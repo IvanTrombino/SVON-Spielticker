@@ -4,7 +4,11 @@ export default function PlayerManager() {
 const [teams, setTeams] = useState([]);
 const [selectedTeam, setSelectedTeam] = useState("");
 const [playerName, setPlayerName] = useState("");
-const [players, setPlayers] = useState([]);
+const [players, setPlayers] = useState(() => {
+return JSON.parse(
+localStorage.getItem("svon_players")
+) || [];
+});
  
 useEffect(() => {
 const savedTeams =
@@ -16,6 +20,12 @@ if (savedTeams.length > 0) {
 setSelectedTeam(savedTeams[0]);
 }
 }, []);
+useEffect(() => {
+localStorage.setItem(
+"svon_players",
+JSON.stringify(players)
+);
+}, [players]);
  
 return (
 <div>
