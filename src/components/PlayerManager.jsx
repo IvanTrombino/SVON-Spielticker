@@ -6,7 +6,7 @@ export default function PlayerManager() {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState("");
   const [playerName, setPlayerName] = useState("");
-  const [players, setPlayers] = useState({});
+  const [players, setPlayers] = useState([]);
 
   // 1. Teams in Echtzeit aus Firebase laden
   useEffect(() => {
@@ -22,51 +22,50 @@ export default function PlayerManager() {
     return () => unsubTeams();
   }, []);
 
-  // 2. Spieler in Echtzeit aus der Cloud laden
+  // 2. Spieler für das ausgewählte Team in Echtzeit laden (eigenes Dokument pro Team)
   useEffect(() => {
-    const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (docSnap) => {
+    if (!selectedTeam) {
+      setPlayers([]);
+      return;
+    }
+
+    const docName = `players_${selectedTeam}`;
+    const unsubPlayers = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
-        setPlayers(docSnap.data() || {});
+        setPlayers(docSnap.data().playersList || []);
       } else {
-        setPlayers({});
+        setPlayers([]);
       }
     });
-    return () => unsubPlayers();
-  }, []);
 
-  // Hilfsfunktion: Neue Spielerliste in die Cloud speichern
-  const savePlayersToCloud = async (newPlayers) => {
+    return () => unsubPlayers();
+  }, [selectedTeam]);
+
+  // Hilfsfunktion: Spieler in ein eigenes Team-Dokument in Firebase speichern
+  const savePlayersToCloud = async (updatedList) => {
+    if (!selectedTeam) return;
     try {
-      await setDoc(doc(db, "ticker", "players"), newPlayers);
+      const docName = `players_${selectedTeam}`;
+      await setDoc(doc(db, "ticker", docName), { playersList: updatedList });
     } catch (error) {
       console.error("Fehler beim Cloud-Speichern der Spieler:", error);
     }
   };
 
   const addPlayer = () => {
-    if (!playerName.trim()) return;
-    if (!selectedTeam) return;
+    if (!playerName.trim() || !selectedTeam) return;
+    if (players.includes(playerName.trim())) return;
 
-    const currentPlayers = players[selectedTeam] || [];
-    const newPlayers = {
-      ...players,
-      [selectedTeam]: [...currentPlayers, playerName.trim()],
-    };
-
-    setPlayers(newPlayers);
-    savePlayersToCloud(newPlayers);
+    const updatedList = [...players, playerName.trim()];
+    setPlayers(updatedList);
+    savePlayersToCloud(updatedList);
     setPlayerName("");
   };
 
-  const deletePlayer = (player) => {
-    const currentPlayers = players[selectedTeam] || [];
-    const newPlayers = {
-      ...players,
-      [selectedTeam]: currentPlayers.filter((p) => p !== player),
-    };
-
-    setPlayers(newPlayers);
-    savePlayersToCloud(newPlayers);
+  const deletePlayer = (playerToDelete) => {
+    const updatedList = players.filter((p) => p !== playerToDelete);
+    setPlayers(updatedList);
+    savePlayersToCloud(updatedList);
   };
 
   return (
@@ -112,10 +111,10 @@ export default function PlayerManager() {
 
       <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-      {(players[selectedTeam] || []).length === 0 ? (
+      {players.length === 0 ? (
         <p style={{ color: "#777", fontSize: "14px", textAlign: "center" }}>Noch keine Spieler in dieser Mannschaft.</p>
       ) : (
-        (players[selectedTeam] || []).map((player) => (
+        players.map((player) => (
           <div
             key={player}
             style={{
