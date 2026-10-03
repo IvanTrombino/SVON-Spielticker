@@ -294,7 +294,22 @@ export default function MatchView() {
                 {teams.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ) : (
-              <input value={homeTeam} onChange={(e) => { setHomeTeam(e.target.value); syncLiveMatch({ homeTeam: e.target.value }); }} placeholder="Gegner..." style={{...inputStyle, textAlign: "center"}} />
+              <input 
+                value={homeTeam === "SVON" ? "" : homeTeam} 
+                onChange={(e) => { 
+                  const val = e.target.value;
+                  setHomeTeam(val); 
+                  syncLiveMatch({ homeTeam: val === "" ? "SVON" : val }); 
+                }} 
+                onBlur={(e) => {
+                  if (e.target.value.trim() === "") {
+                    setHomeTeam("SVON");
+                    syncLiveMatch({ homeTeam: "SVON" });
+                  }
+                }}
+                placeholder="Gegner..." 
+                style={{...inputStyle, textAlign: "center"}} 
+              />
             )}
           </div>
 
@@ -310,7 +325,22 @@ export default function MatchView() {
                 {teams.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ) : (
-              <input value={awayTeam} onChange={(e) => { setAwayTeam(e.target.value); syncLiveMatch({ awayTeam: e.target.value }); }} placeholder="Gegner..." style={{...inputStyle, textAlign: "center"}} />
+              <input 
+                value={awayTeam === "Gast" ? "" : awayTeam} 
+                onChange={(e) => { 
+                  const val = e.target.value;
+                  setAwayTeam(val); 
+                  syncLiveMatch({ awayTeam: val === "" ? "Gast" : val }); 
+                }} 
+                onBlur={(e) => {
+                  if (e.target.value.trim() === "") {
+                    setAwayTeam("Gast");
+                    syncLiveMatch({ awayTeam: "Gast" });
+                  }
+                }}
+                placeholder="Gegner..." 
+                style={{...inputStyle, textAlign: "center"}} 
+              />
             )}
           </div>
         </div>
