@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-// --- NEU: Firebase Imports ---
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -9,27 +8,30 @@ export default function PlayerManager() {
   const [playerName, setPlayerName] = useState("");
   const [players, setPlayers] = useState({});
 
-  // 1. Teams laden (vorerst noch lokal, bis wir gleich den TeamManager anpassen)
+  // 1. Teams in Echtzeit aus Firebase laden
   useEffect(() => {
-    const savedTeams = JSON.parse(localStorage.getItem("svon_teams")) || [];
-    setTeams(savedTeams);
-
-    if (savedTeams.length > 0) {
-      setSelectedTeam(savedTeams[0]);
-    }
+    const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
+      if (docSnap.exists()) {
+        const teamsList = docSnap.data().teamsList || [];
+        setTeams(teamsList);
+        if (teamsList.length > 0 && (!selectedTeam || !teamsList.includes(selectedTeam))) {
+          setSelectedTeam(teamsList[0]);
+        }
+      }
+    });
+    return () => unsubTeams();
   }, []);
 
-  // 2. LIVE-DATEN: Spieler in Echtzeit aus der Cloud laden
+  // 2. Spieler in Echtzeit aus der Cloud laden
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "ticker", "players"), (docSnap) => {
+    const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (docSnap) => {
       if (docSnap.exists()) {
-        setPlayers(docSnap.data());
+        setPlayers(docSnap.data() || {});
       } else {
-        // Falls das Dokument in der Cloud noch nicht existiert
         setPlayers({});
       }
     });
-    return () => unsub(); // Aufräumen, wenn die Seite verlassen wird
+    return () => unsubPlayers();
   }, []);
 
   // Hilfsfunktion: Neue Spielerliste in die Cloud speichern
@@ -46,20 +48,18 @@ export default function PlayerManager() {
     if (!selectedTeam) return;
 
     const currentPlayers = players[selectedTeam] || [];
-    
     const newPlayers = {
       ...players,
-      [selectedTeam]: [...currentPlayers, playerName],
+      [selectedTeam]: [...currentPlayers, playerName.trim()],
     };
 
-    setPlayers(newPlayers); // Schnelles Update für die Anzeige
-    savePlayersToCloud(newPlayers); // Ab in die Cloud damit!
+    setPlayers(newPlayers);
+    savePlayersToCloud(newPlayers);
     setPlayerName("");
   };
 
   const deletePlayer = (player) => {
     const currentPlayers = players[selectedTeam] || [];
-    
     const newPlayers = {
       ...players,
       [selectedTeam]: currentPlayers.filter((p) => p !== player),
@@ -70,13 +70,13 @@ export default function PlayerManager() {
   };
 
   return (
-    <div>
-      <h2>👤 Spielerverwaltung</h2>
+    <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
+      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👤 Spielerverwaltung</h2>
 
       <select
         value={selectedTeam}
         onChange={(e) => setSelectedTeam(e.target.value)}
-        style={{ padding: "8px", width: "100%", marginBottom: "10px", borderRadius: "5px", border: "1px solid #ccc" }}
+        style={{ padding: "10px", width: "100%", marginBottom: "15px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
       >
         {teams.length === 0 && <option value="">Keine Teams vorhanden</option>}
         {teams.map((team) => (
@@ -86,38 +86,34 @@ export default function PlayerManager() {
         ))}
       </select>
 
-      <p>
-        Mannschaft:
-        <strong> {selectedTeam || "-"}</strong>
-      </p>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+        <input
+          value={playerName}
+          onChange={(e) => setPlayerName(e.target.value)}
+          placeholder="Spielername eingeben..."
+          style={{
+            flex: 1,
+            padding: "10px",
+            boxSizing: "border-box",
+            borderRadius: "8px",
+            border: "1px solid #ccc",
+            fontSize: "15px"
+          }}
+        />
 
-      <input
-        value={playerName}
-        onChange={(e) => setPlayerName(e.target.value)}
-        placeholder="Spielername"
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginTop: "10px",
-          marginBottom: "10px",
-          boxSizing: "border-box",
-          borderRadius: "5px",
-          border: "1px solid #ccc"
-        }}
-      />
-
-      <button 
-        onClick={addPlayer} 
-        disabled={!selectedTeam}
-        style={{ width: "100%", padding: "10px", background: "#2146d0", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}
-      >
-        ➕ Spieler hinzufügen
-      </button>
+        <button 
+          onClick={addPlayer} 
+          disabled={!selectedTeam}
+          style={{ padding: "0 20px", background: "#2146d0", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "16px" }}
+        >
+          ➕
+        </button>
+      </div>
 
       <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
       {(players[selectedTeam] || []).length === 0 ? (
-        <p style={{ color: "#777", fontSize: "14px" }}>Noch keine Spieler in dieser Mannschaft.</p>
+        <p style={{ color: "#777", fontSize: "14px", textAlign: "center" }}>Noch keine Spieler in dieser Mannschaft.</p>
       ) : (
         (players[selectedTeam] || []).map((player) => (
           <div
@@ -127,17 +123,18 @@ export default function PlayerManager() {
               justifyContent: "space-between",
               alignItems: "center",
               border: "1px solid #ddd",
-              padding: "10px",
-              marginTop: "5px",
-              borderRadius: "5px",
-              background: "white"
+              padding: "10px 15px",
+              marginTop: "8px",
+              borderRadius: "8px",
+              background: "white",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.03)"
             }}
           >
-            <span>{player}</span>
+            <span style={{ fontWeight: "bold" }}>{player}</span>
 
             <button 
               onClick={() => deletePlayer(player)} 
-              style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "3px", padding: "5px 10px", cursor: "pointer" }}
+              style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "5px", padding: "6px 10px", cursor: "pointer" }}
             >
               ❌
             </button>

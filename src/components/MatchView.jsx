@@ -43,7 +43,9 @@ export default function MatchView() {
     });
     
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
-      if (snap.exists()) setPlayers(snap.data());
+      if (snap.exists()) {
+        setPlayers(snap.data() || {});
+      }
     });
     
     const unsubScorers = onSnapshot(doc(db, "ticker", "scorers"), (snap) => {
@@ -79,7 +81,6 @@ export default function MatchView() {
         if (data.time !== undefined) setTime(data.time);
         setIsRunning(data.isRunning || false);
       } else {
-        // Falls noch kein Eintrag existiert, mit Standardwerten initialisieren
         setIsSvonAway(false);
         setHomeTeam(selectedTeam);
         setAwayTeam("Gast");
@@ -105,7 +106,6 @@ export default function MatchView() {
     }
   };
 
-  // Hilfsfunktion: Gespeicherte Spiele in die Cloud sichern
   const saveMatchesToCloud = async (newMatchesList) => {
     try {
       await setDoc(doc(db, "ticker", "matches"), { matchesList: newMatchesList });
@@ -114,7 +114,6 @@ export default function MatchView() {
     }
   };
 
-  // Spieluhr (läuft lokal, speichert beim Pausieren)
   useEffect(() => {
     let interval;
     if (isRunning) {
@@ -132,8 +131,8 @@ export default function MatchView() {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const ourTeamName = isSvonAway ? awayTeam : homeTeam;
-  const availablePlayers = players[ourTeamName] || players[selectedTeam] || [];
+  // Hier werden die Spieler nun fehlerfrei für das ausgewählte Team ausgelesen
+  const availablePlayers = players[selectedTeam] || [];
 
   const toggleHomeAway = () => {
     if (history.length > 0) {
