@@ -15,13 +15,12 @@ export default function PublicView({ onBackToAdmin }) {
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // 1. Teams aus Firebase laden
+  // Teams aus Firebase laden
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
         const teamsList = snap.data().teamsList;
         setTeams(teamsList);
-        // Wenn noch kein Team gewählt ist, das erste Team als Standard nehmen
         if (teamsList.length > 0 && !selectedTeam) {
           setSelectedTeam(teamsList[0]);
         }
@@ -31,13 +30,11 @@ export default function PublicView({ onBackToAdmin }) {
     return () => unsubTeams();
   }, []);
 
-  // 2. Live-Daten dynamisch für das ausgewählte Team aus Firebase abonnieren
+  // Live-Daten dynamisch für das ausgewählte Team abonnieren
   useEffect(() => {
     if (!selectedTeam) return;
 
-    // Erzeugt den passenden Dokumenten-Namen in Firebase (z.B. "live_match_F-Jugend")
     const docName = `live_match_${selectedTeam}`;
-
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -49,7 +46,6 @@ export default function PublicView({ onBackToAdmin }) {
         if (data.time !== undefined) setTime(data.time);
         setIsRunning(data.isRunning || false);
       } else {
-        // Falls für dieses Team noch kein Live-Match existiert, Werte zurücksetzen
         setHomeTeam(selectedTeam);
         setAwayTeam("Gast");
         setHomeGoals(0);
@@ -69,11 +65,12 @@ export default function PublicView({ onBackToAdmin }) {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
+  // Exakte Emojis/Symbole wie in der MatchView-Ansicht
   const getEventIcon = (type) => {
-    if (type === "goal") return "Tor";
-    if (type === "yellow") return "Gelb";
-    if (type === "red") return "Rot";
-    return "Notiz";
+    if (type === "goal") return "⚽";
+    if (type === "yellow") return "🟨";
+    if (type === "red") return "🟥";
+    return "📝";
   };
 
   return (
@@ -130,9 +127,9 @@ export default function PublicView({ onBackToAdmin }) {
         ) : (
           <div style={{ textAlign: "left", padding: "10px", borderRadius: "8px", background: "white", border: "1px solid #ddd" }}>
             {[...history].reverse().map((event) => (
-              <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "10px", alignItems: "center" }}>
+              <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", alignItems: "center" }}>
                 <span style={{ fontWeight: "bold", width: "35px", color: "#555" }}>{event.minute}'</span>
-                <span style={{ fontSize: "1.1rem" }}>{getEventIcon(event.type)}</span>
+                <span style={{ fontSize: "1.4rem" }}>{getEventIcon(event.type)}</span>
                 <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
               </div>
             ))}
