@@ -4,6 +4,9 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase"; 
 
 export default function MatchView() {
+  // --- NAVIGATION (Ansicht umschalten) ---
+  const [activeTab, setActiveTab] = useState("ticker"); // "ticker" oder "history"
+
   // --- CLOUD-STATE: Metadaten (aus anderen Menüs) ---
   const [teams, setTeams] = useState([]);
   const [players, setPlayers] = useState({});
@@ -22,6 +25,9 @@ export default function MatchView() {
 
   // --- LOKALER-STATE: UI-Bedienung ---
   const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [editingMatchId, setEditingMatchId] = useState(null);
+  const [editHomeGoals, setEditHomeGoals] = useState(0);
+  const [editAwayGoals, setEditAwayGoals] = useState(0);
 
   // 1. GLOBALE DATEN AUS DER CLOUD LADEN (Teams, Spieler, Torschützen, Alte Spiele)
   useEffect(() => {
@@ -61,7 +67,6 @@ export default function MatchView() {
         setAwayGoals(data.awayGoals || 0);
         setHistory(data.history || []);
         
-        // Verhindern, dass die Zeit springt, wenn sie lokal schon weiter ist
         if (!isRunning && data.time) setTime(data.time);
       }
     });
@@ -74,6 +79,15 @@ export default function MatchView() {
       await setDoc(doc(db, "ticker", "live_match"), updates, { merge: true });
     } catch (error) {
       console.error("Fehler beim Cloud-Speichern:", error);
+    }
+  };
+
+  // Hilfsfunktion: Gespeicherte Spiele in die Cloud sichern
+  const saveMatchesToCloud = async (newMatchesList) => {
+    try {
+      await setDoc(doc(db, "ticker", "matches"), { matchesList: newMatchesList });
+    } catch (error) {
+      console.error("Fehler beim Speichern der Historie:", error);
     }
   };
 
@@ -138,14 +152,13 @@ export default function MatchView() {
       if (isHomeEvent) newHomeGoals++;
       else newAwayGoals++;
       
-      // Torschützen in die Cloud aktualisieren
       if (isOurEvent && selectedPlayer) {
         const teamScorers = scorers[ourTeamName] || {};
         const pGoals = teamScorers[selectedPlayer] || 0;
         const newScorers = { ...scorers, [ourTeamName]: { ...teamScorers, [selectedPlayer]: pGoals + 1 } };
         
-        setScorers(newScorers); // Lokales Update für schnelle UI
-        setDoc(doc(db, "ticker", "scorers"), newScorers); // Cloud Update
+        setScorers(newScorers);
+        setDoc(doc(db, "ticker", "scorers"), newScorers);
       }
     }
     
@@ -214,11 +227,8 @@ export default function MatchView() {
       
       const newSavedMatches = [newMatch, ...savedMatches];
       setSavedMatches(newSavedMatches);
+      saveMatchesToCloud(newSavedMatches);
       
-      // Gespeicherte Spiele in die Cloud laden
-      setDoc(doc(db, "ticker", "matches"), { matchesList: newSavedMatches });
-      
-      // Live-Ticker in der Cloud zurücksetzen
       const resetData = {
         homeGoals: 0,
         awayGoals: 0,
@@ -246,6 +256,34 @@ export default function MatchView() {
     }
   };
 
+  // --- SPIEL IN HISTORIE LÖSCHEN ---
+  const deleteSavedMatch = (id) => {
+    if (window.confirm("Dieses gespeicherte Spiel wirklich löschen?")) {
+      const updated = savedMatches.filter(m => m.id !== id);
+      setSavedMatches(updated);
+      saveMatchesToCloud(updated);
+    }
+  };
+
+  // --- SPIEL IN HISTORIE BEARBEITEN ---
+  const startEditingMatch = (match) => {
+    setEditingMatchId(match.id);
+    setEditHomeGoals(match.homeGoals);
+    setEditAwayGoals(match.awayGoals);
+  };
+
+  const saveEditedMatch = (id) => {
+    const updated = savedMatches.map(m => {
+      if (m.id === id) {
+        return { ...m, homeGoals: Number(editHomeGoals), awayGoals: Number(editAwayGoals) };
+      }
+      return m;
+    });
+    setSavedMatches(updated);
+    saveMatchesToCloud(updated);
+    setEditingMatchId(null);
+  };
+
   const generatePDF = () => {
     window.print();
   };
@@ -268,6 +306,18 @@ export default function MatchView() {
     cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
   };
 
+  const tabButtonStyle = (tabName) => ({
+    flex: 1,
+    padding: "10px",
+    background: activeTab === tabName ? "#2146d0" : "#e0e0e0",
+    color: activeTab === tabName ? "white" : "#333",
+    border: "none",
+    borderRadius: "8px",
+    fontWeight: "bold",
+    cursor: "pointer",
+    fontSize: "14px"
+  });
+
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
       <style>
@@ -280,175 +330,215 @@ export default function MatchView() {
       </style>
 
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
-      <h2 style={{ color: "#2146d0", margin: "0 0 15px 0", fontSize: "1.5rem" }}>⚽ Live-Ticker</h2>
+      <h2 style={{ color: "#2146d0", margin: "0 0 15px 0", fontSize: "1.5rem" }}>⚽ SVON Ticker</h2>
 
-      <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
-        
-        {/* --- KOPFBEREICH: TEAMS --- */}
-        <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "15px", width: "100%" }}>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "left" }}>Heimteam</label>
-            {!isSvonAway ? (
-              <select value={homeTeam} onChange={(e) => { setHomeTeam(e.target.value); syncLiveMatch({ homeTeam: e.target.value }); }} style={inputStyle}>
-                {teams.length === 0 && <option value="SVON">SVON</option>}
-                {teams.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            ) : (
-              <input 
-                value={homeTeam === "SVON" ? "" : homeTeam} 
-                onChange={(e) => { 
-                  const val = e.target.value;
-                  setHomeTeam(val); 
-                  syncLiveMatch({ homeTeam: val === "" ? "SVON" : val }); 
-                }} 
-                onBlur={(e) => {
-                  if (e.target.value.trim() === "") {
-                    setHomeTeam("SVON");
-                    syncLiveMatch({ homeTeam: "SVON" });
-                  }
-                }}
-                placeholder="Gegner..." 
-                style={{...inputStyle, textAlign: "center"}} 
-              />
-            )}
-          </div>
+      {/* --- OBERER MENÜ-SCHALTER (REITER) --- */}
+      <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+        <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
+          ⏱️ Live-Ticker
+        </button>
+        <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
+          📜 Letzte Spiele ({savedMatches.length})
+        </button>
+      </div>
 
-          <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "10px", cursor: "pointer", background: "#e0e0e0", border: "none", borderRadius: "8px", fontSize: "18px", marginTop: "18px", flexShrink: 0 }}>
-            🔄
-          </button>
+      {/* ========================================================= */}
+      {/* ANSICHT 1: DER LIVE-TICKER                                */}
+      {/* ========================================================= */}
+      {activeTab === "ticker" && (
+        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+          
+          {/* --- KOPFBEREICH: TEAMS --- */}
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "15px", width: "100%" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+              <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "left" }}>Heimteam</label>
+              {!isSvonAway ? (
+                <select value={homeTeam} onChange={(e) => { setHomeTeam(e.target.value); syncLiveMatch({ homeTeam: e.target.value }); }} style={inputStyle}>
+                  {teams.length === 0 && <option value="SVON">SVON</option>}
+                  {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              ) : (
+                <input 
+                  value={homeTeam === "SVON" ? "" : homeTeam} 
+                  onChange={(e) => { 
+                    const val = e.target.value;
+                    setHomeTeam(val); 
+                    syncLiveMatch({ homeTeam: val === "" ? "SVON" : val }); 
+                  }} 
+                  onBlur={(e) => {
+                    if (e.target.value.trim() === "") {
+                      setHomeTeam("SVON");
+                      syncLiveMatch({ homeTeam: "SVON" });
+                    }
+                  }}
+                  placeholder="Gegner..." 
+                  style={{...inputStyle, textAlign: "center"}} 
+                />
+              )}
+            </div>
 
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "right" }}>Gastteam</label>
-            {isSvonAway ? (
-              <select value={awayTeam} onChange={(e) => { setAwayTeam(e.target.value); syncLiveMatch({ awayTeam: e.target.value }); }} style={inputStyle}>
-                {teams.length === 0 && <option value="SVON">SVON</option>}
-                {teams.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            ) : (
-              <input 
-                value={awayTeam === "Gast" ? "" : awayTeam} 
-                onChange={(e) => { 
-                  const val = e.target.value;
-                  setAwayTeam(val); 
-                  syncLiveMatch({ awayTeam: val === "" ? "Gast" : val }); 
-                }} 
-                onBlur={(e) => {
-                  if (e.target.value.trim() === "") {
-                    setAwayTeam("Gast");
-                    syncLiveMatch({ awayTeam: "Gast" });
-                  }
-                }}
-                placeholder="Gegner..." 
-                style={{...inputStyle, textAlign: "center"}} 
-              />
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: "none" }} className="print-only">
-           <h3>{homeTeam} vs {awayTeam}</h3>
-        </div>
-
-        {/* --- SPIELSTAND --- */}
-        <div style={{ fontSize: "clamp(3rem, 12vw, 4.5rem)", fontWeight: "bold", margin: "10px 0", lineHeight: "1" }}>
-          {homeGoals} : {awayGoals}
-        </div>
-
-        {/* --- UHRZEIT & STEUERUNG --- */}
-        <div className="no-print" style={{ marginBottom: "25px" }}>
-          <div style={{ fontSize: "2rem", fontFamily: "monospace", marginBottom: "12px" }}>
-            {formatTime(time)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
-            <button onClick={() => { setIsRunning(!isRunning); syncLiveMatch({ isRunning: !isRunning }); }} style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: isRunning ? "#e74c3c" : "#2ecc71", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
-              {isRunning ? "⏸ Pause" : "▶️ Start"}
+            <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "10px", cursor: "pointer", background: "#e0e0e0", border: "none", borderRadius: "8px", fontSize: "18px", marginTop: "18px", flexShrink: 0 }}>
+              🔄
             </button>
-            <button onClick={() => { setIsRunning(false); setTime(45 * 60); syncLiveMatch({ isRunning: false, time: 45 * 60 }); }} style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
-              ⏱ Halbzeit
-            </button>
+
+            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+              <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "right" }}>Gastteam</label>
+              {isSvonAway ? (
+                <select value={awayTeam} onChange={(e) => { setAwayTeam(e.target.value); syncLiveMatch({ awayTeam: e.target.value }); }} style={inputStyle}>
+                  {teams.length === 0 && <option value="SVON">SVON</option>}
+                  {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              ) : (
+                <input 
+                  value={awayTeam === "Gast" ? "" : awayTeam} 
+                  onChange={(e) => { 
+                    const val = e.target.value;
+                    setAwayTeam(val); 
+                    syncLiveMatch({ awayTeam: val === "" ? "Gast" : val }); 
+                  }} 
+                  onBlur={(e) => {
+                    if (e.target.value.trim() === "") {
+                      setAwayTeam("Gast");
+                      syncLiveMatch({ awayTeam: "Gast" });
+                    }
+                  }}
+                  placeholder="Gegner..." 
+                  style={{...inputStyle, textAlign: "center"}} 
+                />
+              )}
+            </div>
           </div>
-        </div>
 
-        <hr className="no-print" style={{ margin: "20px 0", borderColor: "#eee" }} />
-
-        {/* --- AKTIONEN: TORE & KARTEN --- */}
-        <div className="no-print">
-          <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} style={{ ...inputStyle, marginBottom: "15px" }}>
-            <option value="">-- {ourTeamName} Spieler wählen --</option>
-            {availablePlayers.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "25px" }}>
-            <button onClick={() => addEvent("home", "goal")} style={{...actionButtonStyle, background: "#2146d0"}}>⚽ Tor {homeTeam}</button>
-            <button onClick={() => addEvent("away", "goal")} style={{...actionButtonStyle, background: "#333"}}>⚽ Tor {awayTeam}</button>
-            
-            <button onClick={() => addEvent("home", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {homeTeam}</button>
-            <button onClick={() => addEvent("away", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {awayTeam}</button>
-            
-            <button onClick={() => addEvent("home", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {homeTeam}</button>
-            <button onClick={() => addEvent("away", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {awayTeam}</button>
+          {/* --- SPIELSTAND --- */}
+          <div style={{ fontSize: "clamp(3rem, 12vw, 4.5rem)", fontWeight: "bold", margin: "10px 0", lineHeight: "1" }}>
+            {homeGoals} : {awayGoals}
           </div>
+
+          {/* --- UHRZEIT & STEUERUNG --- */}
+          <div className="no-print" style={{ marginBottom: "25px" }}>
+            <div style={{ fontSize: "2rem", fontFamily: "monospace", marginBottom: "12px" }}>
+              {formatTime(time)}
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+              <button onClick={() => { setIsRunning(!isRunning); syncLiveMatch({ isRunning: !isRunning }); }} style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: isRunning ? "#e74c3c" : "#2ecc71", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
+                {isRunning ? "⏸ Pause" : "▶️ Start"}
+              </button>
+              <button onClick={() => { setIsRunning(false); setTime(45 * 60); syncLiveMatch({ isRunning: false, time: 45 * 60 }); }} style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
+                ⏱ Halbzeit
+              </button>
+            </div>
+          </div>
+
+          <hr className="no-print" style={{ margin: "20px 0", borderColor: "#eee" }} />
+
+          {/* --- AKTIONEN: TORE & KARTEN --- */}
+          <div className="no-print">
+            <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} style={{ ...inputStyle, marginBottom: "15px" }}>
+              <option value="">-- {ourTeamName} Spieler wählen --</option>
+              {availablePlayers.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "25px" }}>
+              <button onClick={() => addEvent("home", "goal")} style={{...actionButtonStyle, background: "#2146d0"}}>⚽ Tor {homeTeam}</button>
+              <button onClick={() => addEvent("away", "goal")} style={{...actionButtonStyle, background: "#333"}}>⚽ Tor {awayTeam}</button>
+              
+              <button onClick={() => addEvent("home", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {homeTeam}</button>
+              <button onClick={() => addEvent("away", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {awayTeam}</button>
+              
+              <button onClick={() => addEvent("home", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {homeTeam}</button>
+              <button onClick={() => addEvent("away", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {awayTeam}</button>
+            </div>
+          </div>
+
+          {/* --- ADMIN & PDF --- */}
+          <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
+            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️ Zurück</button>
+            <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑️ Verwerfen</button>
+            <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
+            <button onClick={generatePDF} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#2980b9", color: "white", border: "none", borderRadius: "8px", fontSize: "16px" }}>🖨️ PDF Bericht</button>
+          </div>
+
+          <hr style={{ margin: "25px 0", borderColor: "#eee" }} />
+
+          {/* --- SPIELBERICHT (TIMELINE) --- */}
+          <h3 style={{ fontSize: "1.2rem", marginBottom: "10px" }}>📝 Spielbericht</h3>
+          {history.length === 0 ? (
+            <p style={{ color: "#999", fontSize: "14px" }}>Noch keine Ereignisse.</p>
+          ) : (
+            <div style={{ textAlign: "left", padding: "12px", borderRadius: "10px", background: "white", border: "1px solid #ddd" }}>
+              {[...history].reverse().map((event) => (
+                <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", alignItems: "center" }}>
+                  <span style={{ fontWeight: "bold", width: "35px", color: "#555" }}>{event.minute}'</span>
+                  <span style={{ fontSize: "1.4rem" }}>{getEventIcon(event.type)}</span>
+                  <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      )}
 
-        {/* --- ADMIN & PDF --- */}
-        <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
-          <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️ Zurück</button>
-          <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑️ Verwerfen</button>
-          <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
-          <button onClick={generatePDF} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#2980b9", color: "white", border: "none", borderRadius: "8px", fontSize: "16px" }}>🖨️ PDF Bericht</button>
-        </div>
+      {/* ========================================================= */}
+      {/* ANSICHT 2: LETZTE SPIELE (BEARBEITBAR & LÖSCHBAR)          */}
+      {/* ========================================================= */}
+      {activeTab === "history" && (
+        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🏆 Gespeicherte Spiele</h3>
+          
+          {savedMatches.length === 0 ? (
+            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Noch keine Spiele gespeichert.</p>
+          ) : (
+            savedMatches.map((match) => (
+              <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
+                  <span>📅 {match.date}</span>
+                  <span>{match.history?.length || 0} Ereignisse</span>
+                </div>
 
-        <hr style={{ margin: "25px 0", borderColor: "#eee" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontWeight: "bold", fontSize: "15px", flex: 1 }}>
+                    {match.homeTeam} vs {match.awayTeam}
+                  </span>
 
-        {/* --- SPIELBERICHT (TIMELINE) --- */}
-        <h3 style={{ fontSize: "1.2rem", marginBottom: "10px" }}>📝 Spielbericht</h3>
-        {history.length === 0 ? (
-          <p style={{ color: "#999", fontSize: "14px" }}>Noch keine Ereignisse.</p>
-        ) : (
-          <div style={{ textAlign: "left", padding: "12px", borderRadius: "10px", background: "white", border: "1px solid #ddd" }}>
-            {[...history].reverse().map((event) => (
-              <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ fontWeight: "bold", width: "35px", color: "#555" }}>{event.minute}'</span>
-                <span style={{ fontSize: "1.4rem" }}>{getEventIcon(event.type)}</span>
-                <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
+                  {/* Wenn im Bearbeitungsmodus */}
+                  {editingMatchId === match.id ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      <input 
+                        type="number" 
+                        value={editHomeGoals} 
+                        onChange={(e) => setEditHomeGoals(e.target.value)} 
+                        style={{ width: "40px", textAlign: "center", padding: "4px" }} 
+                      />
+                      <span>:</span>
+                      <input 
+                        type="number" 
+                        value={editAwayGoals} 
+                        onChange={(e) => setEditAwayGoals(e.target.value)} 
+                        style={{ width: "40px", textAlign: "center", padding: "4px" }} 
+                      />
+                      <button onClick={() => saveEditedMatch(match.id)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>💾</button>
+                      <button onClick={() => setEditingMatchId(null)} style={{ background: "#7f8c8d", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✖</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontWeight: "bold", fontSize: "16px", color: "#2146d0" }}>
+                        {match.homeGoals} : {match.awayGoals}
+                      </span>
+                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
+                      <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>🗑️️</button>
+                    </div>
+                  )}
+                </div>
+
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      )}
 
-      {/* --- TABELLE: LETZTE SPIELE (Gespeichert in der Cloud) --- */}
-      <div className="no-print" style={{ marginTop: "40px" }}>
-        <h3 style={{ fontSize: "1.2rem", marginBottom: "15px" }}>🏆 Letzte Spiele</h3>
-        {savedMatches.length === 0 ? (
-          <p style={{ color: "#999", fontSize: "14px" }}>Noch keine Spiele gespeichert.</p>
-        ) : (
-          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", background: "white", minWidth: "400px" }}>
-              <thead>
-                <tr style={{ background: "#2146d0", color: "white", textAlign: "left" }}>
-                  <th style={{ padding: "12px 10px", fontSize: "14px" }}>Datum</th>
-                  <th style={{ padding: "12px 10px", fontSize: "14px" }}>Begegnung</th>
-                  <th style={{ padding: "12px 10px", fontSize: "14px", textAlign: "center" }}>Ergebnis</th>
-                </tr>
-              </thead>
-              <tbody>
-                {savedMatches.map((match) => (
-                  <tr key={match.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "12px 10px", fontSize: "14px", color: "#555" }}>{match.date}</td>
-                    <td style={{ padding: "12px 10px", fontSize: "14px" }}>{match.homeTeam} vs {match.awayTeam}</td>
-                    <td style={{ padding: "12px 10px", fontWeight: "bold", fontSize: "16px", textAlign: "center" }}>
-                      {match.homeGoals} : {match.awayGoals}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
