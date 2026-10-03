@@ -1,26 +1,26 @@
 import { useState, useEffect } from "react";
-// --- NEU: Firebase Imports ---
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function TeamManager({ teams = [], setTeams }) {
+export default function TeamManager() {
+  const [teams, setTeams] = useState([]);
   const [newTeam, setNewTeam] = useState("");
 
-  // LIVE-DATEN: Teams in Echtzeit aus der Cloud laden
+  // Teams in Echtzeit direkt aus der Cloud laden
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (setTeams) setTeams(data.teamsList || []);
+        setTeams(data.teamsList || []);
       } else {
-        if (setTeams) setTeams([]);
+        setTeams([]);
       }
     });
     
-    return () => unsub(); // Aufräumen, wenn die Seite verlassen wird
-  }, [setTeams]);
+    return () => unsub();
+  }, []);
 
-  // Hilfsfunktion: Teams in die Cloud speichern
+  // Teams in die Cloud speichern
   const saveTeamsToCloud = async (updatedTeams) => {
     try {
       await setDoc(doc(db, "ticker", "teams"), { teamsList: updatedTeams });
@@ -31,20 +31,18 @@ export default function TeamManager({ teams = [], setTeams }) {
 
   const addTeam = () => {
     if (!newTeam.trim()) return;
-    if (teams.includes(newTeam)) return;
+    const trimmedTeam = newTeam.trim();
+    if (teams.includes(trimmedTeam)) return;
 
-    const updatedTeams = [...teams, newTeam];
-    
-    if (setTeams) setTeams(updatedTeams); // Schnelles Update für die Anzeige
-    saveTeamsToCloud(updatedTeams);       // Ab in die Cloud!
-    
+    const updatedTeams = [...teams, trimmedTeam];
+    setTeams(updatedTeams);
+    saveTeamsToCloud(updatedTeams);
     setNewTeam("");
   };
 
-  const deleteTeam = (team) => {
-    const updatedTeams = teams.filter((t) => t !== team);
-    
-    if (setTeams) setTeams(updatedTeams);
+  const deleteTeam = (teamToDelete) => {
+    const updatedTeams = teams.filter((t) => t !== teamToDelete);
+    setTeams(updatedTeams);
     saveTeamsToCloud(updatedTeams);
   };
 
@@ -52,23 +50,18 @@ export default function TeamManager({ teams = [], setTeams }) {
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
       <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👥 Mannschaftsverwaltung</h2>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          marginBottom: "25px",
-        }}
-      >
+      <div style={{ display: "flex", gap: "10px", marginBottom: "25px" }}>
         <input
           value={newTeam}
           onChange={(e) => setNewTeam(e.target.value)}
-          placeholder="Neue Mannschaft"
+          placeholder="Neue Mannschaft eingeben..."
           style={{
             flex: 1,
             padding: "12px",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            fontSize: "16px"
+            fontSize: "16px",
+            boxSizing: "border-box"
           }}
         />
 
