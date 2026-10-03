@@ -6,8 +6,10 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
  
 export default function App() {
-  const [view, setView] = useState("public"); // Standardmäßig startet die App in der Zuschauer-Ansicht oder nach Wunsch
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [view, setView] = useState("match"); // Startet direkt im Spiel-Modus
+  
+  // VORÜBERGEHEND DEAKTIVIERT: Direkt auf true gesetzt, damit kein Passwort abgefragt wird
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [passwordInput, setPasswordInput] = useState("");
  
   const [teams, setTeams] = useState(() => {
@@ -39,7 +41,6 @@ export default function App() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // Hier kannst du dein Wunsch-Passwort eintragen (aktuell: "svon2026")
     if (passwordInput === "svon2026") {
       setIsAuthenticated(true);
       setPasswordInput("");
@@ -49,12 +50,12 @@ export default function App() {
     }
   };
 
-  // Wenn der Zuschauer-Modus gewählt wird, ist KEIN Passwort nötig
+  // Wenn der Zuschauer-Modus gewählt wird
   if (view === "public") {
     return <PublicView onBackToAdmin={() => setView("match")} />;
   }
 
-  // Wenn der Admin/Trainer-Bereich aufgerufen wird, aber noch kein Passwort eingegeben wurde:
+  // Da isAuthenticated auf true steht, wird dieser Login-Bildschirm aktuell übersprungen
   if (!isAuthenticated) {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5", display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
@@ -133,19 +134,19 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setIsAuthenticated(false); setView("public"); }}
+          onClick={() => setView("public")}
           style={{
             padding: "10px 15px",
             borderRadius: "8px",
             border: 0,
-            background: "#f39c12",
+            background: "#27ae60",
             color: "white",
             fontWeight: "bold",
             cursor: "pointer"
           }}
-          title="Zurück zur Zuschaueransicht & Logout"
+          title="Zur Zuschaueransicht wechseln"
         >
-          👀 Zuschauer (Logout)
+          👀 Zuschauer-Ansicht
         </button>
       </div>
  
