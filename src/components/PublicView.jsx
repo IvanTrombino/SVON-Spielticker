@@ -5,7 +5,7 @@ import { db } from "../firebase";
 
 export default function PublicView({ onBackToAdmin }) {
   const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState("SVON");
+  const [selectedTeam, setSelectedTeam] = useState("");
   
   const [homeTeam, setHomeTeam] = useState("SVON");
   const [awayTeam, setAwayTeam] = useState("Gast");
@@ -15,32 +15,53 @@ export default function PublicView({ onBackToAdmin }) {
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // Teams und Live-Daten aus Firebase abonnieren
+  // 1. Teams aus Firebase laden
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
-        setTeams(snap.data().teamsList);
+        const teamsList = snap.data().teamsList;
+        setTeams(teamsList);
+        // Wenn noch kein Team gewählt ist, das erste Team als Standard nehmen
+        if (teamsList.length > 0 && !selectedTeam) {
+          setSelectedTeam(teamsList[0]);
+        }
       }
     });
 
-    const unsubLive = onSnapshot(doc(db, "ticker", "live_match"), (docSnap) => {
+    return () => unsubTeams();
+  }, []);
+
+  // 2. Live-Daten dynamisch für das ausgewählte Team aus Firebase abonnieren
+  useEffect(() => {
+    if (!selectedTeam) return;
+
+    // Erzeugt den passenden Dokumenten-Namen in Firebase (z.B. "live_match_F-Jugend")
+    const docName = `live_match_${selectedTeam}`;
+
+    const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setHomeTeam(data.homeTeam || "SVON");
+        setHomeTeam(data.homeTeam || selectedTeam);
         setAwayTeam(data.awayTeam || "Gast");
         setHomeGoals(data.homeGoals || 0);
         setAwayGoals(data.awayGoals || 0);
         setHistory(data.history || []);
         if (data.time !== undefined) setTime(data.time);
         setIsRunning(data.isRunning || false);
+      } else {
+        // Falls für dieses Team noch kein Live-Match existiert, Werte zurücksetzen
+        setHomeTeam(selectedTeam);
+        setAwayTeam("Gast");
+        setHomeGoals(0);
+        setAwayGoals(0);
+        setHistory([]);
+        setTime(0);
+        setIsRunning(false);
       }
     });
 
-    return () => {
-      unsubTeams();
-      unsubLive();
-    };
-  }, []);
+    return () => unsubLive();
+  }, [selectedTeam]);
 
   const formatTime = (totalSeconds) => {
     const m = Math.floor(totalSeconds / 60);
@@ -80,7 +101,6 @@ export default function PublicView({ onBackToAdmin }) {
           onChange={(e) => setSelectedTeam(e.target.value)}
           style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
         >
-          <option value="SVON">Alle / SVON</option>
           {teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
@@ -106,7 +126,7 @@ export default function PublicView({ onBackToAdmin }) {
 
         <h3 style={{ fontSize: "1.1rem", marginBottom: "10px" }}>Spielbericht</h3>
         {history.length === 0 ? (
-          <p style={{ color: "#999", fontSize: "14px" }}>Bisher noch keine Ereignisse im Spiel.</p>
+          <p style={{ color: "#999", fontSize: "14px" }}>Bisher noch keine Ereignisse für dieses Team.</p>
         ) : (
           <div style={{ textAlign: "left", padding: "10px", borderRadius: "8px", background: "white", border: "1px solid #ddd" }}>
             {[...history].reverse().map((event) => (

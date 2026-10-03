@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import AdminPanel from "./components/AdminPanel";
 import MatchView from "./components/MatchView";
-import PublicView from "./components/PublicView"; // NEU: Die Zuschauer-Ansicht
+import PublicView from "./components/PublicView";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
  
 export default function App() {
-  const [view, setView] = useState("match"); // "match", "admin", oder "public"
+  const [view, setView] = useState("public"); // Standardmäßig startet die App in der Zuschauer-Ansicht oder nach Wunsch
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
  
   const [teams, setTeams] = useState(() => {
     const saved = localStorage.getItem("svon_teams");
@@ -17,7 +19,6 @@ export default function App() {
     localStorage.setItem("svon_teams", JSON.stringify(teams));
   }, [teams]);
 
-  // Teams zusätzlich mit Firebase synchronisieren
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
@@ -36,9 +37,57 @@ export default function App() {
     }
   };
 
-  // Wenn der Zuschauer-Modus aktiv ist, zeigen wir NUR die PublicView
+  const handleLogin = (e) => {
+    e.preventDefault();
+    // Hier kannst du dein Wunsch-Passwort eintragen (aktuell: "svon2026")
+    if (passwordInput === "svon2026") {
+      setIsAuthenticated(true);
+      setPasswordInput("");
+    } else {
+      alert("Falsches Passwort!");
+      setPasswordInput("");
+    }
+  };
+
+  // Wenn der Zuschauer-Modus gewählt wird, ist KEIN Passwort nötig
   if (view === "public") {
     return <PublicView onBackToAdmin={() => setView("match")} />;
+  }
+
+  // Wenn der Admin/Trainer-Bereich aufgerufen wird, aber noch kein Passwort eingegeben wurde:
+  if (!isAuthenticated) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f0f2f5", display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
+        <div style={{ background: "white", padding: "30px", borderRadius: "12px", boxShadow: "0 4px 10px rgba(0,0,0,0.1)", maxWidth: "400px", width: "100%", textAlign: "center" }}>
+          
+          <h2 style={{ color: "#2146d0", marginBottom: "10px" }}>🔒 Trainer-Bereich</h2>
+          <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>Bitte gib das Passwort ein, um fortzufahren.</p>
+
+          <form onSubmit={handleLogin}>
+            <input 
+              type="password" 
+              value={passwordInput} 
+              onChange={(e) => setPasswordInput(e.target.value)} 
+              placeholder="Passwort eingeben..." 
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "16px", boxSizing: "border-box", marginBottom: "15px", textAlign: "center" }}
+              autoFocus
+            />
+            <button 
+              type="submit" 
+              style={{ width: "100%", padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", marginBottom: "10px" }}>
+              Anmelden
+            </button>
+          </form>
+
+          <button 
+            onClick={() => setView("public")} 
+            style={{ background: "transparent", border: "none", color: "#666", cursor: "pointer", fontSize: "13px", textDecoration: "underline" }}>
+            ← Zurück zur Zuschauer-Ansicht
+          </button>
+
+        </div>
+      </div>
+    );
   }
  
   return (
@@ -84,7 +133,7 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => setView("public")}
+          onClick={() => { setIsAuthenticated(false); setView("public"); }}
           style={{
             padding: "10px 15px",
             borderRadius: "8px",
@@ -94,9 +143,9 @@ export default function App() {
             fontWeight: "bold",
             cursor: "pointer"
           }}
-          title="Ansicht für Eltern und Zuschauer am Spielfeldrand"
+          title="Zurück zur Zuschaueransicht & Logout"
         >
-          👀 Zuschauer
+          👀 Zuschauer (Logout)
         </button>
       </div>
  
