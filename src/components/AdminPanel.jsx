@@ -3,7 +3,10 @@ import TeamManager from "./TeamManager";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
  
-export default function AdminPanel() {
+export default function AdminPanel({
+teams,
+setTeams,
+}) {
 const [tab, setTab] = useState("teams");
  
 return (
@@ -31,9 +34,20 @@ marginBottom: "20px",
 </button>
 </div>
  
-{tab === "teams" && <TeamManager />}
-{tab === "players" && <PlayerManager />}
-{tab === "stats" && <Statistics />}
+{tab === "teams" && (
+<TeamManager
+teams={teams}
+setTeams={setTeams}
+/>
+)}
+ 
+{tab === "players" && (
+<PlayerManager />
+)}
+ 
+{tab === "stats" && (
+<Statistics />
+)}
 </div>
 );
 }

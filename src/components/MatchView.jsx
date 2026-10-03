@@ -1,3 +1,5 @@
+import logo from "../assets/SVON-Wappen.png";
+ 
 export default function MatchView() {
 return (
 <div
@@ -6,11 +8,17 @@ padding: "20px",
 textAlign: "center",
 }}
 >
-<h1>⚽ SVON Spielticker</h1>
+{logo}
  
-<p>
-Spielansicht folgt als nächster Schritt.
-</p>
+<h1
+style={{
+color: "#2146d0",
+}}
+>
+⚽ SVON Spielticker
+</h1>
+ 
+<p>Spielansicht folgt als nächster Schritt.</p>
 </div>
 );
 }

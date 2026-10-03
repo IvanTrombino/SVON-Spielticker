@@ -1,9 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminPanel from "./components/AdminPanel";
 import MatchView from "./components/MatchView";
  
 export default function App() {
 const [view, setView] = useState("match");
+ 
+const [teams, setTeams] = useState(() => {
+const saved = localStorage.getItem("svon_teams");
+return saved ? JSON.parse(saved) : [];
+});
+ 
+useEffect(() => {
+localStorage.setItem(
+"svon_teams",
+JSON.stringify(teams)
+);
+}, [teams]);
  
 return (
 <div>
@@ -40,9 +52,12 @@ border: 0,
 </div>
  
 {view === "match" ? (
-<MatchView />
+<MatchView teams={teams} />
 ) : (
-<AdminPanel />
+<AdminPanel
+teams={teams}
+setTeams={setTeams}
+/>
 )}
 </div>
 );
