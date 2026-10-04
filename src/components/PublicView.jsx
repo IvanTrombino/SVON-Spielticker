@@ -7,7 +7,7 @@ export default function PublicView({ onBackToAdmin }) {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
   
-  // --- NEU: Tab-Navigation für die Fans (ticker, scorers, history) ---
+  // --- Tab-Navigation für die Fans (ticker, scorers, history) ---
   const [activeTab, setActiveTab] = useState("ticker");
 
   const [homeTeam, setHomeTeam] = useState("SVON");
@@ -21,9 +21,10 @@ export default function PublicView({ onBackToAdmin }) {
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
 
-  // --- NEU: Globale Stats & Historie für die Fans ---
+  // --- Globale Stats & Historie für die Fans ---
   const [scorersData, setScorersData] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
+  const [expandedMatchId, setExpandedMatchId] = useState(null); // NEU: Für das Aufklappen der Ereignisse
 
   const [wantsNotifications, setWantsNotifications] = useState(false);
   const wantsNotificationsRef = useRef(false); 
@@ -58,7 +59,6 @@ export default function PublicView({ onBackToAdmin }) {
       }
     });
 
-    // --- NEU: Torschützen & Historie für Fans laden ---
     const unsubScorers = onSnapshot(doc(db, "ticker", "scorers"), (snap) => {
       if (snap.exists()) setScorersData(snap.data());
     });
@@ -206,7 +206,6 @@ export default function PublicView({ onBackToAdmin }) {
   };
 
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
-
   const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
   const copyToClipboard = () => {
@@ -316,7 +315,7 @@ export default function PublicView({ onBackToAdmin }) {
         </select>
       </div>
 
-      {/* --- NEU: FAN-NAVIGATION (REITER) --- */}
+      {/* FAN-NAVIGATION (REITER) */}
       <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
@@ -329,7 +328,7 @@ export default function PublicView({ onBackToAdmin }) {
         </button>
       </div>
 
-      {/* --- TAB 1: LIVE-TICKER --- */}
+      {/* TAB 1: LIVE-TICKER */}
       {activeTab === "ticker" && (
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", marginBottom: "20px" }}>
           
@@ -370,7 +369,7 @@ export default function PublicView({ onBackToAdmin }) {
         </div>
       )}
 
-      {/* --- TAB 2: TORSCHÜTZENLISTE --- */}
+      {/* TAB 2: TORSCHÜTZENLISTE */}
       {activeTab === "scorers" && (
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🎯 Torschützen ({selectedTeam})</h3>
@@ -394,7 +393,7 @@ export default function PublicView({ onBackToAdmin }) {
         </div>
       )}
 
-      {/* --- TAB 3: LETZTE SPIELE (HISTORIE) --- */}
+      {/* TAB 3: LETZTE SPIELE (MIT AUFKLAPPBAREN EEREIGNISSEN) */}
       {activeTab === "history" && (
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>📜 Letzte Spiele ({selectedTeam})</h3>
@@ -404,13 +403,38 @@ export default function PublicView({ onBackToAdmin }) {
           ) : (
             filteredMatches.map((match) => (
               <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
-                <div style={{ fontSize: "12px", color: "#666", marginBottom: "4px" }}>
-                  📅 {match.date}
+                
+                {/* Kopfzeile mit Datum und Ereignis-Toggle */}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
+                  <span>📅 {match.date}</span>
+                  
+                  <span 
+                    onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)}
+                    style={{ cursor: "pointer", color: "#2980b9", fontWeight: "bold", textDecoration: "underline" }}
+                  >
+                    {match.history?.length || 0} Ereignisse {expandedMatchId === match.id ? "▲" : "▼"}
+                  </span>
                 </div>
+
+                {/* Spielpaarung und Endergebnis */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: "bold", fontSize: "15px", color: "#333" }}>
                   <span>{match.homeTeam} vs {match.awayTeam}</span>
                   <span style={{ color: "#2146d0", fontSize: "16px" }}>{match.homeGoals} : {match.awayGoals}</span>
                 </div>
+
+                {/* Aufklappbarer Spielverlauf */}
+                {expandedMatchId === match.id && match.history && match.history.length > 0 && (
+                  <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
+                    <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
+                    {[...match.history].reverse().map((event) => (
+                      <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
+                        <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
+                        <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
+                        <span><strong>{event.team === "home" ? match.homeTeam : match.awayTeam}</strong>: {event.player}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))
           )}
