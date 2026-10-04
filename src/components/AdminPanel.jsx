@@ -1,14 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TeamManager from "./TeamManager";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 
-export default function AdminPanel({ teams, setTeams }) {
-  const [tab, setTab] = useState("teams");
+export default function AdminPanel({ teams, setTeams, userRole }) {
+  // Wenn Trainer, starte direkt bei "players", ansonsten bei "teams"
+  const [tab, setTab] = useState(userRole === "trainer" ? "players" : "teams");
+
+  // Falls ein Trainer eingeloggt ist und versucht, "teams" aufzurufen, erzwinge "players"
+  useEffect(() => {
+    if (userRole === "trainer" && tab === "teams") {
+      setTab("players");
+    }
+  }, [userRole, tab]);
 
   // Hilfsfunktion für schicke, dynamische Buttons
   const getButtonStyle = (currentTab) => ({
-    flex: "1 1 calc(33% - 8px)",
+    flex: userRole === "trainer" ? "1 1 calc(50% - 8px)" : "1 1 calc(33% - 8px)",
     padding: "12px 5px",
     background: tab === currentTab ? "#2146d0" : "#e0e0e0",
     color: tab === currentTab ? "white" : "#333",
@@ -35,9 +43,12 @@ export default function AdminPanel({ teams, setTeams }) {
           justifyContent: "center"
         }}
       >
-        <button onClick={() => setTab("teams")} style={getButtonStyle("teams")}>
-          👥 Teams
-        </button>
+        {/* TEAMS: NUR FÜR ADMIN SICHTBAR */}
+        {userRole === "admin" && (
+          <button onClick={() => setTab("teams")} style={getButtonStyle("teams")}>
+            👥 Teams
+          </button>
+        )}
 
         <button onClick={() => setTab("players")} style={getButtonStyle("players")}>
           👤 Spieler
@@ -50,7 +61,7 @@ export default function AdminPanel({ teams, setTeams }) {
 
       {/* --- INHALTSBEREICH --- */}
       <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
-        {tab === "teams" && (
+        {tab === "teams" && userRole === "admin" && (
           <TeamManager teams={teams} setTeams={setTeams} />
         )}
 
