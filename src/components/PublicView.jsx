@@ -23,6 +23,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   // --- Globale Daten für alle Teams (Live-Status & Nächste Spiele) ---
   const [allTeamsLiveStatus, setAllTeamsLiveStatus] = useState({});
   const [nextMatches, setNextMatches] = useState({});
+  const [overviewNow, setOverviewNow] = useState(Date.now()); // Für die Live-Minute in der Übersicht
 
   // --- Globale Historie für die Fans ---
   const [savedMatches, setSavedMatches] = useState([]);
@@ -35,6 +36,14 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   const [copied, setCopied] = useState(false);
 
   const historyLengthRef = useRef(0);
+
+  // Interval, um die Live-Minuten in der Gesamtübersicht aktuell zu halten
+  useEffect(() => {
+    if (selectedTeam === "übersicht") {
+      const int = setInterval(() => setOverviewNow(Date.now()), 15000); // Alle 15 Sek. aktualisieren reicht
+      return () => clearInterval(int);
+    }
+  }, [selectedTeam]);
 
   // 1. Nächste Spiele aus der Cloud laden (${clubId}_next_matches)
   useEffect(() => {
@@ -66,6 +75,8 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
               awayTeam: data.awayTeam || "Gast",
               homeGoals: data.homeGoals || 0,
               awayGoals: data.awayGoals || 0,
+              time: data.time || 0,
+              startTime: data.startTime || null
             }
           }));
         }
@@ -303,21 +314,33 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             ) : (
               Object.entries(allTeamsLiveStatus)
                 .filter(([_, status]) => status.isRunning)
-                .map(([teamName, status]) => (
-                  <div key={teamName} onClick={() => setSelectedTeam(teamName)} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fc8181", cursor: "pointer", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
-                    <div>
-                      <span style={{ fontSize: "11px", background: "#e53e3e", color: "white", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold" }}>{teamName}</span>
-                      <div style={{ fontWeight: "bold", fontSize: "14px", marginTop: "4px" }}>{status.homeTeam} vs {status.awayTeam}</div>
+                .map(([teamName, status]) => {
+                  // Spielminute berechnen
+                  const matchMinute = status.startTime 
+                    ? Math.floor((overviewNow - status.startTime) / 60000) + 1 
+                    : Math.floor((status.time || 0) / 60);
+
+                  return (
+                    <div key={teamName} onClick={() => setSelectedTeam(teamName)} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fc8181", cursor: "pointer", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
+                      <div>
+                        <span style={{ fontSize: "11px", background: "#e53e3e", color: "white", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold" }}>{teamName}</span>
+                        <div style={{ fontWeight: "bold", fontSize: "14px", marginTop: "4px" }}>{status.homeTeam} vs {status.awayTeam}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#e53e3e" }}>
+                          {status.homeGoals} : {status.awayGoals} ➔
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#c53030", fontWeight: "bold", marginTop: "2px" }}>
+                          ⏱ {matchMinute}. Min
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#e53e3e" }}>
-                      {status.homeGoals} : {status.awayGoals} ➔
-                    </div>
-                  </div>
-                ))
+                  );
+                })
             )}
           </div>
 
-          {/* NÄCHSTE SPIELE (Ersetzte Icons durch klaren Text) */}
+          {/* NÄCHSTE SPIELE (Erweitert um Heim/Auswärts und Ort + gefiltert) */}
           <div style={{ background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "12px", padding: "15px", marginBottom: "20px" }}>
             <h3 style={{ fontSize: "1.1rem", color: "#2146d0", margin: "0 0 12px 0" }}>
               📅 Nächste Spiele
@@ -325,36 +348,39 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             {(!teams || teams.length === 0) ? (
               <p style={{ color: "#777", fontSize: "13px" }}>Keine Mannschaften vorhanden.</p>
             ) : (
-              teams.map((teamName) => {
-                const nextMatch = nextMatches[teamName];
-                return (
-                  <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
-                    <div style={{ flex: 1, paddingRight: "10px" }}>
-                      <strong style={{ fontSize: "14px", color: "#2146d0", display: "block", marginBottom: "4px" }}>{teamName}</strong>
-                      
-                      <div style={{ fontSize: "13px", color: "#333", fontWeight: "bold", marginBottom: "4px" }}>
-                        {nextMatch?.opponent ? (
-                          <>
-                            {nextMatch.isHome ? "Heimspiel gegen " : "Auswärtsspiel gegen "}
-                            {nextMatch.opponent}
-                          </>
-                        ) : "Gegner noch offen"}
+              teams
+                // Blende "E-Jugend Funino" und "F-Jugend Funino" aus der Liste aus
+                .filter(t => t !== "E-Jugend Funino" && t !== "F-Jugend Funino")
+                .map((teamName) => {
+                  const nextMatch = nextMatches[teamName];
+                  return (
+                    <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+                      <div style={{ flex: 1, paddingRight: "10px" }}>
+                        <strong style={{ fontSize: "14px", color: "#2146d0", display: "block", marginBottom: "4px" }}>{teamName}</strong>
+                        
+                        <div style={{ fontSize: "13px", color: "#333", fontWeight: "bold", marginBottom: "4px" }}>
+                          {nextMatch?.opponent ? (
+                            <>
+                              {nextMatch.isHome ? "Heimspiel gegen " : "Auswärtsspiel gegen "}
+                              {nextMatch.opponent}
+                            </>
+                          ) : "Gegner noch offen"}
+                        </div>
+
+                        {nextMatch?.location && (
+                          <div style={{ fontSize: "11px", color: "#666", display: "flex", alignItems: "center", gap: "4px" }}>
+                            Spielort: {nextMatch.location}
+                          </div>
+                        )}
                       </div>
 
-                      {nextMatch?.location && (
-                        <div style={{ fontSize: "11px", color: "#666", display: "flex", alignItems: "center", gap: "4px" }}>
-                          Spielort: {nextMatch.location}
-                        </div>
-                      )}
+                      <div style={{ fontSize: "12px", color: "#555", textAlign: "right", whiteSpace: "nowrap" }}>
+                        {nextMatch?.date && <div style={{ marginBottom: "2px", fontWeight: "bold" }}>{nextMatch.date}</div>}
+                        {nextMatch?.time && <div>⏱️ {nextMatch.time} Uhr</div>}
+                        {!nextMatch?.date && !nextMatch?.time && <span style={{ fontStyle: "italic", color: "#999", fontSize: "11px" }}>Kein Termin</span>}
+                      </div>
                     </div>
-
-                    <div style={{ fontSize: "12px", color: "#555", textAlign: "right", whiteSpace: "nowrap" }}>
-                      {nextMatch?.date && <div style={{ marginBottom: "2px", fontWeight: "bold" }}>{nextMatch.date}</div>}
-                      {nextMatch?.time && <div>⏱️ {nextMatch.time} Uhr</div>}
-                      {!nextMatch?.date && !nextMatch?.time && <span style={{ fontStyle: "italic", color: "#999", fontSize: "11px" }}>Kein Termin</span>}
-                    </div>
-                  </div>
-                );
+                  );
               })
             )}
           </div>
