@@ -230,14 +230,6 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
       
-      {onBackToAdmin && (
-        <button 
-          onClick={onBackToAdmin} 
-          style={{ marginBottom: "15px", padding: "8px 15px", background: "#7f8c8d", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>
-          Zurück zum Admin-Modus
-        </button>
-      )}
-
       <img src={logo} alt="Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
       <p style={{ color: "#666", fontSize: "12px", marginBottom: "15px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
