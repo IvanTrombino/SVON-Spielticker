@@ -6,9 +6,9 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
  
 export default function App() {
-  const [view, setView] = useState("match"); // Startet direkt im Spiel-Modus
+  const [view, setView] = useState("match"); 
   
-  // VORÜBERGEHEND DEAKTIVIERT: Direkt auf true gesetzt, damit kein Passwort abgefragt wird
+  // Passwort-Schutz Steuerung (kann später wieder auf false gesetzt werden)
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [passwordInput, setPasswordInput] = useState("");
  
@@ -17,6 +17,13 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
  
+  // --- NEU: Prüfen beim Start, ob der Zuschauer-Link aufgerufen wurde ---
+  useEffect(() => {
+    if (window.location.hash === "#zuschauer") {
+      setView("public");
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("svon_teams", JSON.stringify(teams));
   }, [teams]);
@@ -50,19 +57,18 @@ export default function App() {
     }
   };
 
-  // Wenn der Zuschauer-Modus gewählt wird
+  // Wenn der Zuschauer-Modus aktiv ist
   if (view === "public") {
-    return <PublicView onBackToAdmin={() => setView("match")} />;
+    return <PublicView onBackToAdmin={() => { setView("match"); window.location.hash = ""; }} />;
   }
 
-  // Da isAuthenticated auf true steht, wird dieser Login-Bildschirm aktuell übersprungen
   if (!isAuthenticated) {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5", display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
         <div style={{ background: "white", padding: "30px", borderRadius: "12px", boxShadow: "0 4px 10px rgba(0,0,0,0.1)", maxWidth: "400px", width: "100%", textAlign: "center" }}>
           
           <h2 style={{ color: "#2146d0", marginBottom: "10px" }}>🔒 Trainer-Bereich</h2>
-          <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>Bitte gib das Passwort ein, um fortzufahren.</p>
+          <p style={{ color: "%666", fontSize: "14px", marginBottom: "20px" }}>Bitte gib das Passwort ein, um fortzufahren.</p>
 
           <form onSubmit={handleLogin}>
             <input 
@@ -113,14 +119,14 @@ export default function App() {
             color: view === "match" ? "#2146d0" : "white",
             fontWeight: "bold",
             cursor: "pointer"
-          }}
+        }}
         >
           ⚽ Spiel
         </button>
  
         <button
-          onClick={() => setView("admin")}
-          style={{
+            onClick={() => setView("admin")}
+            style={{
             padding: "10px 15px",
             borderRadius: "8px",
             border: 0,
@@ -130,12 +136,12 @@ export default function App() {
             cursor: "pointer"
           }}
         >
-          ⚙ Administration
+            ⚙ Administration
         </button>
 
         <button
-          onClick={() => setView("public")}
-          style={{
+            onClick={() => { setView("public"); window.location.hash = "zuschauer"; }}
+            style={{
             padding: "10px 15px",
             borderRadius: "8px",
             border: 0,
