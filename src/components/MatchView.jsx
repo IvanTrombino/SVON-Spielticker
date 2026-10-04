@@ -67,7 +67,9 @@ export default function MatchView() {
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
       if (snap.exists()) {
         const allPlayersObj = snap.data() || {};
-        setPlayers(allPlayersObj[selectedTeam] || []);
+        const teamPlayers = allPlayersObj[selectedTeam] || [];
+        // NEU: Auch hier alphabetisch sortieren
+        setPlayers([...teamPlayers].sort((a, b) => a.localeCompare(b)));
       } else {
         setPlayers([]);
       }

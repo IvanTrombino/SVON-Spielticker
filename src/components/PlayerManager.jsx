@@ -4,7 +4,10 @@ import { db } from "../firebase";
 
 export default function PlayerManager() {
   const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState("");
+  
+  // Startseite ist standardmäßig die 1. Mannschaft
+  const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
+  
   const [playerName, setPlayerName] = useState("");
   const [playersData, setPlayersData] = useState({});
 
@@ -14,13 +17,15 @@ export default function PlayerManager() {
       if (docSnap.exists()) {
         const teamsList = docSnap.data().teamsList || [];
         setTeams(teamsList);
-        if (teamsList.length > 0 && (!selectedTeam || !teamsList.includes(selectedTeam))) {
+        
+        // Falls "1. Mannschaft" nicht existiert, nimm das erste verfügbare Team
+        if (teamsList.length > 0 && !teamsList.includes(selectedTeam)) {
           setSelectedTeam(teamsList[0]);
         }
       }
     });
     return () => unsubTeams();
-  }, []);
+  }, [selectedTeam]);
 
   // 2. Zentrale Spieler-Daten aus der Cloud laden
   useEffect(() => {
@@ -49,6 +54,7 @@ export default function PlayerManager() {
     if (currentList.includes(playerName.trim())) return;
 
     const updatedList = [...currentList, playerName.trim()];
+
     const newPlayersObj = {
       ...playersData,
       [selectedTeam]: updatedList
@@ -71,7 +77,10 @@ export default function PlayerManager() {
     savePlayersToCloud(newPlayersObj);
   };
 
-  const currentTeamPlayers = playersData[selectedTeam] || [];
+  // --- NEU: Zwingt die Liste IMMER in eine alphabetische Reihenfolge (A-Z) ---
+  const currentTeamPlayers = [...(playersData[selectedTeam] || [])].sort((a, b) => 
+    a.localeCompare(b)
+  );
 
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
@@ -82,7 +91,7 @@ export default function PlayerManager() {
         onChange={(e) => setSelectedTeam(e.target.value)}
         style={{ padding: "10px", width: "100%", marginBottom: "15px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
       >
-        {teams.length === 0 && <option value="">Keine Teams vorhanden</option>}
+        {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
         {teams.map((team) => (
           <option key={team} value={team}>
             {team}
