@@ -2,15 +2,15 @@ import { useState, useEffect } from "react";
 import AdminPanel from "./components/AdminPanel";
 import MatchView from "./components/MatchView";
 import PublicView from "./components/PublicView";
+import YouthAdminPage from "./components/YouthAdminPage"; 
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
-  // Club-ID aus der URL (z.B. #svon -> clubId = "svon") auslesen
   const [clubId, setClubId] = useState(() => {
     const hash = window.location.hash.replace("#", "").trim();
-    if (hash && hash !== "zuschauer") {
+    if (hash && hash !== "zuschauer" && hash !== "jugend") { 
       return hash.toLowerCase();
     }
     return localStorage.getItem("svon_current_club") || "";
@@ -21,7 +21,7 @@ export default function App() {
   });
   
   const [userRole, setUserRole] = useState(() => {
-    return localStorage.getItem("svon_user_role") || null; // "trainer" oder "admin"
+    return localStorage.getItem("svon_user_role") || null; 
   });
 
   const [clubInput, setClubInput] = useState("");
@@ -29,29 +29,33 @@ export default function App() {
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
   const [teams, setTeams] = useState([]);
 
-  // URL-Hash Änderung überwachen
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "").trim();
-      if (hash && hash !== "zuschauer") {
+      if (hash && hash !== "zuschauer" && hash !== "jugend") { 
         const cleanClub = hash.toLowerCase();
         setClubId(cleanClub);
         localStorage.setItem("svon_current_club", cleanClub);
       } else if (hash === "zuschauer" && clubId) {
         setView("public");
         localStorage.setItem("svon_current_view", "public");
+      } else if (hash === "jugend" && clubId) { 
+        setView("youth");
+        localStorage.setItem("svon_current_view", "youth");
       }
     };
 
     window.addEventListener("hashchange", handleHashChange);
+    
     if (window.location.hash === "#zuschauer" && clubId) {
       setView("public");
+    } else if (window.location.hash === "#jugend" && clubId) {
+      setView("youth");
     }
 
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, [clubId]);
 
-  // Teams für den aktuellen Club laden (Präfix: clubId_teams)
   useEffect(() => {
     if (!clubId) return;
 
@@ -94,7 +98,6 @@ export default function App() {
     setClubInput("");
   };
 
-  // --- LOGIN FÜR TRAINER (Passwort: 2002) ---
   const handleTrainerLogin = (e) => {
     e.preventDefault();
     if (trainerPasswordInput === "2002") {
@@ -109,7 +112,6 @@ export default function App() {
     }
   };
 
-  // --- LOGIN FÜR ADMIN (Passwort: 7241) ---
   const handleAdminLogin = (e) => {
     e.preventDefault();
     if (adminPasswordInput === "7241") {
@@ -132,7 +134,6 @@ export default function App() {
     window.location.hash = `#${clubId}`;
   };
 
-  // --- 0. WENN KEIN CLUB GEWÄHLT IST: VEREIN WÄHLEN ---
   if (!clubId) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
@@ -147,7 +148,7 @@ export default function App() {
               value={clubInput} 
               onChange={(e) => setClubInput(e.target.value)} 
               placeholder="z.B. svon" 
-              style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center" }}
+              style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center", color: "#333", background: "#fff" }} 
             />
             <button 
               type="submit" 
@@ -169,7 +170,6 @@ export default function App() {
     );
   }
 
-  // --- 2. ZUSCHAUER-ANSICHT ---
   if (view === "public") {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
@@ -187,7 +187,23 @@ export default function App() {
     );
   }
 
-  // --- 1. STARTSEITE FÜR DEN AKTIVEN VEREIN (Nur bei view === "home") ---
+  if (view === "youth") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
+        <div style={{ background: "#2980b9", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👦 Jugend-Bereich ({clubId.toUpperCase()})</span>
+          <button 
+            onClick={handleBackToHome}
+            style={{ background: "white", color: "#2980b9", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+          >
+            🏠 Zur Startseite
+          </button>
+        </div>
+        <YouthAdminPage clubId={clubId} />
+      </div>
+    );
+  }
+
   if (view === "home") {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
@@ -201,13 +217,12 @@ export default function App() {
         <div style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%", maxWidth: "320px" }}>
           
           <button 
-            onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); }}
+            onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
             style={{ padding: "16px", background: "#27ae60", color: "white", border: "none", borderRadius: "10px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
             👀 Zuschauer-Ansicht
           </button>
 
-          {/* Trainer Login */}
           <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
             <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "16px" }}>📋 Trainer-Bereich</h3>
             <form onSubmit={handleTrainerLogin}>
@@ -216,7 +231,7 @@ export default function App() {
                 value={trainerPasswordInput} 
                 onChange={(e) => setTrainerPasswordInput(e.target.value)} 
                 placeholder="Trainer-Passwort..." 
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center" }}
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center", color: "#333", background: "#fff" }} 
               />
               <button 
                 type="submit" 
@@ -226,7 +241,6 @@ export default function App() {
             </form>
           </div>
 
-          {/* Admin Login */}
           <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
             <h3 style={{ color: "#c0392b", margin: "0 0 10px 0", fontSize: "16px" }}>🔒 Admin-Bereich (Inkl. Teams)</h3>
             <form onSubmit={handleAdminLogin}>
@@ -235,7 +249,7 @@ export default function App() {
                 value={adminPasswordInput} 
                 onChange={(e) => setAdminPasswordInput(e.target.value)} 
                 placeholder="Admin-Passwort..." 
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center" }}
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center", color: "#333", background: "#fff" }} 
               />
               <button 
                 type="submit" 
@@ -245,12 +259,18 @@ export default function App() {
             </form>
           </div>
 
+          <button 
+            onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}
+            style={{ padding: "16px", background: "#2980b9", color: "white", border: "none", borderRadius: "10px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
+          >
+            👦 Jugend-Datenbank
+          </button>
+
         </div>
       </div>
     );
   }
 
-  // --- 3. ADMIN / TRAINER BEREICH ---
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", paddingBottom: "40px" }}>
       <div
@@ -307,7 +327,7 @@ export default function App() {
         </div>
 
         <button
-          onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); }}
+          onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
           style={{
             padding: "8px 12px",
             borderRadius: "6px",

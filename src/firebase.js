@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth"; // <-- NEU HINZUGEFÜGT
 
 const firebaseConfig = {
   apiKey: "AIzaSyADsOUKkPH1r9GeYUPXPZNWkvfvW-0SFfc",
@@ -16,3 +17,6 @@ const app = initializeApp(firebaseConfig);
 
 // Datenbank exportieren, damit andere Dateien sie nutzen können
 export const db = getFirestore(app);
+
+// Authentifizierung exportieren für den geschützten Jugend-Bereich
+export const auth = getAuth(app); // <-- NEU HINZUGEFÜGT
