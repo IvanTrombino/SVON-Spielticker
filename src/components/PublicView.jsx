@@ -23,6 +23,7 @@ export default function PublicView({ onBackToAdmin }) {
   
   // --- State für das Ein-/Ausblenden der Info-Box ---
   const [showInfo, setShowInfo] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const historyLengthRef = useRef(0);
 
@@ -84,7 +85,6 @@ export default function PublicView({ onBackToAdmin }) {
           setIsRunning(false);
         }
 
-        // Push-Benachrichtigungen feuern (Browser-intern)
         if (newHistory.length > historyLengthRef.current && historyLengthRef.current !== 0) {
           if (wantsNotificationsRef.current) {
             const lastEvent = newHistory[newHistory.length - 1];
@@ -143,7 +143,7 @@ export default function PublicView({ onBackToAdmin }) {
     }
 
     if (!("Notification" in window)) {
-      alert("Dein Browser unterstützt Push-Nachrichten nicht direkt. Klicke auf 'ℹ️ Info zur App-Installation', um zu erfahren, wie du es aktivieren kannst!");
+      alert("Dein Browser unterstützt Push-Nachrichten nicht direkt.");
       return;
     }
 
@@ -152,7 +152,7 @@ export default function PublicView({ onBackToAdmin }) {
         setWantsNotifications(true);
         wantsNotificationsRef.current = true;
         new Notification("SVON Live-Ticker", {
-          body: "Benachrichtigungen aktiviert! Du erfährst sofort, wenn ein Tor fällt.",
+          body: "Benachrichtigungen aktiviert!",
           icon: logo
         });
       } else {
@@ -187,10 +187,14 @@ export default function PublicView({ onBackToAdmin }) {
 
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
 
-  // --- HILFSFUNKTION FÜR NTFY KANAL & QR-CODE ---
+  // --- HILFSFUNKTION FÜR NTFY KANAL ---
   const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-  const ntfyUrl = `https://ntfy.sh/${safeChannelName}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(ntfyUrl)}`;
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(safeChannelName);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
@@ -231,34 +235,39 @@ export default function PublicView({ onBackToAdmin }) {
             onClick={() => setShowInfo(!showInfo)}
             style={{ background: "transparent", border: "none", color: "#2980b9", textDecoration: "underline", fontSize: "12px", cursor: "pointer" }}
           >
-            ℹ️️ Echte Push-Benachrichtigungen aufs Handy einrichten (App & QR-Code)
+            ℹ️ Echte Push-Benachrichtigungen aufs Handy (Anleitung)
           </button>
         </div>
 
-        {/* INFO-BOX MIT QR-CODE & ANLEITUNG (Wird nur angezeigt, wenn showInfo true ist) */}
+        {/* INFO-BOX MIT KOPIER-FUNKTION */}
         {showInfo && (
           <div style={{ background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "8px", padding: "15px", marginTop: "10px", textAlign: "left", fontSize: "13px", color: "#333" }}>
             <p style={{ margin: "0 0 8px 0", fontWeight: "bold", color: "#2146d0" }}>
               📱 Push-Alarm für "{selectedTeam}":
             </p>
             <p style={{ margin: "0 0 10px 0" }}>
-              Möchtest du Tore und Spielstände direkt als Push-Benachrichtigung auf dem Sperrbildschirm erhalten?
+              Möchtest du Tore und Spielstände direkt auf dem Sperrbildschirm erhalten?
             </p>
             
             <ol style={{ margin: "0 0 12px 0", paddingLeft: "20px", lineHeight: "1.5" }}>
               <li style={{ marginBottom: "6px" }}>Lade dir die kostenlose App <strong>„ntfy“</strong> aus dem App Store (iPhone) oder Play Store (Android) herunter.</li>
-              <li style={{ marginBottom: "6px" }}>Öffne die App und tippe auf das <strong>„+“</strong>, um einen Kanal zu abonnieren.</li>
-              <li>Gib den Namen <strong>{safeChannelName}</strong> ein – oder scanne direkt den QR-Code unten!</li>
+              <li style={{ marginBottom: "6px" }}>Öffne die App und tippe unten auf das <strong>„+“</strong> (Thema abonnieren).</li>
+              <li>Kopiere den Namen des Kanals und füge ihn dort ein:</li>
             </ol>
 
-            <div style={{ textAlign: "center", background: "white", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+            <div style={{ textAlign: "center", background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #ddd" }}>
               <p style={{ margin: "0 0 5px 0", fontSize: "12px", color: "#666" }}>
-                QR-Code für <strong>{selectedTeam}</strong> scannen:
+                Kanalname für <strong>{selectedTeam}</strong>:
               </p>
-              <img src={qrCodeUrl} alt="ntfy QR-Code" style={{ width: "130px", height: "130px" }} />
-              <p style={{ margin: "5px 0 0 0", fontSize: "11px", fontFamily: "monospace", color: "#2146d0" }}>
-                Kanal: {safeChannelName}
-              </p>
+              <div style={{ fontSize: "16px", fontWeight: "bold", fontFamily: "monospace", color: "#2146d0", marginBottom: "8px", background: "#f8f9fa", padding: "8px", borderRadius: "4px", border: "1px dashed #ccc" }}>
+                {safeChannelName}
+              </div>
+              <button 
+                onClick={copyToClipboard}
+                style={{ background: copied ? "#27ae60" : "#2146d0", color: "white", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "13px", fontWeight: "bold", cursor: "pointer" }}
+              >
+                {copied ? "✅ Erfolgreich kopiert!" : "📋 Namen kopieren"}
+              </button>
             </div>
           </div>
         )}
