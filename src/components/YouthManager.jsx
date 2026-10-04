@@ -73,7 +73,7 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
     </div>
     <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "15px", background: "rgba(255,255,255,0.5)", padding: "10px", borderRadius: "8px" }}>
       <CheckboxField label="Angemeldet bei SVON" name="registeredSVON" checked={formData.registeredSVON} onChange={handleChange} />
-      <CheckboxField label="Angemeldet beim DF B" name="registeredDFB" checked={formData.registeredDFB} onChange={handleChange} />
+      <CheckboxField label="Angemeldet beim DFB" name="registeredDFB" checked={formData.registeredDFB} onChange={handleChange} />
       <CheckboxField label="Bilder-Veröffentlichung erlaubt" name="photoConsent" checked={formData.photoConsent} onChange={handleChange} />
     </div>
 
@@ -486,9 +486,15 @@ export default function YouthManager({ clubId }) {
         <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
           
           <div style={{ background: "#2146d0", padding: "15px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "white", textAlign: "center" }}>
-            <h3 style={{ marginTop: 0, borderBottom: "1px solid rgba(255,255,255,0.3)", paddingBottom: "8px", fontSize: "15px" }}>🏆 Gemeldete Teams im Spielbetrieb</h3>
-            <div style={{ fontSize: "32px", fontWeight: "bold", margin: "8px 0" }}>
-              {totalRegisteredTeams} <span style={{ fontSize: "16px", fontWeight: "normal", opacity: 0.8 }}>Mannschaften insgesamt</span>
+            <h3 style={{ marginTop: 0, borderBottom: "1px solid rgba(255,255,255,0.3)", paddingBottom: "8px", fontSize: "15px" }}>🏆 Gemeldete Teams im Spielbetrieb ({totalRegisteredTeams} gesamt)</h3>
+            
+            {/* Sofortige Auflistung, welche Mannschaften in welcher Anzahl gemeldet sind */}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center", marginTop: "12px" }}>
+              {teamSettings.map(t => (
+                <div key={t.id} style={{ background: "rgba(255,255,255,0.15)", padding: "8px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "bold" }}>
+                  {t.name}: <span style={{ color: "#f1c40f", fontSize: "15px" }}>{t.count || 0}</span>
+                </div>
+              ))}
             </div>
           </div>
 
