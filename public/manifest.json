@@ -1,0 +1,20 @@
+{
+  "short_name": "SVON Ticker",
+  "name": "SVON Live-Ticker",
+  "icons": [
+    {
+      "src": "/SVON-Wappen.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/SVON-Wappen.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#2146d0",
+  "background_color": "#ffffff"
+}

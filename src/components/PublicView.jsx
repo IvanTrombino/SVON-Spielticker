@@ -18,10 +18,12 @@ export default function PublicView({ onBackToAdmin }) {
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
 
-  // --- NEU: State für Ein/Aus-Schalter der Benachrichtigungen ---
   const [wantsNotifications, setWantsNotifications] = useState(false);
-  const wantsNotificationsRef = useRef(false); // Wird für den Hintergrund-Snapshot benötigt
+  const wantsNotificationsRef = useRef(false); 
   
+  // --- NEU: State für das Ein-/Ausblenden der Info-Box ---
+  const [showInfo, setShowInfo] = useState(false);
+
   const historyLengthRef = useRef(0);
 
   // Teams laden & sortieren
@@ -82,7 +84,7 @@ export default function PublicView({ onBackToAdmin }) {
           setIsRunning(false);
         }
 
-        // Benachrichtigungen prüfen (Nur wenn der Schalter auf AN steht)
+        // Push-Benachrichtigungen feuern
         if (newHistory.length > historyLengthRef.current && historyLengthRef.current !== 0) {
           if (wantsNotificationsRef.current) {
             const lastEvent = newHistory[newHistory.length - 1];
@@ -133,18 +135,15 @@ export default function PublicView({ onBackToAdmin }) {
     return "📝";
   };
 
-  // --- NEU: Toggle-Funktion für Benachrichtigungen & iPhone-Erklärung ---
   const toggleNotifications = () => {
-    // Wenn aktuell AN -> Ausschalten
     if (wantsNotifications) {
       setWantsNotifications(false);
       wantsNotificationsRef.current = false;
       return;
     }
 
-    // Wenn aktuell AUS -> Anschalten versuchen
     if (!("Notification" in window)) {
-      alert("Dein Browser unterstützt Push-Nachrichten leider nicht direkt.\n\nTIPP FÜR iPHONE-NUTZER: Tippe unten auf 'Teilen' (Viereck mit Pfeil) und wähle 'Zum Home-Bildschirm'. Wenn du die App dann vom Home-Bildschirm startest, klappen auch die Benachrichtigungen!");
+      alert("Dein Browser unterstützt Push-Nachrichten nicht direkt. Klicke auf 'ℹ️ Info zur App-Installation', um zu erfahren, wie du es aktivieren kannst!");
       return;
     }
 
@@ -157,7 +156,7 @@ export default function PublicView({ onBackToAdmin }) {
           icon: logo
         });
       } else {
-        alert("Du hast die Benachrichtigungen in deinen Einstellungen blockiert.");
+        alert("Du hast die Benachrichtigungen in deinen Browser-Einstellungen blockiert.");
       }
     });
   };
@@ -202,24 +201,46 @@ export default function PublicView({ onBackToAdmin }) {
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
       
-      {/* --- NEU: Dynamischer Ein-/Ausschalt-Button --- */}
-      <button 
-        onClick={toggleNotifications}
-        style={{ 
-          marginBottom: "15px", 
-          padding: "8px 15px", 
-          background: wantsNotifications ? "#e74c3c" : "#f39c12", // Rot, wenn an (zum Deaktivieren) - Orange, wenn aus
-          color: "white", 
-          border: "none", 
-          borderRadius: "15px", 
-          cursor: "pointer", 
-          fontSize: "12px", 
-          fontWeight: "bold", 
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)" 
-        }}
-      >
-        {wantsNotifications ? "🔕 Benachrichtigungen deaktivieren" : "🔔 Live-Benachrichtigungen aktivieren"}
-      </button>
+      {/* BENACHRICHTIGUNGEN & INFO BEREICH */}
+      <div style={{ marginBottom: "20px" }}>
+        <button 
+          onClick={toggleNotifications}
+          style={{ 
+            padding: "8px 15px", 
+            background: wantsNotifications ? "#e74c3c" : "#f39c12", 
+            color: "white", 
+            border: "none", 
+            borderRadius: "15px", 
+            cursor: "pointer", 
+            fontSize: "12px", 
+            fontWeight: "bold", 
+            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            marginBottom: "8px"
+          }}
+        >
+          {wantsNotifications ? "🔕 Benachrichtigungen deaktivieren" : "🔔 Live-Benachrichtigungen aktivieren"}
+        </button>
+
+        <div>
+          <button 
+            onClick={() => setShowInfo(!showInfo)}
+            style={{ background: "transparent", border: "none", color: "#2980b9", textDecoration: "underline", fontSize: "12px", cursor: "pointer" }}
+          >
+            ℹ️ Info zur App-Installation
+          </button>
+        </div>
+
+        {/* INFO-BOX (Wird nur angezeigt, wenn showInfo true ist) */}
+        {showInfo && (
+          <div style={{ background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "8px", padding: "12px", marginTop: "10px", textAlign: "left", fontSize: "13px", color: "#333" }}>
+            <p style={{ margin: "0 0 8px 0" }}><strong>Damit Benachrichtigungen reibungslos funktionieren, installiere diese Seite als App:</strong></p>
+            <ul style={{ margin: "0", paddingLeft: "20px", lineHeight: "1.5" }}>
+              <li style={{ marginBottom: "6px" }}><strong>🍏 iPhone / iPad:</strong> Tippe unten im Browser auf das <strong>Teilen-Symbol</strong> (Viereck mit Pfeil nach oben) und wähle <strong>"Zum Home-Bildschirm"</strong>. Öffne die App dann über dein neues Start-Icon!</li>
+              <li><strong>🤖 Android:</strong> Tippe oben rechts auf die <strong>drei Punkte</strong> und wähle <strong>"Zum Startbildschirm hinzufügen"</strong> oder <strong>"App installieren"</strong>.</li>
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold" }}>
@@ -274,7 +295,6 @@ export default function PublicView({ onBackToAdmin }) {
           </div>
         )}
       </div>
-
     </div>
   );
 }
