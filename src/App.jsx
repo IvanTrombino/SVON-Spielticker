@@ -4,7 +4,8 @@ import MatchView from "./components/MatchView";
 import PublicView from "./components/PublicView";
 import YouthAdminPage from "./components/YouthAdminPage"; 
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth"; // Firebase Auth importiert
+import { db, auth } from "./firebase";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
@@ -20,14 +21,22 @@ export default function App() {
     return localStorage.getItem("svon_current_view") || "home";
   });
   
-  const [userRole, setUserRole] = useState(() => {
-    return localStorage.getItem("svon_user_role") || null; 
-  });
+  // Überprüfung, ob ein Firebase-User eingeloggt ist (ersetzt die alte Rolle)
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const [clubInput, setClubInput] = useState("");
   const [trainerPasswordInput, setTrainerPasswordInput] = useState("");
-  const [adminPasswordInput, setAdminPasswordInput] = useState("");
   const [teams, setTeams] = useState([]);
+
+  // Firebase Auth State Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setFirebaseUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -101,7 +110,7 @@ export default function App() {
   const handleTrainerLogin = (e) => {
     e.preventDefault();
     if (trainerPasswordInput === "2002") {
-      setUserRole("trainer");
+      // Trainer bekommt die Rolle "trainer"
       localStorage.setItem("svon_user_role", "trainer");
       setView("match"); 
       localStorage.setItem("svon_current_view", "match");
@@ -112,27 +121,21 @@ export default function App() {
     }
   };
 
-  const handleAdminLogin = (e) => {
-    e.preventDefault();
-    if (adminPasswordInput === "7241") {
-      setUserRole("admin");
-      localStorage.setItem("svon_user_role", "admin");
-      setView("match"); 
-      localStorage.setItem("svon_current_view", "match");
-      setAdminPasswordInput("");
-    } else {
-      alert("Falsches Admin-Passwort!");
-      setAdminPasswordInput("");
-    }
+  const handleLogout = async () => {
+    await signOut(auth);
+    handleBackToHome();
   };
 
   const handleBackToHome = () => {
     setView("home");
-    setUserRole(null);
     localStorage.removeItem("svon_current_view");
     localStorage.removeItem("svon_user_role");
     window.location.hash = `#${clubId}`;
   };
+
+  if (authLoading) {
+    return <div style={{ textAlign: "center", marginTop: "50px", fontFamily: "sans-serif" }}>Lade...</div>;
+  }
 
   if (!clubId) {
     return (
@@ -253,28 +256,29 @@ export default function App() {
             </form>
           </div>
 
-          <div style={{ background: "white", padding: "18px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#c0392b", margin: "0 0 10px 0", fontSize: "15px" }}>🔒 Admin-Bereich</h3>
-            <form onSubmit={handleAdminLogin}>
-              <input 
-                type="password" 
-                value={adminPasswordInput} 
-                onChange={(e) => setAdminPasswordInput(e.target.value)} 
-                placeholder="Admin-Passwort..." 
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center", color: "#333", background: "#fff" }} 
-              />
-              <button 
-                type="submit" 
-                style={{ width: "100%", padding: "11px", background: "#c0392b", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
-                Als Admin anmelden
-              </button>
-            </form>
-          </div>
+          {/* Der Admin-Bereich führt jetzt direkt zur Firebase-Anmeldung bzw. öffnet den Admin-Bereich direkt, wenn man eingeloggt ist */}
+          <button 
+            onClick={() => {
+              if (firebaseUser) {
+                setView("match");
+                localStorage.setItem("svon_current_view", "match");
+              } else {
+                setView("youth"); // Leitet zum Login (Jugend/Admin-Login) weiter oder öffnet direkt den geschützten Bereich
+                localStorage.setItem("svon_current_view", "youth");
+                window.location.hash = "#jugend";
+              }
+            }}
+            style={{ padding: "15px", background: "#c0392b", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
+          >
+            🔒 Admin-Bereich (Login)
+          </button>
 
         </div>
       </div>
     );
   }
+
+  const role = firebaseUser ? "admin" : (localStorage.getItem("svon_user_role") || "trainer");
 
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", paddingBottom: "40px" }}>
@@ -284,7 +288,7 @@ export default function App() {
           justifyContent: "space-between",
           alignItems: "center",
           padding: "10px 15px",
-          background: userRole === "admin" ? "#c0392b" : "#2146d0",
+          background: firebaseUser ? "#c0392b" : "#2146d0",
           boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
           flexWrap: "wrap",
           gap: "8px"
@@ -292,9 +296,9 @@ export default function App() {
       >
         <button 
           onClick={handleBackToHome}
-          style={{ background: "white", color: userRole === "admin" ? "#c0392b" : "#2146d0", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+          style={{ background: "white", color: firebaseUser ? "#c0392b" : "#2146d0", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
         >
-          🏠 Startseite ({userRole === "admin" ? "Admin" : "Trainer"})
+          🏠 Startseite ({firebaseUser ? "Admin" : "Trainer"})
         </button>
 
         <div style={{ display: "flex", gap: "8px" }}>
@@ -305,7 +309,7 @@ export default function App() {
               borderRadius: "6px",
               border: 0,
               background: view === "match" ? "white" : "rgba(255,255,255,0.2)",
-              color: view === "match" ? (userRole === "admin" ? "#c0392b" : "#2146d0") : "white",
+              color: view === "match" ? (firebaseUser ? "#c0392b" : "#2146d0") : "white",
               fontWeight: "bold",
               cursor: "pointer",
               fontSize: "13px"
@@ -321,7 +325,7 @@ export default function App() {
               borderRadius: "6px",
               border: 0,
               background: view === "admin" ? "white" : "rgba(255,255,255,0.2)",
-              color: view === "admin" ? (userRole === "admin" ? "#c0392b" : "#2146d0") : "white",
+              color: view === "admin" ? (firebaseUser ? "#c0392b" : "#2146d0") : "white",
               fontWeight: "bold",
               cursor: "pointer",
               fontSize: "13px"
@@ -332,8 +336,8 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
-          {/* NUR FÜR ADMIN: JUGEND-DATENBANK BUTTON IN DER LEISTE */}
-          {userRole === "admin" && (
+          {/* NUR FÜR FIREBASE-ADMINS: JUGEND-DATENBANK BUTTON IN DER LEISTE */}
+          {firebaseUser && (
             <button
               onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}
               style={{
@@ -366,17 +370,35 @@ export default function App() {
           >
             👀 Zuschauer
           </button>
+
+          {firebaseUser && (
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "6px",
+                border: 0,
+                background: "#333",
+                color: "white",
+                fontWeight: "bold",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              🚪 Logout
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
-        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={userRole} />}
+        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={firebaseUser ? "admin" : role} />}
         {view === "admin" && (
           <AdminPanel 
             clubId={clubId}
             teams={teams} 
-            setTeams={userRole === "admin" ? saveTeamsToCloud : null} 
-            userRole={userRole} 
+            setTeams={firebaseUser ? saveTeamsToCloud : null} 
+            userRole={firebaseUser ? "admin" : role} 
           />
         )}
       </div>
