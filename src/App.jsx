@@ -214,25 +214,29 @@ export default function App() {
 
   if (view === "home") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
-        <img src={logo} alt="Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
-        <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>SV Orsingen-Nenzingen</h1>
-        <p style={{ color: "#666", marginBottom: "5px", textAlign: "center" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
-        <button onClick={() => { setClubId(""); window.location.hash = ""; localStorage.removeItem("svon_current_club"); }} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline", marginBottom: "20px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px", boxSizing: "border-box" }}>
+        <img src={logo} alt="Logo" style={{ maxWidth: "90px", marginBottom: "10px" }} />
+        <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center", fontSize: "24px", wordBreak: "break-word", padding: "0 10px" }}>
+          SV Orsingen-Nenzingen
+        </h1>
+        <p style={{ color: "#666", marginBottom: "5px", textAlign: "center", fontSize: "14px" }}>
+          Aktiver Verein: <strong>{clubId.toUpperCase()}</strong>
+        </p>
+        <button onClick={() => { setClubId(""); window.location.hash = ""; localStorage.removeItem("svon_current_club"); }} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline", marginBottom: "25px" }}>
           Verein wechseln
         </button>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%", maxWidth: "320px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px", width: "100%", maxWidth: "320px" }}>
           
           <button 
             onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
-            style={{ padding: "16px", background: "#27ae60", color: "white", border: "none", borderRadius: "10px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
+            style={{ padding: "15px", background: "#27ae60", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
             👀 Live-Ticker Zuschauer Ansicht
           </button>
 
-          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "16px" }}>📋 Live-Ticker Trainer Bereich</h3>
+          <div style={{ background: "white", padding: "18px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
+            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "15px" }}>📋 Live-Ticker Trainer Bereich</h3>
             <form onSubmit={handleTrainerLogin}>
               <input 
                 type="password" 
@@ -243,14 +247,14 @@ export default function App() {
               />
               <button 
                 type="submit" 
-                style={{ width: "100%", padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
+                style={{ width: "100%", padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
                 Als Trainer anmelden
               </button>
             </form>
           </div>
 
-          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#c0392b", margin: "0 0 10px 0", fontSize: "16px" }}>🔒 Admin-Bereich</h3>
+          <div style={{ background: "white", padding: "18px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
+            <h3 style={{ color: "#c0392b", margin: "0 0 10px 0", fontSize: "15px" }}>🔒 Admin-Bereich</h3>
             <form onSubmit={handleAdminLogin}>
               <input 
                 type="password" 
@@ -261,7 +265,7 @@ export default function App() {
               />
               <button 
                 type="submit" 
-                style={{ width: "100%", padding: "12px", background: "#c0392b", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
+                style={{ width: "100%", padding: "11px", background: "#c0392b", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
                 Als Admin anmelden
               </button>
             </form>
