@@ -7,6 +7,16 @@ import { db } from "./firebase";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
+  // Club-ID aus der URL (z.B. #svon -> clubId = "svon") auslesen
+  const [clubId, setClubId] = useState(() => {
+    const hash = window.location.hash.replace("#", "").trim();
+    // Wenn ein Hash da ist (und nicht zuschauer), nehmen wir das als Club-ID
+    if (hash && hash !== "zuschauer") {
+      return hash.toLowerCase();
+    }
+    return localStorage.getItem("svon_current_club") || "";
+  });
+
   const [view, setView] = useState(() => {
     return localStorage.getItem("svon_current_view") || "home";
   });
@@ -15,32 +25,74 @@ export default function App() {
     return localStorage.getItem("svon_user_role") || null; // "trainer" oder "admin"
   });
 
+  const [clubInput, setClubInput] = useState("");
   const [trainerPasswordInput, setTrainerPasswordInput] = useState("");
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
   const [teams, setTeams] = useState([]);
 
+  // URL-Hash Änderung überwachen
   useEffect(() => {
-    if (window.location.hash === "#zuschauer") {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "").trim();
+      if (hash && hash !== "zuschauer") {
+        const cleanClub = hash.toLowerCase();
+        setClubId(cleanClub);
+        localStorage.setItem("svon_current_club", cleanClub);
+      } else if (hash === "zuschauer" && clubId) {
+        setView("public");
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    if (window.location.hash === "#zuschauer" && clubId) {
       setView("public");
     }
-  }, []);
 
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [clubId]);
+
+  // Teams für den aktuellen Club laden (Präfix: clubId_teams)
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
+    if (!clubId) return;
+
+    const docName = `${clubId}_teams`;
+    const unsub = onSnapshot(doc(db, "ticker", docName), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
         setTeams(snap.data().teamsList);
+      } else {
+        // Falls noch keine Teams da sind, Standard-Teams für SVON vorbelegen
+        if (clubId === "svon") {
+          const defaultTeams = ["1. Mannschaft", "2. Mannschaft", "F-Jugend"];
+          setTeams(defaultTeams);
+        } else {
+          setTeams(["1. Mannschaft"]);
+        }
       }
     });
     return () => unsub();
-  }, []);
+  }, [clubId]);
 
   const saveTeamsToCloud = async (newTeams) => {
     setTeams(newTeams);
     try {
-      await setDoc(doc(db, "ticker", "teams"), { teamsList: newTeams });
+      const docName = `${clubId}_teams`;
+      await setDoc(doc(db, "ticker", docName), { teamsList: newTeams });
     } catch (e) {
-      console.error("Fehler beim Speichern der Teams in der Cloud:", e);
+      console.error("Fehler beim Speichern der Teams:", e);
     }
+  };
+
+  const handleSelectClub = (e) => {
+    e.preventDefault();
+    const clean = clubInput.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!clean) {
+      alert("Bitte gib eine gültige Vereins-ID ein!");
+      return;
+    }
+    setClubId(clean);
+    localStorage.setItem("svon_current_club", clean);
+    window.location.hash = `#${clean}`;
+    setClubInput("");
   };
 
   // --- LOGIN FÜR TRAINER (Passwort: 2002) ---
@@ -81,13 +133,53 @@ export default function App() {
     window.location.hash = "";
   };
 
-  // --- 1. STARTSEITE MIT GETRENNTEN LOGIN-BEREICHEN ---
+  // --- 0. WENN KEIN CLUB GEWÄHLT IST: VEREIN WÄHLEN ---
+  if (!clubId) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
+        <img src={logo} alt="Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
+        <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>Live-Ticker Plattform</h1>
+        <p style={{ color: "#666", marginBottom: "25px", textAlign: "center" }}>Bitte gib den Vereins-Code ein oder wähle deinen Verein:</p>
+
+        <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center", width: "100%", maxWidth: "320px" }}>
+          <form onSubmit={handleSelectClub}>
+            <input 
+              type="text" 
+              value={clubInput} 
+              onChange={(e) => setClubInput(e.target.value)} 
+              placeholder="z.B. svon" 
+              style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center" }}
+            />
+            <button 
+              type="submit" 
+              style={{ width: "100%", padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
+              Verein laden
+            </button>
+          </form>
+
+          <div style={{ marginTop: "15px", borderTop: "1px solid #eee", paddingTop: "15px" }}>
+            <button 
+              onClick={() => { setClubId("svon"); window.location.hash = "#svon"; }}
+              style={{ background: "none", border: "none", color: "#2980b9", textDecoration: "underline", cursor: "pointer", fontSize: "13px" }}
+            >
+              👉 Direkt zu SV Orsingen-Nenzingen (svon)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- 1. STARTSEITE FÜR DEN AKTIVEN VEREIN ---
   if (view === "home" || !userRole) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
-        <img src={logo} alt="SVON Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
+        <img src={logo} alt="Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
         <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>SVON Live-Ticker</h1>
-        <p style={{ color: "#666", marginBottom: "25px", textAlign: "center" }}>Bitte wähle deinen Bereich aus:</p>
+        <p style={{ color: "#666", marginBottom: "5px", textAlign: "center" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
+        <button onClick={() => { setClubId(""); window.location.hash = ""; localStorage.removeItem("svon_current_club"); }} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline", marginBottom: "20px" }}>
+          Verein wechseln
+        </button>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%", maxWidth: "320px" }}>
           
@@ -146,7 +238,7 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
         <div style={{ background: "#27ae60", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Zuschauer-Modus</span>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Zuschauer-Modus ({clubId.toUpperCase()})</span>
           <button 
             onClick={handleBackToHome}
             style={{ background: "white", color: "#27ae60", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
@@ -154,7 +246,7 @@ export default function App() {
             🏠 Zur Startseite
           </button>
         </div>
-        <PublicView onBackToAdmin={handleBackToHome} />
+        <PublicView clubId={clubId} onBackToAdmin={handleBackToHome} />
       </div>
     );
   }
@@ -233,9 +325,10 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
-        {view === "match" && <MatchView teams={teams} userRole={userRole} />}
+        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={userRole} />}
         {view === "admin" && (
           <AdminPanel 
+            clubId={clubId}
             teams={teams} 
             setTeams={userRole === "admin" ? saveTeamsToCloud : null} 
             userRole={userRole} 
