@@ -11,7 +11,7 @@ export default function MatchView({ clubId, teams }) {
   // --- CLOUD-STATE: Metadaten ---
   const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
-  const [savedMatches, setSavedMatches] = useState({});
+  const [savedMatches, setSavedMatches] = useState([]); // WICHTIG: Hier sind die eckigen Klammern wieder da!
   const [lineups, setLineups] = useState({});
   const [nextMatches, setNextMatches] = useState({});
 
