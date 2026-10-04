@@ -13,6 +13,7 @@ export default function MatchView() {
   const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
+  const [lineups, setLineups] = useState({}); // NEU: Kader pro Mannschaft
 
   // --- CLOUD-STATE: Live-Spiel ---
   const [matchDate, setMatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -84,15 +85,21 @@ export default function MatchView() {
       if (snap.exists()) setSavedMatches(snap.data().matchesList || []);
     });
 
+    const unsubLineups = onSnapshot(doc(db, "ticker", "lineups"), (snap) => {
+      if (snap.exists()) setLineups(snap.data() || {});
+    });
+
     return () => {
       unsubTeams();
       unsubScorers();
       unsubMatches();
+      unsubLineups();
     };
   }, []);
 
-  // 2. SPIELER LADEN
+  // 2. SPIELER LADEN & Spielerauswahl bei Teamwechsel zurücksetzen
   useEffect(() => {
+    setSelectedPlayer("");
     if (!selectedTeam) return;
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
       if (snap.exists()) {
@@ -168,6 +175,24 @@ export default function MatchView() {
       await setDoc(doc(db, "ticker", "matches"), { matchesList: newMatchesList });
     } catch (error) {
       console.error("Fehler beim Speichern der Historie:", error);
+    }
+  };
+
+  // Kader in Cloud speichern
+  const togglePlayerInLineup = async (player) => {
+    const currentTeamLineup = lineups[selectedTeam] || [];
+    let updatedLineup;
+    if (currentTeamLineup.includes(player)) {
+      updatedLineup = currentTeamLineup.filter(p => p !== player);
+    } else {
+      updatedLineup = [...currentTeamLineup, player];
+    }
+    const newLineups = { ...lineups, [selectedTeam]: updatedLineup };
+    setLineups(newLineups);
+    try {
+      await setDoc(doc(db, "ticker", "lineups"), newLineups);
+    } catch (error) {
+      console.error("Fehler beim Speichern des Kaders:", error);
     }
   };
 
@@ -263,7 +288,7 @@ export default function MatchView() {
     setHomeGoals(newHomeGoals);
     setAwayGoals(newAwayGoals);
     setHistory(newHistory);
-    setSelectedPlayer("");
+    setSelectedPlayer(""); // Zurücksetzen nach Aktion
 
     syncLiveMatch({
       homeGoals: newHomeGoals,
@@ -467,11 +492,11 @@ export default function MatchView() {
     background: activeTab === tabName ? "#2146d0" : "#e0e0e0",
     color: activeTab === tabName ? "white" : "#333",
     border: "none", borderRadius: "8px", fontWeight: "bold",
-    cursor: "pointer", fontSize: "14px"
+    cursor: "pointer", fontSize: "13px"
   });
 
-  // --- FILTER FÜR DIE GESPEICHERTEN SPIELE NACH AKTUELLER MANNSCHAFT ---
   const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
+  const currentLineup = lineups[selectedTeam] || [];
 
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
@@ -494,12 +519,16 @@ export default function MatchView() {
         </select>
       </div>
 
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+      {/* --- NAVIGATION TABS (INKL. KADER) --- */}
+      <div style={{ display: "flex", gap: "6px", marginBottom: "20px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
         </button>
+        <button onClick={() => setActiveTab("lineup")} style={tabButtonStyle("lineup")}>
+          📋 Kader ({currentLineup.length})
+        </button>
         <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
-          📜 Letzte Spiele ({filteredMatches.length})
+          📜 Spiele ({filteredMatches.length})
         </button>
       </div>
 
@@ -604,27 +633,63 @@ export default function MatchView() {
 
           <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-          <div>
-            <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} style={{ ...inputStyle, marginBottom: "15px" }}>
-              <option value="">-- {selectedTeam} Spieler wählen --</option>
-              {players.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "25px" }}>
-              <button onClick={() => addEvent("home", "goal")} style={{...actionButtonStyle, background: "#2146d0"}}>⚽ Tor {homeTeam}</button>
-              <button onClick={() => addEvent("away", "goal")} style={{...actionButtonStyle, background: "#333"}}>⚽ Tor {awayTeam}</button>
-              
-              <button onClick={() => addEvent("home", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {homeTeam}</button>
-              <button onClick={() => addEvent("away", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {awayTeam}</button>
-              
-              <button onClick={() => addEvent("home", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {homeTeam}</button>
-              <button onClick={() => addEvent("away", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {awayTeam}</button>
-
-              <button onClick={() => addEvent("home", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {homeTeam}</button>
-              <button onClick={() => addEvent("away", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {awayTeam}</button>
+          {/* --- SCHNELL-AUSWAHL FÜR SPIELER AUS DEM KADER --- */}
+          <div style={{ marginBottom: "20px", textAlign: "left" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>
+                Aktiver Spieler / Torschütze: <span style={{ color: "#2146d0" }}>{selectedPlayer || "Keiner ausgewählt"}</span>
+              </label>
+              {selectedPlayer && (
+                <button onClick={() => setSelectedPlayer("")} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}>
+                  Auswahl aufheben
+                </button>
+              )}
             </div>
+
+            {currentLineup.length === 0 ? (
+              <div style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px dashed #ccc", textAlign: "center" }}>
+                <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#666" }}>Kein Kader für {selectedTeam} hinterlegt.</p>
+                <button onClick={() => setActiveTab("lineup")} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", cursor: "pointer", fontWeight: "bold" }}>
+                  📋 Jetzt Kader zusammenstellen
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", maxHeight: "150px", overflowY: "auto", background: "white", padding: "8px", borderRadius: "8px", border: "1px solid #ccc" }}>
+                {currentLineup.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setSelectedPlayer(p)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: "6px",
+                      border: "none",
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                      background: selectedPlayer === p ? "#2146d0" : "#e8f4f8",
+                      color: selectedPlayer === p ? "white" : "#2c3e50",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                    }}
+                  >
+                    {p} {selectedPlayer === p && "✓"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "25px" }}>
+            <button onClick={() => addEvent("home", "goal")} style={{...actionButtonStyle, background: "#2146d0"}}>⚽ Tor {homeTeam}</button>
+            <button onClick={() => addEvent("away", "goal")} style={{...actionButtonStyle, background: "#333"}}>⚽ Tor {awayTeam}</button>
+            
+            <button onClick={() => addEvent("home", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {homeTeam}</button>
+            <button onClick={() => addEvent("away", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {awayTeam}</button>
+            
+            <button onClick={() => addEvent("home", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {homeTeam}</button>
+            <button onClick={() => addEvent("away", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {awayTeam}</button>
+
+            <button onClick={() => addEvent("home", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {homeTeam}</button>
+            <button onClick={() => addEvent("away", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {awayTeam}</button>
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
@@ -647,6 +712,50 @@ export default function MatchView() {
                   <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- NEUER REITER: KADER AUSWÄHLEN --- */}
+      {activeTab === "lineup" && (
+        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+          <h3 style={{ fontSize: "1.2rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📋 Kader für heute ({selectedTeam})</h3>
+          <p style={{ fontSize: "12px", color: "#666", textAlign: "center", marginBottom: "15px" }}>
+            Wähle aus, welche Spieler heute im Kader stehen. Sie erscheinen dann direkt als Schnell-Buttons im Ticker!
+          </p>
+
+          {players.length === 0 ? (
+            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine Spieler im System für diese Mannschaft hinterlegt.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {players.map((p) => {
+                const isInLineup = currentLineup.includes(p);
+                return (
+                  <div 
+                    key={p} 
+                    onClick={() => togglePlayerInLineup(p)}
+                    style={{ 
+                      background: isInLineup ? "#e8f8f5" : "white", 
+                      border: isInLineup ? "1px solid #27ae60" : "1px solid #ddd", 
+                      borderRadius: "8px", 
+                      padding: "10px 14px", 
+                      display: "flex", 
+                      justifyContent: "space-between", 
+                      alignItems: "center", 
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.02)"
+                    }}
+                  >
+                    <span style={{ fontWeight: isInLineup ? "bold" : "normal", color: isInLineup ? "#27ae60" : "#333", fontSize: "15px" }}>
+                      {p}
+                    </span>
+                    <span style={{ fontSize: "18px" }}>
+                      {isInLineup ? "✅" : "➕"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -696,7 +805,7 @@ export default function MatchView() {
                       </span>
                       
                       <button onClick={() => shareMatchToSocialMedia(match)} title="Highlights teilen" style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>📤 Teilen</button>
-                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
+                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
                     </div>
                   )}
                 </div>
