@@ -10,7 +10,6 @@ export default function App() {
   // Club-ID aus der URL (z.B. #svon -> clubId = "svon") auslesen
   const [clubId, setClubId] = useState(() => {
     const hash = window.location.hash.replace("#", "").trim();
-    // Wenn ein Hash da ist (und nicht zuschauer), nehmen wir das als Club-ID
     if (hash && hash !== "zuschauer") {
       return hash.toLowerCase();
     }
@@ -40,6 +39,7 @@ export default function App() {
         localStorage.setItem("svon_current_club", cleanClub);
       } else if (hash === "zuschauer" && clubId) {
         setView("public");
+        localStorage.setItem("svon_current_view", "public");
       }
     };
 
@@ -60,7 +60,6 @@ export default function App() {
       if (snap.exists() && snap.data().teamsList) {
         setTeams(snap.data().teamsList);
       } else {
-        // Falls noch keine Teams da sind, Standard-Teams für SVON vorbelegen
         if (clubId === "svon") {
           const defaultTeams = ["1. Mannschaft", "2. Mannschaft", "F-Jugend"];
           setTeams(defaultTeams);
@@ -130,7 +129,7 @@ export default function App() {
     setUserRole(null);
     localStorage.removeItem("svon_current_view");
     localStorage.removeItem("svon_user_role");
-    window.location.hash = "";
+    window.location.hash = `#${clubId}`;
   };
 
   // --- 0. WENN KEIN CLUB GEWÄHLT IST: VEREIN WÄHLEN ---
@@ -170,8 +169,26 @@ export default function App() {
     );
   }
 
-  // --- 1. STARTSEITE FÜR DEN AKTIVEN VEREIN ---
-  if (view === "home" || !userRole) {
+  // --- 2. ZUSCHAUER-ANSICHT ---
+  if (view === "public") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
+        <div style={{ background: "#27ae60", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Zuschauer-Modus ({clubId.toUpperCase()})</span>
+          <button 
+            onClick={handleBackToHome}
+            style={{ background: "white", color: "#27ae60", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+          >
+            🏠 Zur Startseite
+          </button>
+        </div>
+        <PublicView clubId={clubId} teams={teams} onBackToAdmin={handleBackToHome} />
+      </div>
+    );
+  }
+
+  // --- 1. STARTSEITE FÜR DEN AKTIVEN VEREIN (Nur bei view === "home") ---
+  if (view === "home") {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
         <img src={logo} alt="Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
@@ -229,24 +246,6 @@ export default function App() {
           </div>
 
         </div>
-      </div>
-    );
-  }
-
-  // --- 2. ZUSCHAUER-ANSICHT ---
-  if (view === "public") {
-    return (
-      <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
-        <div style={{ background: "#27ae60", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Zuschauer-Modus ({clubId.toUpperCase()})</span>
-          <button 
-            onClick={handleBackToHome}
-            style={{ background: "white", color: "#27ae60", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
-          >
-            🏠 Zur Startseite
-          </button>
-        </div>
-        <PublicView clubId={clubId} onBackToAdmin={handleBackToHome} />
       </div>
     );
   }
