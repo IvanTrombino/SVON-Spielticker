@@ -4,28 +4,37 @@ import { db } from "../firebase";
 
 export default function Statistics() {
   const [teams, setTeams] = useState([]);
-  
-  // Startseite ist standardmäßig die 1. Mannschaft
   const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
   
   const [matches, setMatches] = useState([]);
   const [liveMatchHistory, setLiveMatchHistory] = useState([]);
 
-  // 1. Teams in Echtzeit aus der Cloud laden
+  // 1. Teams in Echtzeit aus der Cloud laden und sortieren
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
         const teamsList = snap.data().teamsList;
-        setTeams(teamsList);
         
-        // Falls "1. Mannschaft" nicht existiert, nimm das erste verfügbare Team
-        if (teamsList.length > 0 && !teamsList.includes(selectedTeam)) {
-          setSelectedTeam(teamsList[0]);
-        }
+        const customOrder = [
+          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
+          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
+          "E-Jugend Funino", "F-Jugend", "G-Jugend"
+        ];
+
+        const sortedTeams = [...teamsList].sort((a, b) => {
+          const indexA = customOrder.indexOf(a);
+          const indexB = customOrder.indexOf(b);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
+        });
+
+        setTeams(sortedTeams);
       }
     });
     return () => unsubTeams();
-  }, [selectedTeam]);
+  }, []);
 
   // 2. Beendete Spiele (Historie) laden
   useEffect(() => {
@@ -37,7 +46,7 @@ export default function Statistics() {
     return () => unsubMatches();
   }, []);
 
-  // 3. Aktuelles Live-Spiel für dieses Team laden (damit Live-Tore sofort zählen)
+  // 3. Aktuelles Live-Spiel für dieses Team laden
   useEffect(() => {
     if (!selectedTeam) return;
     const docName = `live_match_${selectedTeam}`;
@@ -54,21 +63,15 @@ export default function Statistics() {
   // --- STATISTIK DYNAMISCH BERECHNEN ---
   const calculateStats = () => {
     const stats = {};
-
-    // Ereignisse aus den beendeten Spielen DIESES Teams filtern
     const teamMatches = matches.filter((m) => m.team === selectedTeam);
     const allEvents = [];
 
     teamMatches.forEach((match) => {
       if (match.history) allEvents.push(...match.history);
     });
-    
-    // Live-Ereignisse anhängen
     allEvents.push(...liveMatchHistory);
 
-    // Zusammenzählen
     allEvents.forEach((event) => {
-      // Gegner oder unbekannte Spieler ignorieren
       if (!event.player || event.player === "Unbekannt" || event.player === "Gegner") return;
 
       if (!stats[event.player]) {
@@ -81,7 +84,6 @@ export default function Statistics() {
       if (event.type === "red") stats[event.player].red += 1;
     });
 
-    // Aus dem Objekt eine sortierte Liste machen (nach Toren absteigend sortiert)
     return Object.entries(stats)
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
@@ -93,7 +95,6 @@ export default function Statistics() {
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", fontFamily: "sans-serif" }}>
       <h2 style={{ color: "#2146d0", marginBottom: "20px", textAlign: "center" }}>📊 Spielerstatistik</h2>
 
-      {/* TEAM-AUSWAHL */}
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold" }}>
           Mannschaft auswählen:
@@ -112,7 +113,6 @@ export default function Statistics() {
 
       <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-      {/* STATISTIK-TABELLE */}
       {playerStats.length === 0 ? (
         <p style={{ color: "#777", textAlign: "center", marginTop: "20px" }}>
           Bisher keine Ereignisse (Tore oder Karten) für diese Mannschaft erfasst.

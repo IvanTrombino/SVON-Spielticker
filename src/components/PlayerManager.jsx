@@ -4,30 +4,38 @@ import { db } from "../firebase";
 
 export default function PlayerManager() {
   const [teams, setTeams] = useState([]);
-  
-  // Startseite ist standardmäßig die 1. Mannschaft
   const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
-  
   const [playerName, setPlayerName] = useState("");
   const [playersData, setPlayersData] = useState({});
 
-  // 1. Teams aus Firebase laden
+  // 1. Teams aus Firebase laden und sortieren
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
       if (docSnap.exists()) {
         const teamsList = docSnap.data().teamsList || [];
-        setTeams(teamsList);
         
-        // Falls "1. Mannschaft" nicht existiert, nimm das erste verfügbare Team
-        if (teamsList.length > 0 && !teamsList.includes(selectedTeam)) {
-          setSelectedTeam(teamsList[0]);
-        }
+        const customOrder = [
+          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
+          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
+          "E-Jugend Funino", "F-Jugend", "G-Jugend"
+        ];
+
+        const sortedTeams = [...teamsList].sort((a, b) => {
+          const indexA = customOrder.indexOf(a);
+          const indexB = customOrder.indexOf(b);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
+        });
+
+        setTeams(sortedTeams);
       }
     });
     return () => unsubTeams();
-  }, [selectedTeam]);
+  }, []);
 
-  // 2. Zentrale Spieler-Daten aus der Cloud laden
+  // 2. Zentrale Spieler-Daten laden
   useEffect(() => {
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (docSnap) => {
       if (docSnap.exists()) {
@@ -39,7 +47,6 @@ export default function PlayerManager() {
     return () => unsubPlayers();
   }, []);
 
-  // Hilfsfunktion: Spieler speichern
   const savePlayersToCloud = async (newPlayersObj) => {
     try {
       await setDoc(doc(db, "ticker", "players"), newPlayersObj);
@@ -77,7 +84,7 @@ export default function PlayerManager() {
     savePlayersToCloud(newPlayersObj);
   };
 
-  // --- NEU: Zwingt die Liste IMMER in eine alphabetische Reihenfolge (A-Z) ---
+  // Spieler für das ausgewählte Team alphabetisch sortieren
   const currentTeamPlayers = [...(playersData[selectedTeam] || [])].sort((a, b) => 
     a.localeCompare(b)
   );

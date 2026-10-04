@@ -26,7 +26,24 @@ export default function PublicView({ onBackToAdmin }) {
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
-        setTeams(snap.data().teamsList);
+        const teamsList = snap.data().teamsList;
+        
+        const customOrder = [
+          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
+          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
+          "E-Jugend Funino", "F-Jugend", "G-Jugend"
+        ];
+
+        const sortedTeams = [...teamsList].sort((a, b) => {
+          const indexA = customOrder.indexOf(a);
+          const indexB = customOrder.indexOf(b);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
+        });
+
+        setTeams(sortedTeams);
       }
     });
     return () => unsubTeams();
@@ -207,7 +224,6 @@ export default function PublicView({ onBackToAdmin }) {
           {homeGoals} : {awayGoals}
         </div>
 
-        {/* LOGIK-FIX: Zeigt "Pause" nur noch an, wenn das Spiel auch wirklich schon gestartet wurde (time > 0) */}
         <div style={{ fontSize: "1.5rem", fontFamily: "monospace", color: isRunning ? "#27ae60" : (time > 0 ? "#e74c3c" : "#333"), marginBottom: "15px", fontWeight: "bold" }}>
           {formatTime(time)} {isRunning ? "LIVE" : (time > 0 ? "Pause" : "")}
         </div>
@@ -229,7 +245,6 @@ export default function PublicView({ onBackToAdmin }) {
           </div>
         )}
       </div>
-
     </div>
   );
 }

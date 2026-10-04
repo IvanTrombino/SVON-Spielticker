@@ -6,8 +6,6 @@ import { db } from "../firebase";
 export default function MatchView() {
   // --- NAVIGATION & TEAM-AUSWAHL ---
   const [activeTab, setActiveTab] = useState("ticker");
-  
-  // Startseite ist standardmäßig die 1. Mannschaft
   const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
 
   // --- CLOUD-STATE: Metadaten ---
@@ -36,13 +34,39 @@ export default function MatchView() {
   
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
-  // 1. GLOBALE DATEN LADEN
+  // 1. GLOBALE DATEN LADEN (MIT BENUTZERDEFINIERTER SORTIERUNG)
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists()) {
         const teamsList = snap.data().teamsList || [];
-        // NEU: Teams alphabetisch sortieren
-        setTeams([...teamsList].sort((a, b) => a.localeCompare(b)));
+        
+        // --- NEU: Deine exakte Wunsch-Reihenfolge ---
+        const customOrder = [
+          "1. Mannschaft",
+          "2. Mannschaft",
+          "3. Mannschaft",
+          "Damen",
+          "A-Jugend",
+          "B-Jugend",
+          "C-Jugend",
+          "D-Jugend",
+          "E-Jugend",
+          "E-Jugend Funino",
+          "F-Jugend",
+          "G-Jugend"
+        ];
+
+        const sortedTeams = [...teamsList].sort((a, b) => {
+          const indexA = customOrder.indexOf(a);
+          const indexB = customOrder.indexOf(b);
+          
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB; // Beide in der Liste -> nach Liste sortieren
+          if (indexA !== -1) return -1; // Nur A ist in der Liste -> A nach oben
+          if (indexB !== -1) return 1;  // Nur B ist in der Liste -> B nach oben
+          return a.localeCompare(b);    // Keines in der Liste -> Fallback: alphabetisch ans Ende
+        });
+
+        setTeams(sortedTeams);
       }
     });
     
@@ -61,14 +85,13 @@ export default function MatchView() {
     };
   }, []);
 
-  // 2. SPIELER LADEN
+  // 2. SPIELER LADEN (Bleiben alphabetisch, da Namen)
   useEffect(() => {
     if (!selectedTeam) return;
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
       if (snap.exists()) {
         const allPlayersObj = snap.data() || {};
         const teamPlayers = allPlayersObj[selectedTeam] || [];
-        // NEU: Spieler alphabetisch sortieren
         setPlayers([...teamPlayers].sort((a, b) => a.localeCompare(b)));
       } else {
         setPlayers([]);
@@ -154,7 +177,7 @@ export default function MatchView() {
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // AUTO-STOP NACH 130 MINUTEN (7800 Sekunden)
+  // AUTO-STOP NACH 130 MINUTEN
   useEffect(() => {
     if (isRunning && time >= 130 * 60) {
       setIsRunning(false);
@@ -544,7 +567,7 @@ export default function MatchView() {
           </div>
 
           <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
-            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️️ Zurück</button>
+            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩ Zurück</button>
             <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑 Zurücksetzen</button>
             <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
             <button onClick={generatePDF} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#2980b9", color: "white", border: "none", borderRadius: "8px", fontSize: "16px" }}>🖨️ PDF Bericht</button>
