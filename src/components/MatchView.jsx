@@ -34,13 +34,14 @@ export default function MatchView() {
   
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
-  // --- NEU: Funktion zum Senden der Push-Benachrichtigung über ntfy.sh ---
+  // --- DYNAMISCHE PUSH-BENACHRICHTIGUNG JE NACH MANNSCHAFT ---
   const sendNtfyPush = async (eventTitle, eventMessage) => {
     try {
-      await fetch("https://ntfy.sh/svon-liveticker", {
+      // Erstellt aus dem Teamnamen einen sauberen Kanal (z.B. "E-Jugend" -> "svonejugend")
+      const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+
+      await fetch(`https://ntfy.sh/${safeChannelName}`, {
         method: "POST",
-        // Wir übergeben den Titel und die Nachricht im Textkörper, 
-        // das umgeht bei manchen Browsern Header-Blockaden
         body: `${eventTitle}: ${eventMessage}`,
         headers: {
           "Priority": "urgent"
@@ -242,16 +243,15 @@ export default function MatchView() {
     
     let newHomeGoals = homeGoals;
     let newAwayGoals = awayGoals;
+    const eventingTeamName = isHomeEvent ? homeTeam : awayTeam;
 
     if (type === "goal") {
       if (isHomeEvent) newHomeGoals++;
       else newAwayGoals++;
       
-      // --- PUSH BENACHRICHTIGUNG AUSLÖSEN ---
-      const scoringTeamName = isHomeEvent ? homeTeam : awayTeam;
       sendNtfyPush(
-        `⚽ TOOOOR für ${scoringTeamName}!`,
-        `${minute}. Minute - Torschütze: ${playerName} (${newHomeGoals}:${newAwayGoals})`
+        `⚽ TOOOOR für ${eventingTeamName} (${selectedTeam})`,
+        `${minute}. Minute - ${playerName} (${newHomeGoals}:${newAwayGoals})`
       );
 
       if (isOurEvent && selectedPlayer) {
@@ -262,6 +262,12 @@ export default function MatchView() {
         setScorers(newScorers);
         setDoc(doc(db, "ticker", "scorers"), newScorers);
       }
+    } else if (type === "yellow") {
+      sendNtfyPush(`🟨 Gelbe Karte (${eventingTeamName})`, `${minute}. Minute - ${playerName}`);
+    } else if (type === "yellowred") {
+      sendNtfyPush(`🟨🟥 Gelb-Rote Karte (${eventingTeamName})`, `${minute}. Minute - ${playerName}`);
+    } else if (type === "red") {
+      sendNtfyPush(`🟥 Rote Karte (${eventingTeamName})`, `${minute}. Minute - ${playerName}`);
     }
     
     const newHistory = [...history, newEvent];
@@ -319,6 +325,11 @@ export default function MatchView() {
     if (window.confirm("Spiel beenden und in 'Letzte Spiele' speichern?")) {
       const formattedDate = new Date(matchDate).toLocaleDateString("de-DE");
       const displayDate = kickoffTime ? `${formattedDate} ${kickoffTime} Uhr` : formattedDate;
+
+      sendNtfyPush(
+        `🏁 Spiel beendet (${homeTeam} vs ${awayTeam})`,
+        `Endstand: ${homeGoals} : ${awayGoals}`
+      );
 
       const newMatch = {
         id: Date.now(),
@@ -546,6 +557,11 @@ export default function MatchView() {
                   } else {
                     const newStartTime = Date.now() - (time * 1000);
                     setIsRunning(true);
+                    
+                    if (time === 0) {
+                      sendNtfyPush("▶ Anpfiff", `Das Spiel ${homeTeam} vs ${awayTeam} hat begonnen!`);
+                    }
+
                     syncLiveMatch({ isRunning: true, startTime: newStartTime, time: time });
                   }
                 }} 
@@ -555,6 +571,9 @@ export default function MatchView() {
               <button onClick={() => { 
                   setIsRunning(false); 
                   setTime(45 * 60); 
+
+                  sendNtfyPush("⏱ Halbzeit", `Spielstand: ${homeTeam} ${homeGoals} : ${awayGoals} ${awayTeam}`);
+
                   syncLiveMatch({ isRunning: false, time: 45 * 60, startTime: null }); 
                 }} 
                 style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
