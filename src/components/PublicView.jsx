@@ -21,7 +21,7 @@ export default function PublicView({ onBackToAdmin }) {
   const [wantsNotifications, setWantsNotifications] = useState(false);
   const wantsNotificationsRef = useRef(false); 
   
-  // --- NEU: State für das Ein-/Ausblenden der Info-Box ---
+  // --- State für das Ein-/Ausblenden der Info-Box ---
   const [showInfo, setShowInfo] = useState(false);
 
   const historyLengthRef = useRef(0);
@@ -84,7 +84,7 @@ export default function PublicView({ onBackToAdmin }) {
           setIsRunning(false);
         }
 
-        // Push-Benachrichtigungen feuern
+        // Push-Benachrichtigungen feuern (Browser-intern)
         if (newHistory.length > historyLengthRef.current && historyLengthRef.current !== 0) {
           if (wantsNotificationsRef.current) {
             const lastEvent = newHistory[newHistory.length - 1];
@@ -187,6 +187,11 @@ export default function PublicView({ onBackToAdmin }) {
 
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
 
+  // --- HILFSFUNKTION FÜR NTFY KANAL & QR-CODE ---
+  const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const ntfyUrl = `https://ntfy.sh/${safeChannelName}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(ntfyUrl)}`;
+
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
       
@@ -218,7 +223,7 @@ export default function PublicView({ onBackToAdmin }) {
             marginBottom: "8px"
           }}
         >
-          {wantsNotifications ? "🔕 Benachrichtigungen deaktivieren" : "🔔 Live-Benachrichtigungen aktivieren"}
+          {wantsNotifications ? "🔕 Browser-Benachrichtigungen deaktivieren" : "🔔 Browser-Benachrichtigungen aktivieren"}
         </button>
 
         <div>
@@ -226,18 +231,35 @@ export default function PublicView({ onBackToAdmin }) {
             onClick={() => setShowInfo(!showInfo)}
             style={{ background: "transparent", border: "none", color: "#2980b9", textDecoration: "underline", fontSize: "12px", cursor: "pointer" }}
           >
-            ℹ️ Info zur App-Installation
+            ℹ️️ Echte Push-Benachrichtigungen aufs Handy einrichten (App & QR-Code)
           </button>
         </div>
 
-        {/* INFO-BOX (Wird nur angezeigt, wenn showInfo true ist) */}
+        {/* INFO-BOX MIT QR-CODE & ANLEITUNG (Wird nur angezeigt, wenn showInfo true ist) */}
         {showInfo && (
-          <div style={{ background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "8px", padding: "12px", marginTop: "10px", textAlign: "left", fontSize: "13px", color: "#333" }}>
-            <p style={{ margin: "0 0 8px 0" }}><strong>Damit Benachrichtigungen reibungslos funktionieren, installiere diese Seite als App:</strong></p>
-            <ul style={{ margin: "0", paddingLeft: "20px", lineHeight: "1.5" }}>
-              <li style={{ marginBottom: "6px" }}><strong>🍏 iPhone / iPad:</strong> Tippe unten im Browser auf das <strong>Teilen-Symbol</strong> (Viereck mit Pfeil nach oben) und wähle <strong>"Zum Home-Bildschirm"</strong>. Öffne die App dann über dein neues Start-Icon!</li>
-              <li><strong>🤖 Android:</strong> Tippe oben rechts auf die <strong>drei Punkte</strong> und wähle <strong>"Zum Startbildschirm hinzufügen"</strong> oder <strong>"App installieren"</strong>.</li>
-            </ul>
+          <div style={{ background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "8px", padding: "15px", marginTop: "10px", textAlign: "left", fontSize: "13px", color: "#333" }}>
+            <p style={{ margin: "0 0 8px 0", fontWeight: "bold", color: "#2146d0" }}>
+              📱 Push-Alarm für "{selectedTeam}":
+            </p>
+            <p style={{ margin: "0 0 10px 0" }}>
+              Möchtest du Tore und Spielstände direkt als Push-Benachrichtigung auf dem Sperrbildschirm erhalten?
+            </p>
+            
+            <ol style={{ margin: "0 0 12px 0", paddingLeft: "20px", lineHeight: "1.5" }}>
+              <li style={{ marginBottom: "6px" }}>Lade dir die kostenlose App <strong>„ntfy“</strong> aus dem App Store (iPhone) oder Play Store (Android) herunter.</li>
+              <li style={{ marginBottom: "6px" }}>Öffne die App und tippe auf das <strong>„+“</strong>, um einen Kanal zu abonnieren.</li>
+              <li>Gib den Namen <strong>{safeChannelName}</strong> ein – oder scanne direkt den QR-Code unten!</li>
+            </ol>
+
+            <div style={{ textAlign: "center", background: "white", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+              <p style={{ margin: "0 0 5px 0", fontSize: "12px", color: "#666" }}>
+                QR-Code für <strong>{selectedTeam}</strong> scannen:
+              </p>
+              <img src={qrCodeUrl} alt="ntfy QR-Code" style={{ width: "130px", height: "130px" }} />
+              <p style={{ margin: "5px 0 0 0", fontSize: "11px", fontFamily: "monospace", color: "#2146d0" }}>
+                Kanal: {safeChannelName}
+              </p>
+            </div>
           </div>
         )}
       </div>
