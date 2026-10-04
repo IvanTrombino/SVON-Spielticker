@@ -56,14 +56,14 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
     <h4 style={{ color: "#4f46e5", marginBottom: "10px", fontSize: "14px" }}>⚽ Vereinsdaten</h4>
     <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "15px", alignItems: "flex-end" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: "1 1 200px" }}>
-        <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Jugendmannschaft</label>
+        <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Jugendmannschaft (Zuweisung)</label>
         <select
           name="youthTeam"
           value={formData.youthTeam}
           onChange={handleChange}
           style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px" }}
         >
-          <option value="">-- Bitte wählen --</option>
+          <option value="">-- Ohne Team --</option>
           {teamsList.map(team => (
             <option key={team.id} value={team.name}>{team.name} (Jg. {team.years})</option>
           ))}
@@ -206,12 +206,22 @@ export default function YouthManager({ clubId }) {
   const activePlayers = allPlayers.filter(p => p.status === "aktiv");
   const inactivePlayers = allPlayers.filter(p => p.status === "abgemeldet");
 
+  // DASHBOARD BERECHNUNGEN
+  // a) Spieler pro Jahrgang
   const playersPerYear = activePlayers.reduce((acc, p) => {
     const year = p.birthYear || "Unbekannt";
     acc[year] = (acc[year] || 0) + 1;
     return acc;
   }, {});
   const sortedYears = Object.keys(playersPerYear).sort((a, b) => b.localeCompare(a));
+
+  // b) Spieler pro Mannschaft
+  const playersPerTeam = activePlayers.reduce((acc, p) => {
+    const team = p.youthTeam || "Ohne Team";
+    acc[team] = (acc[team] || 0) + 1;
+    return acc;
+  }, {});
+  const sortedTeams = Object.keys(playersPerTeam).sort((a, b) => a.localeCompare(b));
 
   // --- HANDLER: SPIELER ---
   const handlePlayerChange = (e, isEditMode = false) => {
@@ -323,16 +333,34 @@ export default function YouthManager({ clubId }) {
       </div>
 
       {activeTab === "dashboard" && (
-        <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
-          <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Aktive Spieler pro Jahrgang</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "15px", marginTop: "20px" }}>
-            {sortedYears.length === 0 ? <p style={{ color: "#777" }}>Keine Daten vorhanden.</p> : sortedYears.map(year => (
-              <div key={year} style={{ background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: "8px", padding: "15px", textAlign: "center" }}>
-                <div style={{ fontSize: "24px", fontWeight: "bold", color: "#3730a3" }}>{playersPerYear[year]}</div>
-                <div style={{ fontSize: "14px", color: "#555", fontWeight: "bold", marginTop: "5px" }}>Jg. {year}</div>
-              </div>
-            ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          
+          {/* DASHBOARD: TEAMS */}
+          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+            <h3 style={{ marginTop: 0, color: "#27ae60", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Spieler pro Mannschaft</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "15px", marginTop: "20px" }}>
+              {sortedTeams.length === 0 ? <p style={{ color: "#777" }}>Keine Zuweisungen vorhanden.</p> : sortedTeams.map(team => (
+                <div key={team} style={{ background: "#e8f8f5", border: "1px solid #a3e4d7", borderRadius: "8px", padding: "15px", textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: "bold", color: "#16a085" }}>{playersPerTeam[team]}</div>
+                  <div style={{ fontSize: "14px", color: "#555", fontWeight: "bold", marginTop: "5px" }}>{team}</div>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* DASHBOARD: JAHRGÄNGE */}
+          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+            <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Spieler pro Jahrgang</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "15px", marginTop: "20px" }}>
+              {sortedYears.length === 0 ? <p style={{ color: "#777" }}>Keine Daten vorhanden.</p> : sortedYears.map(year => (
+                <div key={year} style={{ background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: "8px", padding: "15px", textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: "bold", color: "#3730a3" }}>{playersPerYear[year]}</div>
+                  <div style={{ fontSize: "14px", color: "#555", fontWeight: "bold", marginTop: "5px" }}>Jg. {year}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -341,15 +369,16 @@ export default function YouthManager({ clubId }) {
 
       {activeTab === "active" && (
         <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "15px" }}>
-          <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>💡 Klicke auf den Namen eines Spielers zum Bearbeiten.</p>
+          <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>💡 Klicke auf den Namen eines Spielers, um das Team zuzuweisen oder Daten zu bearbeiten.</p>
           {activePlayers.length === 0 ? <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Keine aktiven Spieler gemeldet.</p> : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
                 <thead style={{ background: "#2146d0", color: "white" }}>
                   <tr>
                     <th style={{ padding: "12px", textAlign: "left" }}>Name, Vorname</th>
                     <th style={{ padding: "12px", textAlign: "center" }}>Jugend</th>
                     <th style={{ padding: "12px", textAlign: "center" }}>Jahrgang</th>
+                    <th style={{ padding: "12px", textAlign: "center" }}>Passnummer</th>
                     <th style={{ padding: "12px", textAlign: "right" }}>Aktion</th>
                   </tr>
                 </thead>
@@ -357,8 +386,9 @@ export default function YouthManager({ clubId }) {
                   {activePlayers.map((p, i) => (
                     <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
                       <td onClick={() => { setEditPlayerFormData({ ...initialPlayerState, ...p }); setActiveTab("edit"); }} style={{ padding: "12px", fontWeight: "bold", color: "#2980b9", cursor: "pointer", textDecoration: "underline" }}>{p.lastName}, {p.firstName} ✏️</td>
-                      <td style={{ padding: "12px", textAlign: "center", color: "#555" }}>{p.youthTeam}</td>
+                      <td style={{ padding: "12px", textAlign: "center", color: "#555", fontWeight: "bold" }}>{p.youthTeam || "-"}</td>
                       <td style={{ padding: "12px", textAlign: "center" }}>{p.birthYear || "?"}</td>
+                      <td style={{ padding: "12px", textAlign: "center", color: p.passNumber ? "#333" : "#aaa", fontWeight: "bold" }}>{p.passNumber || "-"}</td>
                       <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => handleDeregisterPlayer(p)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Abmelden</button></td>
                     </tr>
                   ))}
