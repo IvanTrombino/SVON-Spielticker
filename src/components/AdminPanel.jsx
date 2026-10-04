@@ -3,7 +3,7 @@ import TeamManager from "./TeamManager";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 
-export default function AdminPanel({ teams, setTeams, userRole }) {
+export default function AdminPanel({ clubId, teams, setTeams, userRole }) {
   // Wenn Trainer, starte direkt bei "players", ansonsten bei "teams"
   const [tab, setTab] = useState(userRole === "trainer" ? "players" : "teams");
 
@@ -31,7 +31,8 @@ export default function AdminPanel({ teams, setTeams, userRole }) {
 
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", fontFamily: "sans-serif", textAlign: "center" }}>
-      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>⚙ Administration</h2>
+      <h2 style={{ color: "#2146d0", marginBottom: "5px" }}>⚙ Administration</h2>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
 
       {/* --- NAVIGATION --- */}
       <div
@@ -62,15 +63,15 @@ export default function AdminPanel({ teams, setTeams, userRole }) {
       {/* --- INHALTSBEREICH --- */}
       <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
         {tab === "teams" && userRole === "admin" && (
-          <TeamManager teams={teams} setTeams={setTeams} />
+          <TeamManager clubId={clubId} teams={teams} setTeams={setTeams} />
         )}
 
         {tab === "players" && (
-          <PlayerManager />
+          <PlayerManager clubId={clubId} teams={teams} />
         )}
 
         {tab === "stats" && (
-          <Statistics />
+          <Statistics clubId={clubId} teams={teams} />
         )}
       </div>
     </div>

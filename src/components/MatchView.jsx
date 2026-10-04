@@ -3,13 +3,12 @@ import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase"; 
 
-export default function MatchView() {
+export default function MatchView({ clubId, teams }) {
   // --- NAVIGATION & TEAM-AUSWAHL ---
   const [activeTab, setActiveTab] = useState("ticker");
-  const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
+  const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
 
   // --- CLOUD-STATE: Metadaten ---
-  const [teams, setTeams] = useState([]);
   const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
@@ -19,7 +18,7 @@ export default function MatchView() {
   const [matchDate, setMatchDate] = useState(new Date().toISOString().split("T")[0]);
   const [kickoffTime, setKickoffTime] = useState("");
   const [isSvonAway, setIsSvonAway] = useState(false);
-  const [homeTeam, setHomeTeam] = useState("SVON");
+  const [homeTeam, setHomeTeam] = useState("Heim");
   const [awayTeam, setAwayTeam] = useState("Gast");
   const [homeGoals, setHomeGoals] = useState(0);
   const [awayGoals, setAwayGoals] = useState(0);
@@ -35,10 +34,17 @@ export default function MatchView() {
   
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
-  // --- DYNAMISCHE PUSH-BENACHRICHTIGUNG JE NACH MANNSCHAFT ---
+  // Wenn sich die Teams ändern und das ausgewählte Team nicht mehr existiert, korrigieren
+  useEffect(() => {
+    if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
+      setSelectedTeam(teams[0]);
+    }
+  }, [teams, selectedTeam]);
+
+  // --- VEREINSSPEZIFISCHE PUSH-BENACHRICHTIGUNG ---
   const sendNtfyPush = async (eventTitle, eventMessage) => {
     try {
-      const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+      const safeChannelName = `${clubId}${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
       await fetch(`https://ntfy.sh/${safeChannelName}`, {
         method: "POST",
@@ -52,56 +58,35 @@ export default function MatchView() {
     }
   };
 
-  // 1. GLOBALE DATEN LADEN
+  // 1. GLOBALE DATEN FÜR DIESEN CLUB LADEN (Torschützen, Matches, Lineups)
   useEffect(() => {
-    const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
-      if (snap.exists()) {
-        const teamsList = snap.data().teamsList || [];
-        
-        const customOrder = [
-          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
-          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
-          "E-Jugend Funino", "F-Jugend", "F-Jugend Funino", "G-Jugend"
-        ];
+    if (!clubId) return;
 
-        const sortedTeams = [...teamsList].sort((a, b) => {
-          const indexA = customOrder.indexOf(a);
-          const indexB = customOrder.indexOf(b);
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
-          return a.localeCompare(b);
-        });
-
-        setTeams(sortedTeams);
-      }
-    });
-    
-    const unsubScorers = onSnapshot(doc(db, "ticker", "scorers"), (snap) => {
+    const unsubScorers = onSnapshot(doc(db, "ticker", `${clubId}_scorers`), (snap) => {
       if (snap.exists()) setScorers(snap.data());
     });
     
-    const unsubMatches = onSnapshot(doc(db, "ticker", "matches"), (snap) => {
+    const unsubMatches = onSnapshot(doc(db, "ticker", `${clubId}_matches`), (snap) => {
       if (snap.exists()) setSavedMatches(snap.data().matchesList || []);
     });
 
-    const unsubLineups = onSnapshot(doc(db, "ticker", "lineups"), (snap) => {
+    const unsubLineups = onSnapshot(doc(db, "ticker", `${clubId}_lineups`), (snap) => {
       if (snap.exists()) setLineups(snap.data() || {});
     });
 
     return () => {
-      unsubTeams();
       unsubScorers();
       unsubMatches();
       unsubLineups();
     };
-  }, []);
+  }, [clubId]);
 
-  // 2. SPIELER LADEN
+  // 2. SPIELER FÜR DEN AKTUELLEN CLUB LADEN
   useEffect(() => {
     setSelectedPlayer("");
-    if (!selectedTeam) return;
-    const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
+    if (!clubId || !selectedTeam) return;
+
+    const unsubPlayers = onSnapshot(doc(db, "ticker", `${clubId}_players`), (snap) => {
       if (snap.exists()) {
         const allPlayersObj = snap.data() || {};
         const teamPlayers = allPlayersObj[selectedTeam] || [];
@@ -111,13 +96,13 @@ export default function MatchView() {
       }
     });
     return () => unsubPlayers();
-  }, [selectedTeam]);
+  }, [clubId, selectedTeam]);
 
-  // 3. LIVE-TICKER LADEN
+  // 3. LIVE-TICKER FÜR DIESEN CLUB & TEAM LADEN
   useEffect(() => {
-    if (!selectedTeam) return;
+    if (!clubId || !selectedTeam) return;
 
-    const docName = `live_match_${selectedTeam}`;
+    const docName = `${clubId}_live_match_${selectedTeam}`;
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -158,12 +143,12 @@ export default function MatchView() {
     });
 
     return () => unsubLive(); 
-  }, [selectedTeam]);
+  }, [clubId, selectedTeam]);
 
   const syncLiveMatch = async (updates) => {
-    if (!selectedTeam) return;
+    if (!clubId || !selectedTeam) return;
     try {
-      const docName = `live_match_${selectedTeam}`;
+      const docName = `${clubId}_live_match_${selectedTeam}`;
       await setDoc(doc(db, "ticker", docName), updates, { merge: true });
     } catch (error) {
       console.error("Fehler beim Cloud-Speichern:", error);
@@ -172,7 +157,7 @@ export default function MatchView() {
 
   const saveMatchesToCloud = async (newMatchesList) => {
     try {
-      await setDoc(doc(db, "ticker", "matches"), { matchesList: newMatchesList });
+      await setDoc(doc(db, "ticker", `${clubId}_matches`), { matchesList: newMatchesList });
     } catch (error) {
       console.error("Fehler beim Speichern der Historie:", error);
     }
@@ -189,7 +174,7 @@ export default function MatchView() {
     const newLineups = { ...lineups, [selectedTeam]: updatedLineup };
     setLineups(newLineups);
     try {
-      await setDoc(doc(db, "ticker", "lineups"), newLineups);
+      await setDoc(doc(db, "ticker", `${clubId}_lineups`), newLineups);
     } catch (error) {
       console.error("Fehler beim Speichern des Kaders:", error);
     }
@@ -272,7 +257,7 @@ export default function MatchView() {
         const newScorers = { ...scorers, [selectedTeam]: { ...teamScorers, [selectedPlayer]: pGoals + 1 } };
         
         setScorers(newScorers);
-        setDoc(doc(db, "ticker", "scorers"), newScorers);
+        setDoc(doc(db, "ticker", `${clubId}_scorers`), newScorers);
       }
     } else if (type === "yellow") {
       sendNtfyPush(`🟨 Gelbe Karte (${eventingTeamName})`, `${minute}. Minute - ${playerName}`);
@@ -318,7 +303,7 @@ export default function MatchView() {
         const newScorers = { ...scorers, [selectedTeam]: { ...teamScorers, [lastEvent.player]: Math.max(0, pGoals - 1) } };
         
         setScorers(newScorers);
-        setDoc(doc(db, "ticker", "scorers"), newScorers); 
+        setDoc(doc(db, "ticker", `${clubId}_scorers`), newScorers); 
       }
     }
     
@@ -384,7 +369,7 @@ export default function MatchView() {
   };
 
   const shareMatchToSocialMedia = (match) => {
-    let text = `⚽ SVON Spielbericht (${match.team || selectedTeam})\n`;
+    let text = `⚽ Spielbericht (${match.team || selectedTeam})\n`;
     text += `📅 ${match.date}\n\n`;
     text += `🏆 ${match.homeTeam} vs ${match.awayTeam}\n`;
     text += `👉 Endstand: ${match.homeGoals} : ${match.awayGoals}\n\n`;
@@ -406,11 +391,9 @@ export default function MatchView() {
       text += `Keine Ereignisse aufgezeichnet.\n`;
     }
 
-    text += `\nSV Orsingen-Nenzingen\nEine Gemeinde. Ein Verein. Eine Familie.`;
-
     if (navigator.share) {
       navigator.share({
-        title: "SVON Spielbericht",
+        title: "Spielbericht",
         text: text,
       }).catch((error) => console.log("Teilen abgebrochen", error));
     } else {
@@ -495,13 +478,13 @@ export default function MatchView() {
     cursor: "pointer", fontSize: "12px"
   });
 
-  const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
+  const filteredMatches = savedMatches.filter(m => (m.team || (teams && teams[0]) || "1. Mannschaft") === selectedTeam);
   const currentLineup = lineups[selectedTeam] || [];
 
   return (
     <div style={{ padding: "10px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto", boxSizing: "border-box" }}>
-      <img src={logo} alt="SVON Logo" style={{ maxWidth: "60px", marginBottom: "5px" }} />
-      <h2 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "1.3rem" }}>⚽ SVON Ticker (Admin)</h2>
+      <img src={logo} alt="Logo" style={{ maxWidth: "60px", marginBottom: "5px" }} />
+      <h2 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "1.3rem" }}>⚽ Live-Ticker ({clubId.toUpperCase()})</h2>
 
       <div style={{ background: "white", padding: "10px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "12px", color: "#555", marginBottom: "4px", fontWeight: "bold", textAlign: "left" }}>
@@ -512,8 +495,8 @@ export default function MatchView() {
           onChange={(e) => setSelectedTeam(e.target.value)}
           style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "14px", background: "#f8f9fa", boxSizing: "border-box" }}
         >
-          {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
-          {teams.map((t) => (
+          {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+          {teams && teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
@@ -526,7 +509,7 @@ export default function MatchView() {
         <button onClick={() => setActiveTab("lineup")} style={tabButtonStyle("lineup")}>
           📋 Kader ({currentLineup.length})
         </button>
-        <button onClick={() => setActiveTeam("history") /* oder history */ || setActiveTab("history")} style={tabButtonStyle("history")}>
+        <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
           📜 Spiele ({filteredMatches.length})
         </button>
       </div>

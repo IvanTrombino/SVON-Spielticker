@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function PlayerManager() {
-  const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
+export default function PlayerManager({ clubId, teams }) {
+  const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
   const [playerName, setPlayerName] = useState("");
   const [playersData, setPlayersData] = useState({});
 
@@ -13,58 +12,23 @@ export default function PlayerManager() {
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [targetTeam, setTargetTeam] = useState("");
 
-  // --- NEU: States für die Namens-Bearbeitung ---
-  const [editingPlayer, setEditingPlayer] = useState(null); // Welcher Spieler wird bearbeitet?
-  const [editedName, setEditedName] = useState(""); // Der neue Text im Eingabefeld
+  // States für die Namens-Bearbeitung
+  const [editingPlayer, setEditingPlayer] = useState(null); 
+  const [editedName, setEditedName] = useState(""); 
 
-  // Feste Vereins-Hierarchie für die Team-Sortierung
-  const sortTeams = (teamList) => {
-    const customOrder = [
-      "1. Mannschaft", 
-      "2. Mannschaft", 
-      "3. Mannschaft", 
-      "Damen",
-      "A-Jugend", 
-      "B-Jugend", 
-      "C-Jugend", 
-      "D-Jugend", 
-      "E-Jugend",
-      "E-Jugend Funino", 
-      "F-Jugend", 
-      "F-Jugend Funino", 
-      "G-Jugend"
-    ];
-
-    return [...teamList].sort((a, b) => {
-      const indexA = customOrder.indexOf(a);
-      const indexB = customOrder.indexOf(b);
-      
-      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
-      return a.localeCompare(b);
-    });
-  };
-
-  // 1. Teams aus Firebase laden und sortieren
+  // Wenn sich die Teams ändern und das gewählte Team wegfällt, anpassen
   useEffect(() => {
-    const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
-      if (docSnap.exists()) {
-        const teamsList = docSnap.data().teamsList || [];
-        const sorted = sortTeams(teamsList);
-        setTeams(sorted);
-        
-        if (sorted.length > 0 && !sorted.includes(selectedTeam)) {
-          setSelectedTeam(sorted[0]);
-        }
-      }
-    });
-    return () => unsubTeams();
-  }, []);
+    if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
+      setSelectedTeam(teams[0]);
+    }
+  }, [teams, selectedTeam]);
 
-  // 2. Zentrale Spieler-Daten aus der Cloud laden
+  // Zentrale Spieler-Daten für diesen Club aus der Cloud laden
   useEffect(() => {
-    const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (docSnap) => {
+    if (!clubId) return;
+
+    const docName = `${clubId}_players`;
+    const unsubPlayers = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         setPlayersData(docSnap.data() || {});
       } else {
@@ -72,11 +36,12 @@ export default function PlayerManager() {
       }
     });
     return () => unsubPlayers();
-  }, []);
+  }, [clubId]);
 
   const savePlayersToCloud = async (newPlayersObj) => {
     try {
-      await setDoc(doc(db, "ticker", "players"), newPlayersObj);
+      const docName = `${clubId}_players`;
+      await setDoc(doc(db, "ticker", docName), newPlayersObj);
     } catch (error) {
       console.error("Fehler beim Cloud-Speichern der Spieler:", error);
     }
@@ -115,7 +80,7 @@ export default function PlayerManager() {
     savePlayersToCloud(newPlayersObj);
   };
 
-  // --- NEU: Spieler-Namen in der gesamten App aktualisieren ---
+  // Spieler-Namen in der gesamten App für diesen Verein aktualisieren
   const saveEditedPlayerName = (oldName) => {
     const newName = editedName.trim();
     if (!newName) {
@@ -127,13 +92,11 @@ export default function PlayerManager() {
       return;
     }
 
-    // Gehe alle Mannschaften in playersData durch und ersetze den Namen überall
     const updatedPlayersData = { ...playersData };
 
     Object.keys(updatedPlayersData).forEach((teamKey) => {
       const teamList = updatedPlayersData[teamKey] || [];
       if (teamList.includes(oldName)) {
-        // Alten Namen raus, neuen Namen rein & alphabetisch sortieren
         const filtered = teamList.filter((p) => p !== oldName);
         if (!filtered.includes(newName)) {
           filtered.push(newName);
@@ -157,6 +120,10 @@ export default function PlayerManager() {
       setSelectedPlayers([...selectedPlayers, player]);
     }
   };
+
+  const currentTeamPlayers = [...(playersData[selectedTeam] || [])].sort((a, b) => 
+    a.localeCompare(b)
+  );
 
   const toggleSelectAll = () => {
     if (selectedPlayers.length === currentTeamPlayers.length) {
@@ -201,15 +168,11 @@ export default function PlayerManager() {
     alert(`${addedCount} Spieler wurden erfolgreich zur "${targetTeam}" kopiert!`);
   };
 
-  const currentTeamPlayers = [...(playersData[selectedTeam] || [])].sort((a, b) => 
-    a.localeCompare(b)
-  );
-
-  const otherTeams = teams.filter((t) => t !== selectedTeam);
+  const otherTeams = teams ? teams.filter((t) => t !== selectedTeam) : [];
 
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
-      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👤 Spielerverwaltung</h2>
+      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👤 Spielerverwaltung ({clubId.toUpperCase()})</h2>
 
       <select
         value={selectedTeam}
@@ -219,10 +182,10 @@ export default function PlayerManager() {
           setIsMultiSelectMode(false);
           setEditingPlayer(null);
         }}
-        style={{ padding: "10px", width: "100%", marginBottom: "15px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
+        style={{ padding: "10px", width: "100%", marginBottom: "15px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box" }}
       >
-        {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
-        {teams.map((team) => (
+        {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+        {teams && teams.map((team) => (
           <option key={team} value={team}>
             {team}
           </option>
@@ -335,7 +298,6 @@ export default function PlayerManager() {
                   />
                 )}
 
-                {/* --- BEARBEITUNGS-MODUS ODER NORMALER TEXT --- */}
                 {isEditing ? (
                   <div style={{ display: "flex", gap: "6px", flex: 1, marginRight: "10px" }}>
                     <input
@@ -363,7 +325,6 @@ export default function PlayerManager() {
                 )}
               </div>
 
-              {/* Aktions-Buttons (Bearbeiten & Löschen) */}
               {!isEditing && (
                 <div style={{ display: "flex", gap: "6px" }}>
                   <button

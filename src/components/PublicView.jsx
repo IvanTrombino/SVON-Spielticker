@@ -3,14 +3,13 @@ import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function PublicView({ onBackToAdmin }) {
-  const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
+export default function PublicView({ clubId, teams, onBackToAdmin }) {
+  const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
   
   // --- Tab-Navigation für die Fans ---
   const [activeTab, setActiveTab] = useState("ticker");
 
-  const [homeTeam, setHomeTeam] = useState("SVON");
+  const [homeTeam, setHomeTeam] = useState("Heim");
   const [awayTeam, setAwayTeam] = useState("Gast");
   const [homeGoals, setHomeGoals] = useState(0);
   const [awayGoals, setAwayGoals] = useState(0);
@@ -33,46 +32,34 @@ export default function PublicView({ onBackToAdmin }) {
 
   const historyLengthRef = useRef(0);
 
-  // Teams laden & sortieren
+  // Wenn sich die Teams ändern und das gewählte Team wegfällt, anpassen
   useEffect(() => {
-    const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
-      if (snap.exists() && snap.data().teamsList) {
-        const teamsList = snap.data().teamsList;
-        
-        const customOrder = [
-          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
-          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
-          "E-Jugend Funino", "F-Jugend", "F-Jugend Funino", "G-Jugend"
-        ];
+    if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
+      setSelectedTeam(teams[0]);
+    }
+  }, [teams, selectedTeam]);
 
-        const sortedTeams = [...teamsList].sort((a, b) => {
-          const indexA = customOrder.indexOf(a);
-          const indexB = customOrder.indexOf(b);
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
-          return a.localeCompare(b);
-        });
+  // Beendete Spiele (Historie) für diesen Club laden
+  useEffect(() => {
+    if (!clubId) return;
 
-        setTeams(sortedTeams);
+    const docName = `${clubId}_matches`;
+    const unsubMatches = onSnapshot(doc(db, "ticker", docName), (snap) => {
+      if (snap.exists()) {
+        setSavedMatches(snap.data().matchesList || []);
+      } else {
+        setSavedMatches([]);
       }
     });
 
-    const unsubMatches = onSnapshot(doc(db, "ticker", "matches"), (snap) => {
-      if (snap.exists()) setSavedMatches(snap.data().matchesList || []);
-    });
+    return () => unsubMatches();
+  }, [clubId]);
 
-    return () => {
-      unsubTeams();
-      unsubMatches();
-    };
-  }, []);
-
-  // Live-Spiel laden
+  // Live-Spiel für diesen Club & dieses Team laden
   useEffect(() => {
-    if (!selectedTeam) return;
+    if (!clubId || !selectedTeam) return;
 
-    const docName = `live_match_${selectedTeam}`;
+    const docName = `${clubId}_live_match_${selectedTeam}`;
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -122,7 +109,7 @@ export default function PublicView({ onBackToAdmin }) {
     });
 
     return () => unsubLive();
-  }, [selectedTeam]);
+  }, [clubId, selectedTeam]);
 
   // Lokale Uhr
   useEffect(() => {
@@ -165,7 +152,7 @@ export default function PublicView({ onBackToAdmin }) {
       if (permission === "granted") {
         setWantsNotifications(true);
         wantsNotificationsRef.current = true;
-        new Notification("SVON Live-Ticker", {
+        new Notification("Live-Ticker", {
           body: "Benachrichtigungen aktiviert!",
           icon: logo
         });
@@ -177,7 +164,7 @@ export default function PublicView({ onBackToAdmin }) {
 
   const triggerNotification = (event, currentHome, currentAway) => {
     if (Notification.permission === "granted") {
-      let title = "SVON Live-Ticker";
+      let title = "Live-Ticker";
       let body = "";
       const eventTeam = event.team === "home" ? currentHome : currentAway;
 
@@ -200,7 +187,7 @@ export default function PublicView({ onBackToAdmin }) {
   };
 
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
-  const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const safeChannelName = `${clubId}${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(safeChannelName);
@@ -209,7 +196,7 @@ export default function PublicView({ onBackToAdmin }) {
   };
 
   // --- FILTER FÜR DIE FANS ---
-  const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
+  const filteredMatches = savedMatches.filter(m => (m.team || (teams && teams[0]) || "1. Mannschaft") === selectedTeam);
   
   // --- DYNAMISCHE TORSCHÜTZEN-BERECHCHNUNG AUS DEN GESPEICHERTEN SPIELEN ---
   const calculatedScorers = {};
@@ -217,7 +204,6 @@ export default function PublicView({ onBackToAdmin }) {
     if (match.history && Array.isArray(match.history)) {
       match.history.forEach(event => {
         if (event.type === "goal") {
-          // Prüfen ob es ein eigenes Tor ist (Spieler ist bekannt und kein Gegner/Unbekannt)
           const playerName = event.player;
           if (playerName && playerName !== "Gegner" && playerName !== "Unbekannt") {
             calculatedScorers[playerName] = (calculatedScorers[playerName] || 0) + 1;
@@ -230,7 +216,7 @@ export default function PublicView({ onBackToAdmin }) {
   const sortedScorers = Object.entries(calculatedScorers).sort((a, b) => b[1] - a[1]);
 
   const getFussballDeLink = () => {
-    return "https://www.fussball.de/verein/sv-orsingen-nenzingen-suedbaden/-/id/00ES8GN9F000000RVV0AG08LVUPGND5I#!/";
+    return "https://www.fussball.de";
   };
 
   const tabButtonStyle = (tabName) => ({
@@ -252,8 +238,9 @@ export default function PublicView({ onBackToAdmin }) {
         </button>
       )}
 
-      <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
+      <img src={logo} alt="Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "15px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
       
       {/* BENACHRICHTIGUNGEN & INFO BEREICH */}
       <div style={{ marginBottom: "15px" }}>
@@ -318,10 +305,10 @@ export default function PublicView({ onBackToAdmin }) {
         <select 
           value={selectedTeam} 
           onChange={(e) => setSelectedTeam(e.target.value)}
-          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box" }}
         >
-          {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
-          {teams.map((t) => (
+          {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+          {teams && teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>

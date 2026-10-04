@@ -1,55 +1,39 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function Statistics() {
-  const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
-  
+export default function Statistics({ clubId, teams }) {
+  const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
   const [matches, setMatches] = useState([]);
   const [liveMatchHistory, setLiveMatchHistory] = useState([]);
 
-  // 1. Teams in Echtzeit aus der Cloud laden und sortieren
+  // Wenn sich die Teams ändern und das gewählte Team wegfällt, anpassen
   useEffect(() => {
-    const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
-      if (snap.exists() && snap.data().teamsList) {
-        const teamsList = snap.data().teamsList;
-        
-        const customOrder = [
-          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
-          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
-          "E-Jugend Funino", "F-Jugend","F-Jugend Funino", "G-Jugend"
-        ];
+    if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
+      setSelectedTeam(teams[0]);
+    }
+  }, [teams, selectedTeam]);
 
-        const sortedTeams = [...teamsList].sort((a, b) => {
-          const indexA = customOrder.indexOf(a);
-          const indexB = customOrder.indexOf(b);
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
-          return a.localeCompare(b);
-        });
-
-        setTeams(sortedTeams);
-      }
-    });
-    return () => unsubTeams();
-  }, []);
-
-  // 2. Beendete Spiele (Historie) laden
+  // 1. Beendete Spiele (Historie) für diesen Club laden
   useEffect(() => {
-    const unsubMatches = onSnapshot(doc(db, "ticker", "matches"), (snap) => {
+    if (!clubId) return;
+
+    const docName = `${clubId}_matches`;
+    const unsubMatches = onSnapshot(doc(db, "ticker", docName), (snap) => {
       if (snap.exists()) {
         setMatches(snap.data().matchesList || []);
+      } else {
+        setMatches([]);
       }
     });
     return () => unsubMatches();
-  }, []);
+  }, [clubId]);
 
-  // 3. Aktuelles Live-Spiel für dieses Team laden
+  // 2. Aktuelles Live-Spiel für dieses Team und diesen Club laden
   useEffect(() => {
-    if (!selectedTeam) return;
-    const docName = `live_match_${selectedTeam}`;
+    if (!clubId || !selectedTeam) return;
+
+    const docName = `${clubId}_live_match_${selectedTeam}`;
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (snap) => {
       if (snap.exists() && snap.data().history) {
         setLiveMatchHistory(snap.data().history);
@@ -58,12 +42,12 @@ export default function Statistics() {
       }
     });
     return () => unsubLive();
-  }, [selectedTeam]);
+  }, [clubId, selectedTeam]);
 
   // --- STATISTIK DYNAMISCH BERECHNEN ---
   const calculateStats = () => {
     const stats = {};
-    const teamMatches = matches.filter((m) => m.team === selectedTeam);
+    const teamMatches = matches.filter((m) => (m.team || (teams && teams[0]) || "1. Mannschaft") === selectedTeam);
     const allEvents = [];
 
     teamMatches.forEach((match) => {
@@ -93,19 +77,20 @@ export default function Statistics() {
 
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", fontFamily: "sans-serif" }}>
-      <h2 style={{ color: "#2146d0", marginBottom: "20px", textAlign: "center" }}>📊 Spielerstatistik</h2>
+      <h2 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>📊 Spielerstatistik</h2>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px", textAlign: "center" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
 
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
-        <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold" }}>
+        <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
           Mannschaft auswählen:
         </label>
         <select
           value={selectedTeam}
           onChange={(e) => setSelectedTeam(e.target.value)}
-          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box" }}
         >
-          {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
-          {teams.map((t) => (
+          {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+          {teams && teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>

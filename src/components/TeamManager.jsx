@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function TeamManager() {
+export default function TeamManager({ clubId }) {
   const [teams, setTeams] = useState([]);
   const [newTeam, setNewTeam] = useState("");
 
@@ -35,25 +35,35 @@ export default function TeamManager() {
     });
   };
 
-  // Teams in Echtzeit aus der Cloud laden und sofort sortieren
+  // Teams für diesen Club in Echtzeit aus der Cloud laden und sofort sortieren
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
+    if (!clubId) return;
+
+    const docName = `${clubId}_teams`;
+    const unsub = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const loadedTeams = data.teamsList || [];
         setTeams(sortTeams(loadedTeams));
       } else {
-        setTeams([]);
+        // Falls noch keine Teams da sind, Standard-Teams vorbelegen
+        if (clubId === "svon") {
+          const defaultTeams = ["1. Mannschaft", "2. Mannschaft", "F-Jugend"];
+          setTeams(sortTeams(defaultTeams));
+        } else {
+          setTeams(["1. Mannschaft"]);
+        }
       }
     });
     
     return () => unsub();
-  }, []);
+  }, [clubId]);
 
-  // Teams in die Cloud speichern
+  // Teams für diesen Club in die Cloud speichern
   const saveTeamsToCloud = async (updatedTeams) => {
     try {
-      await setDoc(doc(db, "ticker", "teams"), { teamsList: updatedTeams });
+      const docName = `${clubId}_teams`;
+      await setDoc(doc(db, "ticker", docName), { teamsList: updatedTeams });
     } catch (error) {
       console.error("Fehler beim Cloud-Speichern der Teams:", error);
     }
@@ -80,7 +90,8 @@ export default function TeamManager() {
 
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
-      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👥 Mannschaftsverwaltung</h2>
+      <h2 style={{ color: "#2146d0", marginBottom: "5px" }}>👥 Mannschaftsverwaltung</h2>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
 
       <div style={{ display: "flex", gap: "10px", marginBottom: "25px" }}>
         <input
