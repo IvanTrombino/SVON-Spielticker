@@ -11,8 +11,14 @@ export default function MatchView({ clubId, teams }) {
   // --- CLOUD-STATE: Metadaten ---
   const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
-  const [savedMatches, setSavedMatches] = useState([]);
+  const [savedMatches, setSavedMatches] = useState({});
   const [lineups, setLineups] = useState({});
+  const [nextMatches, setNextMatches] = useState({});
+
+  // --- LOKALER-STATE FÜR NÄCHSTE SPIELE (Admin-Eingabe) ---
+  const [nextOpponent, setNextOpponent] = useState("");
+  const [nextDate, setNextDate] = useState("");
+  const [nextTime, setNextTime] = useState("");
 
   // --- CLOUD-STATE: Live-Spiel ---
   const [matchDate, setMatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -41,6 +47,14 @@ export default function MatchView({ clubId, teams }) {
     }
   }, [teams, selectedTeam]);
 
+  // Wenn das Team gewechselt wird, die Felder für das nächste Spiel mit den gespeicherten Werten vorbelegen
+  useEffect(() => {
+    const currentNext = nextMatches[selectedTeam] || {};
+    setNextOpponent(currentNext.opponent || "");
+    setNextDate(currentNext.date || "");
+    setNextTime(currentNext.time || "");
+  }, [selectedTeam, nextMatches]);
+
   // --- VEREINSSPEZIFISCHE PUSH-BENACHRICHTIGUNG ---
   const sendNtfyPush = async (eventTitle, eventMessage) => {
     try {
@@ -58,7 +72,7 @@ export default function MatchView({ clubId, teams }) {
     }
   };
 
-  // 1. GLOBALE DATEN FÜR DIESEN CLUB LADEN (Torschützen, Matches, Lineups)
+  // 1. GLOBALE DATEN FÜR DIESEN CLUB LADEN (Torschützen, Matches, Lineups, Nächste Spiele)
   useEffect(() => {
     if (!clubId) return;
 
@@ -74,10 +88,15 @@ export default function MatchView({ clubId, teams }) {
       if (snap.exists()) setLineups(snap.data() || {});
     });
 
+    const unsubNext = onSnapshot(doc(db, "ticker", `${clubId}_next_matches`), (snap) => {
+      if (snap.exists()) setNextMatches(snap.data() || {});
+    });
+
     return () => {
       unsubScorers();
       unsubMatches();
       unsubLineups();
+      unsubNext();
     };
   }, [clubId]);
 
@@ -160,6 +179,26 @@ export default function MatchView({ clubId, teams }) {
       await setDoc(doc(db, "ticker", `${clubId}_matches`), { matchesList: newMatchesList });
     } catch (error) {
       console.error("Fehler beim Speichern der Historie:", error);
+    }
+  };
+
+  const saveNextMatchToCloud = async (e) => {
+    e.preventDefault();
+    const updatedNextMatches = {
+      ...nextMatches,
+      [selectedTeam]: {
+        opponent: nextOpponent,
+        date: nextDate,
+        time: nextTime
+      }
+    };
+    setNextMatches(updatedNextMatches);
+    try {
+      await setDoc(doc(db, "ticker", `${clubId}_next_matches`), updatedNextMatches);
+      alert(`✅ Nächstes Spiel für ${selectedTeam} gespeichert!`);
+    } catch (error) {
+      console.error("Fehler beim Speichern des nächsten Spiels:", error);
+      alert("Fehler beim Speichern.");
     }
   };
 
@@ -378,14 +417,13 @@ export default function MatchView({ clubId, teams }) {
       text += `📝 Highlights & Verlauf:\n`;
       const sortedHistory = [...match.history].reverse();
       sortedHistory.forEach((event) => {
-        const teamName = event.team === "home" ? match.homeTeam : match.awayTeam;
         let icon = "📝";
         if (event.type === "goal") icon = "⚽";
         else if (event.type === "yellow") icon = "🟨";
         else if (event.type === "yellowred") icon = "🟨🟥";
         else if (event.type === "red") icon = "🟥";
 
-        text += `${event.minute}' ${icon} ${teamName}: ${event.player}\n`;
+        text += `${event.minute}' ${icon} ${event.player}\n`;
       });
     } else {
       text += `Keine Ereignisse aufgezeichnet.\n`;
@@ -506,6 +544,9 @@ export default function MatchView({ clubId, teams }) {
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Ticker
         </button>
+        <button onClick={() => setActiveTab("next")} style={tabButtonStyle("next")}>
+          📅 Nächstes Spiel
+        </button>
         <button onClick={() => setActiveTab("lineup")} style={tabButtonStyle("lineup")}>
           📋 Kader ({currentLineup.length})
         </button>
@@ -517,7 +558,6 @@ export default function MatchView({ clubId, teams }) {
       {activeTab === "ticker" && (
         <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
-          {/* --- DATUM & ANSTOSSZEIT (KOMPAKT UNTEREINANDER AUF HANDY) --- */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
             <div style={{ flex: 1, textAlign: "left" }}>
               <label style={{ fontSize: "11px", color: "#666", display: "block", marginBottom: "2px" }}>Datum</label>
@@ -539,7 +579,6 @@ export default function MatchView({ clubId, teams }) {
             </div>
           </div>
 
-          {/* --- HEIMTEAM & GASTTEAM (FLEXIBEL MIT KÜRZERER SCHRIFT & TAUSCH-BUTTON) --- */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "12px", width: "100%" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               <label style={{ fontSize: "11px", color: "#666", marginBottom: "2px", textAlign: "left" }}>Heimteam</label>
@@ -698,6 +737,57 @@ export default function MatchView({ clubId, teams }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* --- TAB: NÄCHSTES SPIEL EINTRAGEN --- */}
+      {activeTab === "next" && (
+        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+          <h3 style={{ fontSize: "1.1rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📅 Nächstes Spiel für {selectedTeam}</h3>
+          <p style={{ fontSize: "11px", color: "#666", textAlign: "center", marginBottom: "15px" }}>
+            Trage hier das kommende Spiel ein, damit es in der Gesamtübersicht für Fans angezeigt wird.
+          </p>
+
+          <form onSubmit={saveNextMatchToCloud}>
+            <div style={{ marginBottom: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Gegner (z.B. FC Radolfzell)</label>
+              <input 
+                type="text" 
+                value={nextOpponent} 
+                onChange={(e) => setNextOpponent(e.target.value)} 
+                placeholder="Gegner eingeben..." 
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", marginBottom: "15px" }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Datum</label>
+                <input 
+                  type="date" 
+                  value={nextDate} 
+                  onChange={(e) => setNextDate(e.target.value)} 
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Uhrzeit</label>
+                <input 
+                  type="time" 
+                  value={nextTime} 
+                  onChange={(e) => setNextTime(e.target.value)} 
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              style={{ width: "100%", padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}
+            >
+              💾 Nächstes Spiel speichern
+            </button>
+          </form>
         </div>
       )}
 

@@ -4,9 +4,9 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function PublicView({ clubId, teams, onBackToAdmin }) {
-  const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
+  const [selectedTeam, setSelectedTeam] = useState("übersicht"); // Standardmäßig auf Gesamtübersicht starten
   
-  // --- Tab-Navigation für die Fans ---
+  // --- Tab-Navigation für die Fans (innerhalb einer Mannschaft) ---
   const [activeTab, setActiveTab] = useState("ticker");
 
   const [homeTeam, setHomeTeam] = useState("Heim");
@@ -20,6 +20,10 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
 
+  // --- Globale Daten für alle Teams (Live-Status & Nächste Spiele) ---
+  const [allTeamsLiveStatus, setAllTeamsLiveStatus] = useState({});
+  const [nextMatches, setNextMatches] = useState({});
+
   // --- Globale Historie für die Fans ---
   const [savedMatches, setSavedMatches] = useState([]);
   const [expandedMatchId, setExpandedMatchId] = useState(null);
@@ -32,12 +36,46 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
 
   const historyLengthRef = useRef(0);
 
-  // Wenn sich die Teams ändern und das gewählte Team wegfällt, anpassen
+  // 1. Nächste Spiele aus der Cloud laden (${clubId}_next_matches)
   useEffect(() => {
-    if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
-      setSelectedTeam(teams[0]);
-    }
-  }, [teams, selectedTeam]);
+    if (!clubId) return;
+    const unsubNext = onSnapshot(doc(db, "ticker", `${clubId}_next_matches`), (snap) => {
+      if (snap.exists()) {
+        setNextMatches(snap.data() || {});
+      } else {
+        setNextMatches({});
+      }
+    });
+    return () => unsubNext();
+  }, [clubId]);
+
+  // 2. Live-Status für ALLE Mannschaften gleichzeitig überwachen (für die Übersicht)
+  useEffect(() => {
+    if (!clubId || !teams || teams.length === 0) return;
+
+    const unsubList = teams.map((teamName) => {
+      const docName = `${clubId}_live_match_${teamName}`;
+      return onSnapshot(doc(db, "ticker", docName), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setAllTeamsLiveStatus((prev) => ({
+            ...prev,
+            [teamName]: {
+              isRunning: data.isRunning || false,
+              homeTeam: data.homeTeam || teamName,
+              awayTeam: data.awayTeam || "Gast",
+              homeGoals: data.homeGoals || 0,
+              awayGoals: data.awayGoals || 0,
+            }
+          }));
+        }
+      });
+    });
+
+    return () => {
+      unsubList.forEach((unsub) => unsub());
+    };
+  }, [clubId, teams]);
 
   // Beendete Spiele (Historie) für diesen Club laden
   useEffect(() => {
@@ -55,9 +93,9 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
     return () => unsubMatches();
   }, [clubId]);
 
-  // Live-Spiel für diesen Club & dieses Team laden
+  // Live-Spiel für das AKTUELL ausgewählte Team laden (Detailansicht)
   useEffect(() => {
-    if (!clubId || !selectedTeam) return;
+    if (!clubId || selectedTeam === "übersicht") return;
 
     const docName = `${clubId}_live_match_${selectedTeam}`;
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
@@ -187,7 +225,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   };
 
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
-  const safeChannelName = `${clubId}${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const safeChannelName = selectedTeam !== "übersicht" ? `${clubId}${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}` : clubId;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(safeChannelName);
@@ -196,9 +234,9 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   };
 
   // --- FILTER FÜR DIE FANS ---
-  const filteredMatches = savedMatches.filter(m => (m.team || (teams && teams[0]) || "1. Mannschaft") === selectedTeam);
+  const filteredMatches = selectedTeam !== "übersicht" ? savedMatches.filter(m => (m.team || (teams && teams[0]) || "1. Mannschaft") === selectedTeam) : [];
   
-  // --- DYNAMISCHE TORSCHÜTZEN-BERECHCHNUNG AUS DEN GESPEICHERTEN SPIELEN ---
+  // --- DYNAMISCHE TORSCHÜTZEN-BERECHCHNUNG ---
   const calculatedScorers = {};
   filteredMatches.forEach(match => {
     if (match.history && Array.isArray(match.history)) {
@@ -216,7 +254,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   const sortedScorers = Object.entries(calculatedScorers).sort((a, b) => b[1] - a[1]);
 
   const getFussballDeLink = () => {
-    return "https://www.fussball.de";
+    return "https://www.fussball.de/verein/sv-orsingen-nenzingen-suedbaden/-/id/00ES8GN9F000000RVV0AG08LVUPGND5I#!/";
   };
 
   const tabButtonStyle = (tabName) => ({
@@ -234,224 +272,220 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
       <p style={{ color: "#666", fontSize: "12px", marginBottom: "15px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
       
-      {/* BENACHRICHTIGUNGEN & INFO BEREICH */}
-      <div style={{ marginBottom: "15px" }}>
-        <button 
-          onClick={toggleNotifications}
-          style={{ 
-            padding: "8px 15px", 
-            background: wantsNotifications ? "#e74c3c" : "#f39c12", 
-            color: "white", 
-            border: "none", 
-            borderRadius: "15px", 
-            cursor: "pointer", 
-            fontSize: "12px", 
-            fontWeight: "bold", 
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-            marginBottom: "6px"
-          }}
-        >
-          {wantsNotifications ? "🔕 Browser-Benachrichtigungen deaktivieren" : "🔔 Browser-Benachrichtigungen aktivieren"}
-        </button>
-
-        <div>
-          <button 
-            onClick={() => setShowInfo(!showInfo)}
-            style={{ background: "transparent", border: "none", color: "#2980b9", textDecoration: "underline", fontSize: "12px", cursor: "pointer" }}
-          >
-            ℹ️ Echte Push-Benachrichtigungen aufs Handy (Anleitung)
-          </button>
-        </div>
-
-        {showInfo && (
-          <div style={{ background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "8px", padding: "15px", marginTop: "10px", textAlign: "left", fontSize: "13px", color: "#333" }}>
-            <p style={{ margin: "0 0 8px 0", fontWeight: "bold", color: "#2146d0" }}>
-              📱 Push-Alarm für "{selectedTeam}":
-            </p>
-            <ol style={{ margin: "0 0 12px 0", paddingLeft: "20px", lineHeight: "1.5" }}>
-              <li style={{ marginBottom: "6px" }}>Lade dir die kostenlose App <strong>„ntfy“</strong> aus dem App Store oder Play Store herunter.</li>
-              <li style={{ marginBottom: "6px" }}>Öffne die App und tippe unten auf das <strong>„+“</strong>.</li>
-              <li>Kopiere diesen Kanalnamen und füge ihn ein:</li>
-            </ol>
-
-            <div style={{ textAlign: "center", background: "white", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
-              <div style={{ fontSize: "15px", fontWeight: "bold", fontFamily: "monospace", color: "#2146d0", marginBottom: "8px", background: "#f8f9fa", padding: "6px", borderRadius: "4px", border: "1px dashed #ccc" }}>
-                {safeChannelName}
-              </div>
-              <button 
-                onClick={copyToClipboard}
-                style={{ background: copied ? "#27ae60" : "#2146d0", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
-              >
-                {copied ? "✅ Kopiert!" : "📋 Namen kopieren"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* MANNSCHAFTS-AUSWAHL */}
+      {/* MANNSCHAFTS-AUSWAHL (Inklusive Gesamtübersicht) */}
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
-          Mannschaft auswählen:
+          Ansicht / Mannschaft wählen:
         </label>
         <select 
           value={selectedTeam} 
-          onChange={(e) => setSelectedTeam(e.target.value)}
-          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box" }}
+          onChange={(e) => { setSelectedTeam(e.target.value); setActiveTab("ticker"); }}
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box", fontWeight: "bold", color: selectedTeam === "übersicht" ? "#27ae60" : "#333" }}
         >
-          {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+          <option value="übersicht">📊 Gesamtübersicht (Aktive & Nächste Spiele)</option>
           {teams && teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
       </div>
 
-      {/* FAN-NAVIGATION (REITER) */}
-      <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
-        <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
-          ⏱️ Live-Ticker
-        </button>
-        <button onClick={() => setActiveTab("scorers")} style={tabButtonStyle("scorers")}>
-          🎯 Torschützen
-        </button>
-        <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
-          📅 Spielplan & Letzte Spiele
-        </button>
-      </div>
-
-      {/* TAB 1: LIVE-TICKER */}
-      {activeTab === "ticker" && (
-        <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", marginBottom: "20px" }}>
+      {/* --- GESAMTÜBERSICHT (DASHBOARD) --- */}
+      {selectedTeam === "übersicht" && (
+        <div style={{ textAlign: "left" }}>
           
-          {(displayDate || kickoffTime) && (
-            <div style={{ fontSize: "12px", color: "#666", marginBottom: "15px", background: "#eee", padding: "6px", borderRadius: "6px", display: "inline-block" }}>
-              📅 {displayDate} {kickoffTime && `| ⏱ ${kickoffTime} Uhr`}
-            </div>
-          )}
-
-          <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#333", marginBottom: "10px" }}>
-            {homeTeam} vs {awayTeam}
+          {/* AKTIVE / LIVE SPIELE */}
+          <div style={{ background: "#fff5f5", border: "1px solid #feb2b2", borderRadius: "12px", padding: "15px", marginBottom: "20px" }}>
+            <h3 style={{ fontSize: "1.1rem", color: "#c53030", margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+              🔴 Aktive Live-Spiele
+            </h3>
+            {Object.entries(allTeamsLiveStatus).filter(([_, status]) => status.isRunning).length === 0 ? (
+              <p style={{ color: "#718096", fontSize: "13px", margin: "0" }}>Aktuell findet kein Live-Spiel statt.</p>
+            ) : (
+              Object.entries(allTeamsLiveStatus)
+                .filter(([_, status]) => status.isRunning)
+                .map(([teamName, status]) => (
+                  <div key={teamName} onClick={() => setSelectedTeam(teamName)} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fc8181", cursor: "pointer", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
+                    <div>
+                      <span style={{ fontSize: "11px", background: "#e53e3e", color: "white", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold" }}>{teamName}</span>
+                      <div style={{ fontWeight: "bold", fontSize: "14px", marginTop: "4px" }}>{status.homeTeam} vs {status.awayTeam}</div>
+                    </div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#e53e3e" }}>
+                      {status.homeGoals} : {status.awayGoals} ➔
+                    </div>
+                  </div>
+                ))
+            )}
           </div>
 
-          <div style={{ fontSize: "3.5rem", fontWeight: "bold", margin: "10px 0", lineHeight: "1", color: "#2146d0" }}>
-            {homeGoals} : {awayGoals}
+          {/* NÄCHSTE SPIELE */}
+          <div style={{ background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "12px", padding: "15px", marginBottom: "20px" }}>
+            <h3 style={{ fontSize: "1.1rem", color: "#2146d0", margin: "0 0 12px 0" }}>
+              📅 Nächste Spiele
+            </h3>
+            {(!teams || teams.length === 0) ? (
+              <p style={{ color: "#777", fontSize: "13px" }}>Keine Mannschaften vorhanden.</p>
+            ) : (
+              teams.map((teamName) => {
+                const nextMatch = nextMatches[teamName];
+                return (
+                  <div key={teamName} style={{ background: "white", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <strong style={{ fontSize: "13px", color: "#2146d0" }}>{teamName}</strong>
+                      <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>
+                        {nextMatch?.opponent ? `vs ${nextMatch.opponent}` : "Gegner noch offen"}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#666", textAlign: "right" }}>
+                      {nextMatch?.date ? `📅 ${nextMatch.date}` : ""}
+                      {nextMatch?.time ? ` ⏱️ ${nextMatch.time} Uhr` : ""}
+                      {!nextMatch?.date && !nextMatch?.time && <span style={{ fontStyle: "italic", color: "#999" }}>Kein Termin</span>}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
-          <div style={{ fontSize: "1.5rem", fontFamily: "monospace", color: isRunning ? "#27ae60" : (time > 0 ? "#e74c3c" : "#333"), marginBottom: "15px", fontWeight: "bold" }}>
-            {formatTime(time)} {isRunning ? "LIVE" : (time > 0 ? "Pause" : "")}
-          </div>
-
-          <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
-
-          <h3 style={{ fontSize: "1.1rem", marginBottom: "10px" }}>Spielbericht</h3>
-          {history.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px" }}>Bisher noch keine Ereignisse für dieses Team.</p>
-          ) : (
-            <div style={{ textAlign: "left", padding: "10px", borderRadius: "8px", background: "white", border: "1px solid #ddd" }}>
-              {[...history].reverse().map((event) => (
-                <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", alignItems: "center" }}>
-                  <span style={{ fontWeight: "bold", width: "35px", color: "#555" }}>{event.minute}'</span>
-                  <span style={{ fontSize: "1.4rem" }}>{getEventIcon(event.type)}</span>
-                  <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: TORSCHÜTZENLISTE */}
-      {activeTab === "scorers" && (
-        <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🎯 Torschützen ({selectedTeam})</h3>
-          
-          {sortedScorers.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Bisher noch keine Torschützen in dieser Saison.</p>
-          ) : (
-            <div style={{ background: "white", borderRadius: "8px", border: "1px solid #ddd", overflow: "hidden" }}>
-              {sortedScorers.map(([player, goals], index) => (
-                <div key={player} style={{ padding: "10px 15px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "14px", color: "#333" }}>
-                    <strong>{index + 1}.</strong> {player}
-                  </span>
-                  <span style={{ background: "#2146d0", color: "white", padding: "3px 10px", borderRadius: "12px", fontSize: "13px", fontWeight: "bold" }}>
-                    ⚽ {goals} {goals === 1 ? "Tor" : "Tore"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: SPIELPLAN & LETZTE SPIELE */}
-      {activeTab === "history" && (
-        <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
-          
-          <div style={{ marginBottom: "20px", background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "10px", padding: "15px", textAlign: "center" }}>
-            <p style={{ margin: "0 0 10px 0", fontSize: "13px", fontWeight: "bold", color: "#0056b3" }}>
-              📅 Suche nach den nächsten Spielen, Uhrzeiten oder der Tabelle?
-            </p>
+          {/* OFFIZIELLER FUSSBALL.DE LINK */}
+          <div style={{ background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "10px", padding: "15px", textAlign: "center" }}>
             <a 
               href={getFussballDeLink()} 
               target="_blank" 
               rel="noopener noreferrer"
-              style={{
-                display: "block",
-                padding: "12px",
-                background: "#0056b3",
-                color: "white",
-                borderRadius: "8px",
-                textDecoration: "none",
-                fontWeight: "bold",
-                fontSize: "14px",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-              }}
+              style={{ display: "block", padding: "12px", background: "#0056b3", color: "white", borderRadius: "8px", textDecoration: "none", fontWeight: "bold", fontSize: "14px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
             >
               🌐 Zum offiziellen Spielplan & Tabelle auf Fussball.de
             </a>
           </div>
 
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>📜 Letzte Spiele & Ergebnisse ({selectedTeam})</h3>
-          
-          {filteredMatches.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine vergangenen Spiele für {selectedTeam} im Ticker gespeichert.</p>
-          ) : (
-            filteredMatches.map((match) => (
-              <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
-                
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
-                  <span>📅 {match.date}</span>
-                  
-                  <span 
-                    onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)}
-                    style={{ cursor: "pointer", color: "#2980b9", fontWeight: "bold", textDecoration: "underline" }}
-                  >
-                    {match.history?.length || 0} Ereignisse {expandedMatchId === match.id ? "▲" : "▼"}
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: "bold", fontSize: "15px", color: "#333" }}>
-                  <span>{match.homeTeam} vs {match.awayTeam}</span>
-                  <span style={{ color: "#2146d0", fontSize: "16px" }}>{match.homeGoals} : {match.awayGoals}</span>
-                </div>
-
-                {expandedMatchId === match.id && match.history && match.history.length > 0 && (
-                  <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
-                    <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
-                    {[...match.history].reverse().map((event) => (
-                      <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
-                        <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
-                        <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
-                        <span><strong>{event.team === "home" ? match.homeTeam : match.awayTeam}</strong>: {event.player}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
         </div>
+      )}
+
+      {/* --- DETAILANSICHT FÜR EINE AUSGEWÄHLTE MANNSCHAFT --- */}
+      {selectedTeam !== "übersicht" && (
+        <>
+          {/* FAN-NAVIGATION (REITER) */}
+          <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
+            <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
+              ⏱️ Live-Ticker
+            </button>
+            <button onClick={() => setActiveTab("scorers")} style={tabButtonStyle("scorers")}>
+              🎯 Torschützen
+            </button>
+            <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
+              📅 Letzte Spiele
+            </button>
+          </div>
+
+          {/* TAB 1: LIVE-TICKER */}
+          {activeTab === "ticker" && (
+            <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", marginBottom: "20px" }}>
+              
+              {(displayDate || kickoffTime) && (
+                <div style={{ fontSize: "12px", color: "#666", marginBottom: "15px", background: "#eee", padding: "6px", borderRadius: "6px", display: "inline-block" }}>
+                  📅 {displayDate} {kickoffTime && `| ⏱ ${kickoffTime} Uhr`}
+                </div>
+              )}
+
+              <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#333", marginBottom: "10px" }}>
+                {homeTeam} vs {awayTeam}
+              </div>
+
+              <div style={{ fontSize: "3.5rem", fontWeight: "bold", margin: "10px 0", lineHeight: "1", color: "#2146d0" }}>
+                {homeGoals} : {awayGoals}
+              </div>
+
+              <div style={{ fontSize: "1.5rem", fontFamily: "monospace", color: isRunning ? "#27ae60" : (time > 0 ? "#e74c3c" : "#333"), marginBottom: "15px", fontWeight: "bold" }}>
+                {formatTime(time)} {isRunning ? "LIVE" : (time > 0 ? "Pause" : "")}
+              </div>
+
+              <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
+
+              <h3 style={{ fontSize: "1.1rem", marginBottom: "10px" }}>Spielbericht</h3>
+              {history.length === 0 ? (
+                <p style={{ color: "#999", fontSize: "14px" }}>Bisher noch keine Ereignisse für dieses Team.</p>
+              ) : (
+                <div style={{ textAlign: "left", padding: "10px", borderRadius: "8px", background: "white", border: "1px solid #ddd" }}>
+                  {[...history].reverse().map((event) => (
+                    <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", alignItems: "center" }}>
+                      <span style={{ fontWeight: "bold", width: "35px", color: "#555" }}>{event.minute}'</span>
+                      <span style={{ fontSize: "1.4rem" }}>{getEventIcon(event.type)}</span>
+                      <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: TORSCHÜTZENLISTE */}
+          {activeTab === "scorers" && (
+            <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+              <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🎯 Torschützen ({selectedTeam})</h3>
+              
+              {sortedScorers.length === 0 ? (
+                <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Bisher noch keine Torschützen in dieser Saison.</p>
+              ) : (
+                <div style={{ background: "white", borderRadius: "8px", border: "1px solid #ddd", overflow: "hidden" }}>
+                  {sortedScorers.map(([player, goals], index) => (
+                    <div key={player} style={{ padding: "10px 15px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "14px", color: "#333" }}>
+                        <strong>{index + 1}.</strong> {player}
+                      </span>
+                      <span style={{ background: "#2146d0", color: "white", padding: "3px 10px", borderRadius: "12px", fontSize: "13px", fontWeight: "bold" }}>
+                        ⚽ {goals} {goals === 1 ? "Tor" : "Tore"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: LETZTE SPIELE */}
+          {activeTab === "history" && (
+            <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+              <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>📜 Letzte Spiele & Ergebnisse ({selectedTeam})</h3>
+              
+              {filteredMatches.length === 0 ? (
+                <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine vergangenen Spiele für {selectedTeam} im Ticker gespeichert.</p>
+              ) : (
+                filteredMatches.map((match) => (
+                  <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
+                    
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
+                      <span>📅 {match.date}</span>
+                      <span 
+                        onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)}
+                        style={{ cursor: "pointer", color: "#2980b9", fontWeight: "bold", textDecoration: "underline" }}
+                      >
+                        {match.history?.length || 0} Ereignisse {expandedMatchId === match.id ? "▲" : "▼"}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: "bold", fontSize: "15px", color: "#333" }}>
+                      <span>{match.homeTeam} vs {match.awayTeam}</span>
+                      <span style={{ color: "#2146d0", fontSize: "16px" }}>{match.homeGoals} : {match.awayGoals}</span>
+                    </div>
+
+                    {expandedMatchId === match.id && match.history && match.history.length > 0 && (
+                      <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
+                        <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
+                        {[...match.history].reverse().log?.() || [...match.history].reverse().map((event) => (
+                          <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
+                            <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
+                            <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
+                            <span><strong>{event.team === "home" ? match.homeTeam : match.awayTeam}</strong>: {event.player}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </>
       )}
 
     </div>
