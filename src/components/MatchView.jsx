@@ -475,41 +475,42 @@ export default function MatchView() {
     return "📝";
   };
 
+  // --- MOBIL-OPTIMIERTE STYLES ---
   const inputStyle = {
-    padding: "10px", borderRadius: "8px", border: "1px solid #ccc",
-    width: "100%", boxSizing: "border-box", fontSize: "16px"
+    padding: "8px", borderRadius: "8px", border: "1px solid #ccc",
+    width: "100%", boxSizing: "border-box", fontSize: "14px"
   };
 
   const actionButtonStyle = {
-    padding: "12px 8px", border: "none", borderRadius: "8px",
-    fontSize: "15px", fontWeight: "bold", color: "white",
+    padding: "12px 6px", border: "none", borderRadius: "8px",
+    fontSize: "14px", fontWeight: "bold", color: "white",
     cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
   };
 
   const tabButtonStyle = (tabName) => ({
-    flex: 1, padding: "10px",
+    flex: 1, padding: "8px 4px",
     background: activeTab === tabName ? "#2146d0" : "#e0e0e0",
     color: activeTab === tabName ? "white" : "#333",
     border: "none", borderRadius: "8px", fontWeight: "bold",
-    cursor: "pointer", fontSize: "13px"
+    cursor: "pointer", fontSize: "12px"
   });
 
   const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
   const currentLineup = lineups[selectedTeam] || [];
 
   return (
-    <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
-      <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
-      <h2 style={{ color: "#2146d0", margin: "0 0 15px 0", fontSize: "1.5rem" }}>⚽ SVON Ticker (Admin)</h2>
+    <div style={{ padding: "10px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto", boxSizing: "border-box" }}>
+      <img src={logo} alt="SVON Logo" style={{ maxWidth: "60px", marginBottom: "5px" }} />
+      <h2 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "1.3rem" }}>⚽ SVON Ticker (Admin)</h2>
 
-      <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
-        <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
+      <div style={{ background: "white", padding: "10px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "12px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
+        <label style={{ display: "block", fontSize: "12px", color: "#555", marginBottom: "4px", fontWeight: "bold", textAlign: "left" }}>
           Zu steuernde Mannschaft:
         </label>
         <select 
           value={selectedTeam} 
           onChange={(e) => setSelectedTeam(e.target.value)}
-          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
+          style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "14px", background: "#f8f9fa", boxSizing: "border-box" }}
         >
           {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
           {teams.map((t) => (
@@ -518,24 +519,25 @@ export default function MatchView() {
         </select>
       </div>
 
-      <div style={{ display: "flex", gap: "6px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
-          ⏱️ Live-Ticker
+          ⏱️ Ticker
         </button>
         <button onClick={() => setActiveTab("lineup")} style={tabButtonStyle("lineup")}>
           📋 Kader ({currentLineup.length})
         </button>
-        <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
+        <button onClick={() => setActiveTeam("history") /* oder history */ || setActiveTab("history")} style={tabButtonStyle("history")}>
           📜 Spiele ({filteredMatches.length})
         </button>
       </div>
 
       {activeTab === "ticker" && (
-        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+        <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
-          <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+          {/* --- DATUM & ANSTOSSZEIT (KOMPAKT UNTEREINANDER AUF HANDY) --- */}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
             <div style={{ flex: 1, textAlign: "left" }}>
-              <label style={{ fontSize: "12px", color: "#666", display: "block", marginBottom: "4px" }}>Datum</label>
+              <label style={{ fontSize: "11px", color: "#666", display: "block", marginBottom: "2px" }}>Datum</label>
               <input 
                 type="date" 
                 value={matchDate} 
@@ -544,7 +546,7 @@ export default function MatchView() {
               />
             </div>
             <div style={{ flex: 1, textAlign: "left" }}>
-              <label style={{ fontSize: "12px", color: "#666", display: "block", marginBottom: "4px" }}>Anstoßzeit</label>
+              <label style={{ fontSize: "11px", color: "#666", display: "block", marginBottom: "2px" }}>Anstoßzeit</label>
               <input 
                 type="time" 
                 value={kickoffTime} 
@@ -554,9 +556,10 @@ export default function MatchView() {
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "15px", width: "100%" }}>
+          {/* --- HEIMTEAM & GASTTEAM (FLEXIBEL MIT KÜRZERER SCHRIFT & TAUSCH-BUTTON) --- */}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "12px", width: "100%" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-              <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "left" }}>Heimteam</label>
+              <label style={{ fontSize: "11px", color: "#666", marginBottom: "2px", textAlign: "left" }}>Heimteam</label>
               <input 
                 value={homeTeam} 
                 onChange={(e) => { 
@@ -564,17 +567,17 @@ export default function MatchView() {
                   syncLiveMatch({ homeTeam: e.target.value }); 
                 }} 
                 disabled={!isSvonAway}
-                placeholder="Teamname..." 
-                style={{...inputStyle, textAlign: "center", background: !isSvonAway ? "#eee" : "white", fontWeight: !isSvonAway ? "bold" : "normal"}} 
+                placeholder="Heim..." 
+                style={{...inputStyle, textAlign: "center", fontSize: "13px", padding: "8px 4px", background: !isSvonAway ? "#eee" : "white", fontWeight: !isSvonAway ? "bold" : "normal"}} 
               />
             </div>
 
-            <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "10px", cursor: "pointer", background: "#e0e0e0", border: "none", borderRadius: "8px", fontSize: "18px", marginTop: "18px", flexShrink: 0 }}>
+            <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "8px", cursor: "pointer", background: "#e0e0e0", border: "none", borderRadius: "8px", fontSize: "15px", marginTop: "16px", flexShrink: 0 }}>
               🔄
             </button>
 
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-              <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "right" }}>Gastteam</label>
+              <label style={{ fontSize: "11px", color: "#666", marginBottom: "2px", textAlign: "right" }}>Gastteam</label>
               <input 
                 value={awayTeam} 
                 onChange={(e) => { 
@@ -582,21 +585,21 @@ export default function MatchView() {
                   syncLiveMatch({ awayTeam: e.target.value }); 
                 }} 
                 disabled={isSvonAway}
-                placeholder="Teamname..." 
-                style={{...inputStyle, textAlign: "center", background: isSvonAway ? "#eee" : "white", fontWeight: isSvonAway ? "bold" : "normal"}} 
+                placeholder="Gast..." 
+                style={{...inputStyle, textAlign: "center", fontSize: "13px", padding: "8px 4px", background: isSvonAway ? "#eee" : "white", fontWeight: isSvonAway ? "bold" : "normal"}} 
               />
             </div>
           </div>
 
-          <div style={{ fontSize: "clamp(3rem, 12vw, 4.5rem)", fontWeight: "bold", margin: "10px 0", lineHeight: "1" }}>
+          <div style={{ fontSize: "clamp(2.5rem, 10vw, 4rem)", fontWeight: "bold", margin: "8px 0", lineHeight: "1" }}>
             {homeGoals} : {awayGoals}
           </div>
 
-          <div style={{ marginBottom: "25px" }}>
-            <div style={{ fontSize: "2rem", fontFamily: "monospace", marginBottom: "12px" }}>
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ fontSize: "1.8rem", fontFamily: "monospace", marginBottom: "10px" }}>
               {formatTime(time)}
             </div>
-            <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
               <button onClick={() => { 
                   if (isRunning) {
                     setIsRunning(false);
@@ -612,7 +615,7 @@ export default function MatchView() {
                     syncLiveMatch({ isRunning: true, startTime: newStartTime, time: time });
                   }
                 }} 
-                style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: isRunning ? "#e74c3c" : "#2ecc71", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
+                style={{ flex: 1, maxWidth: "130px", padding: "10px", backgroundColor: isRunning ? "#e74c3c" : "#2ecc71", color: "white", border: "none", borderRadius: "8px", fontSize: "14px", fontWeight: "bold" }}>
                 {isRunning ? "⏸ Pause" : "▶ Start"}
               </button>
               <button onClick={() => { 
@@ -623,45 +626,45 @@ export default function MatchView() {
 
                   syncLiveMatch({ isRunning: false, time: 45 * 60, startTime: null }); 
                 }} 
-                style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
+                style={{ flex: 1, maxWidth: "130px", padding: "10px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "14px", fontWeight: "bold" }}>
                 ⏱ Halbzeit
               </button>
             </div>
           </div>
 
-          <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
+          <hr style={{ margin: "15px 0", borderColor: "#eee" }} />
 
-          {/* --- SPIELER-SCHNELL-AUSWAHL OHNE SCROLLBALKEN --- */}
-          <div style={{ marginBottom: "20px", textAlign: "left" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-              <label style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>
-                Aktiver Spieler / Torschütze: <span style={{ color: "#2146d0" }}>{selectedPlayer || "Keiner ausgewählt"}</span>
+          {/* --- SPIELER-SCHNELL-AUSWAHL --- */}
+          <div style={{ marginBottom: "15px", textAlign: "left" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <label style={{ fontSize: "12px", color: "#555", fontWeight: "bold" }}>
+                Torschütze: <span style={{ color: "#2146d0" }}>{selectedPlayer || "Keiner ausgewählt"}</span>
               </label>
               {selectedPlayer && (
-                <button onClick={() => setSelectedPlayer("")} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}>
-                  Auswahl aufheben
+                <button onClick={() => setSelectedPlayer("")} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "11px", cursor: "pointer", textDecoration: "underline" }}>
+                  Aufheben
                 </button>
               )}
             </div>
 
             {currentLineup.length === 0 ? (
-              <div style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px dashed #ccc", textAlign: "center" }}>
-                <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#666" }}>Kein Kader für {selectedTeam} hinterlegt.</p>
-                <button onClick={() => setActiveTab("lineup")} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", cursor: "pointer", fontWeight: "bold" }}>
-                  📋 Jetzt Kader zusammenstellen
+              <div style={{ background: "white", padding: "10px", borderRadius: "8px", border: "1px dashed #ccc", textAlign: "center" }}>
+                <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#666" }}>Kein Kader für {selectedTeam} hinterlegt.</p>
+                <button onClick={() => setActiveTab("lineup")} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", cursor: "pointer", fontWeight: "bold" }}>
+                  📋 Kader zusammenstellen
                 </button>
               </div>
             ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", background: "white", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", background: "white", padding: "8px", borderRadius: "8px", border: "1px solid #ccc" }}>
                 {currentLineup.map((p) => (
                   <button
                     key={p}
                     onClick={() => setSelectedPlayer(p)}
                     style={{
-                      padding: "6px 10px",
+                      padding: "5px 8px",
                       borderRadius: "6px",
                       border: "none",
-                      fontSize: "13px",
+                      fontSize: "12px",
                       fontWeight: "bold",
                       cursor: "pointer",
                       background: selectedPlayer === p ? "#2146d0" : "#e8f4f8",
@@ -676,7 +679,7 @@ export default function MatchView() {
             )}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "25px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "20px" }}>
             <button onClick={() => addEvent("home", "goal")} style={{...actionButtonStyle, background: "#2146d0"}}>⚽ Tor {homeTeam}</button>
             <button onClick={() => addEvent("away", "goal")} style={{...actionButtonStyle, background: "#333"}}>⚽ Tor {awayTeam}</button>
             
@@ -690,24 +693,24 @@ export default function MatchView() {
             <button onClick={() => addEvent("away", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {awayTeam}</button>
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
-            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩ Zurück</button>
-            <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑 Zurücksetzen</button>
-            <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "6px" }}>
+            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 6px)", padding: "8px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px", fontSize: "13px" }}>↩ Zurück</button>
+            <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 6px)", padding: "8px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px", fontSize: "13px" }}>🗑 Zurücksetzen</button>
+            <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "10px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "14px" }}>💾 Spiel beenden & Speichern</button>
           </div>
 
-          <hr style={{ margin: "25px 0", borderColor: "#eee" }} />
+          <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "10px" }}>📝 Spielbericht</h3>
+          <h3 style={{ fontSize: "1.1rem", marginBottom: "8px" }}>📝 Spielbericht</h3>
           {history.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px" }}>Noch keine Ereignisse.</p>
+            <p style={{ color: "#999", fontSize: "13px" }}>Noch keine Ereignisse.</p>
           ) : (
-            <div style={{ textAlign: "left", padding: "12px", borderRadius: "10px", background: "white", border: "1px solid #ddd" }}>
+            <div style={{ textAlign: "left", padding: "10px", borderRadius: "8px", background: "white", border: "1px solid #ddd" }}>
               {[...history].reverse().map((event) => (
-                <div key={event.id} style={{ padding: "8px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", alignItems: "center" }}>
-                  <span style={{ fontWeight: "bold", width: "35px", color: "#555" }}>{event.minute}'</span>
-                  <span style={{ fontSize: "1.4rem" }}>{getEventIcon(event.type)}</span>
-                  <span style={{ fontSize: "14px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
+                <div key={event.id} style={{ padding: "6px 0", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "10px", alignItems: "center" }}>
+                  <span style={{ fontWeight: "bold", width: "30px", color: "#555", fontSize: "13px" }}>{event.minute}'</span>
+                  <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
+                  <span style={{ fontSize: "13px" }}><strong>{event.team === "home" ? homeTeam : awayTeam}</strong>: {event.player}</span>
                 </div>
               ))}
             </div>
@@ -716,16 +719,16 @@ export default function MatchView() {
       )}
 
       {activeTab === "lineup" && (
-        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📋 Kader für heute ({selectedTeam})</h3>
-          <p style={{ fontSize: "12px", color: "#666", textAlign: "center", marginBottom: "15px" }}>
-            Wähle aus, welche Spieler heute im Kader stehen. Sie erscheinen dann direkt als Schnell-Buttons im Ticker!
+        <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+          <h3 style={{ fontSize: "1.1rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📋 Kader für heute ({selectedTeam})</h3>
+          <p style={{ fontSize: "11px", color: "#666", textAlign: "center", marginBottom: "12px" }}>
+            Wähle aus, welche Spieler heute im Kader stehen.
           </p>
 
           {players.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine Spieler im System für diese Mannschaft hinterlegt.</p>
+            <p style={{ color: "#999", fontSize: "13px", textAlign: "center" }}>Keine Spieler im System für diese Mannschaft hinterlegt.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               {players.map((p) => {
                 const isInLineup = currentLineup.includes(p);
                 return (
@@ -736,7 +739,7 @@ export default function MatchView() {
                       background: isInLineup ? "#e8f8f5" : "white", 
                       border: isInLineup ? "1px solid #27ae60" : "1px solid #ddd", 
                       borderRadius: "8px", 
-                      padding: "10px 14px", 
+                      padding: "8px 12px", 
                       display: "flex", 
                       justifyContent: "space-between", 
                       alignItems: "center", 
@@ -744,10 +747,10 @@ export default function MatchView() {
                       boxShadow: "0 1px 3px rgba(0,0,0,0.02)"
                     }}
                   >
-                    <span style={{ fontWeight: isInLineup ? "bold" : "normal", color: isInLineup ? "#27ae60" : "#333", fontSize: "15px" }}>
+                    <span style={{ fontWeight: isInLineup ? "bold" : "normal", color: isInLineup ? "#27ae60" : "#333", fontSize: "14px" }}>
                       {p}
                     </span>
-                    <span style={{ fontSize: "18px" }}>
+                    <span style={{ fontSize: "16px" }}>
                       {isInLineup ? "✅" : "➕"}
                     </span>
                   </div>
@@ -759,16 +762,16 @@ export default function MatchView() {
       )}
 
       {activeTab === "history" && (
-        <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🏆 Gespeicherte Spiele ({selectedTeam})</h3>
+        <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+          <h3 style={{ fontSize: "1.1rem", marginBottom: "12px", textAlign: "center", color: "#2146d0" }}>🏆 Gespeicherte Spiele ({selectedTeam})</h3>
           
           {filteredMatches.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Noch keine gespeicherten Spiele für {selectedTeam}.</p>
+            <p style={{ color: "#999", fontSize: "13px", textAlign: "center" }}>Noch keine gespeicherten Spiele für {selectedTeam}.</p>
           ) : (
             filteredMatches.map((match) => (
-              <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
+              <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "10px", marginBottom: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
                 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#666", marginBottom: "4px" }}>
                   <span>📅 {match.date}</span>
                   
                   <span 
@@ -780,40 +783,40 @@ export default function MatchView() {
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
-                    <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "transparent", color: "#e74c3c", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "15px", flexShrink: 0 }}>🗑</button>
-                    <span style={{ fontWeight: "bold", fontSize: "15px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flex: 1, minWidth: 0 }}>
+                    <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "transparent", color: "#e74c3c", border: "none", borderRadius: "4px", padding: "2px 4px", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>🗑</button>
+                    <span style={{ fontWeight: "bold", fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {match.homeTeam} vs {match.awayTeam}
                     </span>
                   </div>
 
                   {editingMatchId === match.id ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                      <input type="number" value={editHomeGoals} onChange={(e) => setEditHomeGoals(e.target.value)} style={{ width: "40px", textAlign: "center", padding: "4px" }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                      <input type="number" value={editHomeGoals} onChange={(e) => setEditHomeGoals(e.target.value)} style={{ width: "35px", textAlign: "center", padding: "2px" }} />
                       <span>:</span>
-                      <input type="number" value={editAwayGoals} onChange={(e) => setEditAwayGoals(e.target.value)} style={{ width: "40px", textAlign: "center", padding: "4px" }} />
-                      <button onClick={() => saveEditedMatch(match.id)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>💾</button>
-                      <button onClick={() => setEditingMatchId(null)} style={{ background: "transparent", color: "#7f8c8d", border: "none", padding: "5px 8px", cursor: "pointer", fontSize: "14px" }}>✖</button>
+                      <input type="number" value={editAwayGoals} onChange={(e) => setEditAwayGoals(e.target.value)} style={{ width: "35px", textAlign: "center", padding: "2px" }} />
+                      <button onClick={() => saveEditedMatch(match.id)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "11px" }}>💾</button>
+                      <button onClick={() => setEditingMatchId(null)} style={{ background: "transparent", color: "#7f8c8d", border: "none", padding: "4px 6px", cursor: "pointer", fontSize: "12px" }}>✖</button>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontWeight: "bold", fontSize: "16px", color: "#2146d0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                      <span style={{ fontWeight: "bold", fontSize: "14px", color: "#2146d0" }}>
                         {match.homeGoals} : {match.awayGoals}
                       </span>
                       
-                      <button onClick={() => shareMatchToSocialMedia(match)} title="Highlights teilen" style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>📤 Teilen</button>
-                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
+                      <button onClick={() => shareMatchToSocialMedia(match)} title="Highlights teilen" style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "11px" }}>📤 Teilen</button>
+                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "11px" }}>✏️</button>
                     </div>
                   )}
                 </div>
 
                 {expandedMatchId === match.id && match.history && match.history.length > 0 && (
-                  <div style={{ marginTop: "15px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
-                    <h4 style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
+                  <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px dashed #ccc" }}>
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#555" }}>Spielverlauf:</h4>
                     {[...match.history].reverse().map((event) => (
-                      <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
-                        <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
-                        <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
+                      <div key={event.id} style={{ display: "flex", gap: "8px", alignItems: "center", padding: "3px 0", fontSize: "12px" }}>
+                        <span style={{ fontWeight: "bold", width: "25px", color: "#666" }}>{event.minute}'</span>
+                        <span style={{ fontSize: "1.1rem" }}>{getEventIcon(event.type)}</span>
                         <span><strong>{event.team === "home" ? match.homeTeam : match.awayTeam}</strong>: {event.player}</span>
                       </div>
                     ))}
