@@ -16,14 +16,12 @@ export default function PlayerManager({ clubId, teams }) {
   const [editingPlayer, setEditingPlayer] = useState(null); 
   const [editedName, setEditedName] = useState(""); 
 
-  // Wenn sich die Teams ändern und das gewählte Team wegfällt, anpassen
   useEffect(() => {
     if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
       setSelectedTeam(teams[0]);
     }
   }, [teams, selectedTeam]);
 
-  // Zentrale Spieler-Daten für diesen Club aus der Cloud laden
   useEffect(() => {
     if (!clubId) return;
 
@@ -80,7 +78,6 @@ export default function PlayerManager({ clubId, teams }) {
     savePlayersToCloud(newPlayersObj);
   };
 
-  // Spieler-Namen in der gesamten App für diesen Verein aktualisieren
   const saveEditedPlayerName = (oldName) => {
     const newName = editedName.trim();
     if (!newName) {
@@ -112,7 +109,6 @@ export default function PlayerManager({ clubId, teams }) {
     setEditedName("");
   };
 
-  // Mehrfachauswahl Logik
   const toggleSelectPlayer = (player) => {
     if (selectedPlayers.includes(player)) {
       setSelectedPlayers(selectedPlayers.filter(p => p !== player));
@@ -171,8 +167,8 @@ export default function PlayerManager({ clubId, teams }) {
   const otherTeams = teams ? teams.filter((t) => t !== selectedTeam) : [];
 
   return (
-    <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
-      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👤 Spielerverwaltung ({clubId.toUpperCase()})</h2>
+    <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", color: "#333" }}>
+      <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👤 Spielerverwaltung ({clubId?.toUpperCase()})</h2>
 
       <select
         value={selectedTeam}
@@ -182,9 +178,21 @@ export default function PlayerManager({ clubId, teams }) {
           setIsMultiSelectMode(false);
           setEditingPlayer(null);
         }}
-        style={{ padding: "10px", width: "100%", marginBottom: "15px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box" }}
+        style={{ 
+          padding: "10px", 
+          width: "100%", 
+          marginBottom: "15px", 
+          borderRadius: "8px", 
+          border: "1px solid #ccc", 
+          fontSize: "15px", 
+          background: "#f8f9fa", 
+          color: "#333", /* Dark Mode Fix */
+          boxSizing: "border-box" 
+        }}
       >
-        {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+        {(!teams || teams.length === 0) && (
+          <option value="1. Mannschaft">1. Mannschaft</option>
+        )}
         {teams && teams.map((team) => (
           <option key={team} value={team}>
             {team}
@@ -203,7 +211,9 @@ export default function PlayerManager({ clubId, teams }) {
             boxSizing: "border-box",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            fontSize: "15px"
+            fontSize: "15px",
+            background: "#fff", /* Dark Mode Fix */
+            color: "#333"       /* Dark Mode Fix */
           }}
         />
 
@@ -217,7 +227,7 @@ export default function PlayerManager({ clubId, teams }) {
       </div>
 
       {currentTeamPlayers.length > 0 && (
-        <div style={{ marginBottom: "15px", background: "#eef2ff", padding: "10px", borderRadius: "8px", border: "1px solid #c7d2fe" }}>
+        <div style={{ marginBottom: "15px", background: "#eef2ff", padding: "10px", borderRadius: "8px", border: "1px solid #c7d2fe", color: "#333" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <button
               onClick={() => {
@@ -244,7 +254,7 @@ export default function PlayerManager({ clubId, teams }) {
               <select
                 value={targetTeam}
                 onChange={(e) => setTargetTeam(e.target.value)}
-                style={{ flex: 1, padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "white" }}
+                style={{ flex: 1, padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "white", color: "#333" }}
               >
                 <option value="">-- Ziel-Mannschaft wählen --</option>
                 {otherTeams.map((t) => (
@@ -285,6 +295,7 @@ export default function PlayerManager({ clubId, teams }) {
                 marginTop: "8px",
                 borderRadius: "8px",
                 background: isMultiSelectMode && isSelected ? "#eef2ff" : "white",
+                color: "#333", /* Dark Mode Fix */
                 boxShadow: "0 2px 4px rgba(0,0,0,0.03)"
               }}
             >
@@ -304,7 +315,15 @@ export default function PlayerManager({ clubId, teams }) {
                       type="text"
                       value={editedName}
                       onChange={(e) => setEditedName(e.target.value)}
-                      style={{ flex: 1, padding: "5px", borderRadius: "4px", border: "1px solid #2980b9", fontSize: "14px" }}
+                      style={{ 
+                        flex: 1, 
+                        padding: "5px", 
+                        borderRadius: "4px", 
+                        border: "1px solid #2980b9", 
+                        fontSize: "14px",
+                        background: "#fff", /* Dark Mode Fix */
+                        color: "#333"       /* Dark Mode Fix */
+                      }}
                       autoFocus
                     />
                     <button

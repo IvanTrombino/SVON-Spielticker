@@ -76,9 +76,11 @@ export default function Statistics({ clubId, teams }) {
   const playerStats = calculateStats();
 
   return (
-    <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", fontFamily: "sans-serif" }}>
+    <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", fontFamily: "sans-serif", color: "#333" }}>
       <h2 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>📊 Spielerstatistik</h2>
-      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px", textAlign: "center" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px", textAlign: "center" }}>
+        Aktiver Verein: <strong>{clubId?.toUpperCase()}</strong>
+      </p>
 
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
@@ -87,9 +89,20 @@ export default function Statistics({ clubId, teams }) {
         <select
           value={selectedTeam}
           onChange={(e) => setSelectedTeam(e.target.value)}
-          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box" }}
+          style={{ 
+            width: "100%", 
+            padding: "10px", 
+            borderRadius: "8px", 
+            border: "1px solid #ccc", 
+            fontSize: "15px", 
+            background: "#f8f9fa",
+            color: "#333",
+            boxSizing: "border-box" 
+          }}
         >
-          {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
+          {(!teams || teams.length === 0) && (
+            <option value="1. Mannschaft">1. Mannschaft</option>
+          )}
           {teams && teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
