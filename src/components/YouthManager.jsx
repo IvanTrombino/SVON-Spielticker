@@ -14,7 +14,7 @@ const InputField = ({ label, name, value, onChange, type = "text", placeholder =
       onChange={onChange}
       placeholder={placeholder}
       required={required}
-      style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px" }}
+      style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
     />
   </div>
 );
@@ -34,9 +34,9 @@ const CheckboxField = ({ label, name, checked, onChange }) => (
 
 // --- SPIELER FORMULAR ---
 const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList }) => (
-  <form onSubmit={onSubmit} style={{ background: "#eef2ff", padding: "20px", borderRadius: "10px", border: "1px solid #c7d2fe", color: "#333" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #c7d2fe", paddingBottom: "10px", marginBottom: "20px" }}>
-      <h3 style={{ margin: 0, fontSize: "18px", color: "#3730a3" }}>{title}</h3>
+  <form onSubmit={onSubmit} style={{ background: "#eef2ff", padding: "15px", borderRadius: "10px", border: "1px solid #c7d2fe", color: "#333" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #c7d2fe", paddingBottom: "10px", marginBottom: "15px" }}>
+      <h3 style={{ margin: 0, fontSize: "16px", color: "#3730a3" }}>{title}</h3>
       {onCancel && (
         <button type="button" onClick={onCancel} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}>
           ✕ Abbrechen
@@ -44,8 +44,8 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
       )}
     </div>
     
-    <h4 style={{ color: "#4f46e5", marginBottom: "10px", fontSize: "14px" }}>👤 Spielerdaten</h4>
-    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "20px" }}>
+    <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>👤 Spielerdaten</h4>
+    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Vorname *" name="firstName" value={formData.firstName} onChange={handleChange} required={true} />
       <InputField label="Nachname *" name="lastName" value={formData.lastName} onChange={handleChange} required={true} />
       <InputField label="Geburtsdatum" name="birthDate" value={formData.birthDate} onChange={handleChange} type="date" />
@@ -53,15 +53,15 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
       <InputField label="Jahrgang" name="birthYear" value={formData.birthYear} onChange={handleChange} type="number" placeholder="z.B. 2010" />
     </div>
 
-    <h4 style={{ color: "#4f46e5", marginBottom: "10px", fontSize: "14px" }}>⚽ Vereinsdaten</h4>
-    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "15px", alignItems: "flex-end" }}>
+    <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>⚽ Vereinsdaten</h4>
+    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "12px", alignItems: "flex-end" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: "1 1 200px" }}>
         <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Jugendmannschaft (Zuweisung)</label>
         <select
           name="youthTeam"
           value={formData.youthTeam}
           onChange={handleChange}
-          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px" }}
+          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
         >
           <option value="">-- Ohne Team --</option>
           {teamsList.map(team => (
@@ -71,25 +71,39 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
       </div>
       <InputField label="Passnummer" name="passNumber" value={formData.passNumber} onChange={handleChange} />
     </div>
-    <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "20px", background: "rgba(255,255,255,0.5)", padding: "10px", borderRadius: "8px" }}>
+    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "15px", background: "rgba(255,255,255,0.5)", padding: "10px", borderRadius: "8px" }}>
       <CheckboxField label="Angemeldet bei SVON" name="registeredSVON" checked={formData.registeredSVON} onChange={handleChange} />
-      <CheckboxField label="Angemeldet beim DFB" name="registeredDFB" checked={formData.registeredDFB} onChange={handleChange} />
+      <CheckboxField label="Angemeldet beim DF B" name="registeredDFB" checked={formData.registeredDFB} onChange={handleChange} />
       <CheckboxField label="Bilder-Veröffentlichung erlaubt" name="photoConsent" checked={formData.photoConsent} onChange={handleChange} />
     </div>
 
-    <h4 style={{ color: "#4f46e5", marginBottom: "10px", fontSize: "14px" }}>🏠 Eltern & Kontakt</h4>
-    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "15px" }}>
+    <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>🏠 Anschrift & Kontakt</h4>
+    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
       <InputField label="Straße / Anschrift" name="address" value={formData.address} onChange={handleChange} />
+      <InputField label="PLZ" name="postalCode" value={formData.postalCode} onChange={handleChange} placeholder="z.B. 78333" />
       <InputField label="Wohnort" name="city" value={formData.city} onChange={handleChange} />
     </div>
-    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "25px" }}>
+    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Name Papa" name="fatherName" value={formData.fatherName} onChange={handleChange} />
       <InputField label="Telefonnummer Papa" name="fatherPhone" value={formData.fatherPhone} onChange={handleChange} type="tel" />
       <InputField label="Name Mama" name="motherName" value={formData.motherName} onChange={handleChange} />
       <InputField label="Telefonnummer Mama" name="motherPhone" value={formData.motherPhone} onChange={handleChange} type="tel" />
     </div>
 
-    <button type="submit" disabled={isSubmitting} style={{ width: "100%", padding: "15px", background: "#2146d0", color: "white", border: "none", borderRadius: "8px", cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
+    <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>⚠️ Wichtige Hinweise / Einschränkungen</h4>
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "20px" }}>
+      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Kommentar (z.B. Allergien, Medikamente, Sonstiges)</label>
+      <textarea
+        name="medicalComment"
+        value={formData.medicalComment || ""}
+        onChange={handleChange}
+        placeholder="Hier Allergien oder gesundheitliche Einschränkungen eintragen..."
+        rows="3"
+        style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px", width: "100%", boxSizing: "border-box", fontFamily: "sans-serif" }}
+      />
+    </div>
+
+    <button type="submit" disabled={isSubmitting} style={{ width: "100%", padding: "14px", background: "#2146d0", color: "white", border: "none", borderRadius: "8px", cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
       {isSubmitting ? "Wird gespeichert..." : buttonText}
     </button>
   </form>
@@ -97,9 +111,9 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
 
 // --- TRAINER FORMULAR ---
 const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList }) => (
-  <form onSubmit={onSubmit} style={{ background: "#e8f8f5", padding: "20px", borderRadius: "10px", border: "1px solid #a3e4d7", marginBottom: "20px", color: "#333" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #a3e4d7", paddingBottom: "10px", marginBottom: "20px" }}>
-      <h3 style={{ margin: 0, fontSize: "18px", color: "#117a65" }}>{title}</h3>
+  <form onSubmit={onSubmit} style={{ background: "#e8f8f5", padding: "15px", borderRadius: "10px", border: "1px solid #a3e4d7", marginBottom: "20px", color: "#333" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #a3e4d7", paddingBottom: "10px", marginBottom: "15px" }}>
+      <h3 style={{ margin: 0, fontSize: "16px", color: "#117a65" }}>{title}</h3>
       {onCancel && (
         <button type="button" onClick={onCancel} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}>
           ✕ Abbrechen
@@ -107,12 +121,12 @@ const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, butt
       )}
     </div>
     
-    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "20px" }}>
+    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Vorname *" name="firstName" value={formData.firstName} onChange={handleChange} required={true} />
       <InputField label="Nachname *" name="lastName" value={formData.lastName} onChange={handleChange} required={true} />
       <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: "1 1 200px" }}>
         <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Zuständig für Jugend *</label>
-        <select name="youthTeam" value={formData.youthTeam} onChange={handleChange} required style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px" }}>
+        <select name="youthTeam" value={formData.youthTeam} onChange={handleChange} required style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px", width: "100%", boxSizing: "border-box" }}>
           <option value="">-- Bitte wählen --</option>
           <option value="Jugendleitung">Jugendleitung (Übergreifend)</option>
           {teamsList.map(team => (
@@ -121,13 +135,13 @@ const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, butt
         </select>
       </div>
     </div>
-    <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "20px" }}>
+    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Handynummer" name="phone" value={formData.phone} onChange={handleChange} type="tel" />
       <InputField label="E-Mail Adresse" name="email" value={formData.email} onChange={handleChange} type="email" />
       <InputField label="Schlüssel-Nr." name="keyNumber" value={formData.keyNumber} onChange={handleChange} />
     </div>
 
-    <button type="submit" disabled={isSubmitting} style={{ width: "100%", padding: "15px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
+    <button type="submit" disabled={isSubmitting} style={{ width: "100%", padding: "14px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
       {isSubmitting ? "Wird gespeichert..." : buttonText}
     </button>
   </form>
@@ -163,7 +177,7 @@ export default function YouthManager({ clubId }) {
   const [newTeamCount, setNewTeamCount] = useState(1);
 
   // States Spieler
-  const initialPlayerState = { youthTeam: "", firstName: "", lastName: "", birthDate: "", age: "", birthYear: "", registeredSVON: false, registeredDFB: false, passNumber: "", photoConsent: false, address: "", city: "", fatherName: "", fatherPhone: "", motherName: "", motherPhone: "" };
+  const initialPlayerState = { youthTeam: "", firstName: "", lastName: "", birthDate: "", age: "", birthYear: "", registeredSVON: false, registeredDFB: false, passNumber: "", photoConsent: false, address: "", postalCode: "", city: "", fatherName: "", fatherPhone: "", motherName: "", motherPhone: "", medicalComment: "" };
   const [playerFormData, setPlayerFormData] = useState(initialPlayerState);
   const [editPlayerFormData, setEditPlayerFormData] = useState(null);
 
@@ -254,42 +268,45 @@ export default function YouthManager({ clubId }) {
   }, {});
   const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => a.localeCompare(b));
 
-  // --- EXPORT FUNKTION (CSV/EXCEL) ---
-  const exportToCSV = () => {
-    if (activePlayers.length === 0) {
-      alert("Keine aktiven Spieler zum Exportieren vorhanden.");
+  // --- CSV EXPORT (AKTIVE ODER HISTORIE) ---
+  const exportCSV = (type) => {
+    let dataList = type === "active" ? activePlayers : inactivePlayers;
+    if (dataList.length === 0) {
+      alert(type === "active" ? "Keine aktiven Spieler vorhanden." : "Keine abgemeldeten Spieler in der Historie.");
       return;
     }
 
-    const headers = ["Nachname", "Vorname", "Jugend", "Jahrgang", "Passnummer", "SVON", "DFB", "Anschrift", "Wohnort", "Vater", "Telefon Vater", "Mutter", "Telefon Mutter"];
-    
-    const rows = activePlayers.map(p => [
-      `"${p.lastName || ""}"`,
-      `"${p.firstName || ""}"`,
-      `"${p.youthTeam || ""}"`,
-      `"${p.birthYear || ""}"`,
-      `"${p.passNumber || ""}"`,
-      `"${p.registeredSVON ? "Ja" : "Nein"}"`,
-      `"${p.registeredDFB ? "Ja" : "Nein"}"`,
-      `"${p.address || ""}"`,
-      `"${p.city || ""}"`,
-      `"${p.fatherName || ""}"`,
-      `"${p.fatherPhone || ""}"`,
-      `"${p.motherName || ""}"`,
-      `"${p.motherPhone || ""}"`
-    ]);
+    let headers = [];
+    let rows = [];
+
+    if (type === "active") {
+      headers = ["Nachname", "Vorname", "Jugend", "Geburtsdatum", "Alter", "Jahrgang", "Passnummer", "SVON", "DFB", "Bilderrechte", "Strasse", "PLZ", "Wohnort", "Vater", "Tel. Vater", "Mutter", "Tel. Mutter", "Medizinische Hinweise / Allergien"];
+      rows = activePlayers.map(p => [
+        `"${p.lastName || ""}"`, `"${p.firstName || ""}"`, `"${p.youthTeam || ""}"`, `"${p.birthDate || ""}"`, `"${p.age || ""}"`, `"${p.birthYear || ""}"`, `"${p.passNumber || ""}"`,
+        `"${p.registeredSVON ? "Ja" : "Nein"}"`, `"${p.registeredDFB ? "Ja" : "Nein"}"`, `"${p.photoConsent ? "Ja" : "Nein"}"`,
+        `"${p.address || ""}"`, `"${p.postalCode || ""}"`, `"${p.city || ""}"`, `"${p.fatherName || ""}"`, `"${p.fatherPhone || ""}"`, `"${p.motherName || ""}"`, `"${p.motherPhone || ""}"`, `"${(p.medicalComment || "").replace(/\n/g, " ")}"`
+      ]);
+    } else {
+      headers = ["Nachname", "Vorname", "Abmeldedatum", "Art der Abmeldung", "Bestätigt auf", "An SVON gemeldet", "Meldungsdatum SVON"];
+      rows = inactivePlayers.map(p => {
+        const d = p.deregistrationDetails || {};
+        return [
+          `"${p.lastName || ""}"`, `"${p.firstName || ""}"`, `"${d.date || ""}"`, `"${d.method || ""}"`, `"${d.confirmedDate || ""}"`, `"${d.reportedToSVON ? "Ja" : "Nein"}"`, `"${d.svonReportDate || ""}"`
+        ];
+      });
+    }
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(";"), ...rows.map(e => e.join(";"))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Jugendspieler_${clubId?.toUpperCase()}_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `${type === "active" ? "Jugendspieler_aktiv" : "Jugendspieler_Historie"}_${clubId?.toUpperCase()}_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // --- TEILEN FUNKTION (E-MAIL / NACHRICHT) ---
+  // --- TEILEN FUNKTION ---
   const shareDeregistration = (p, details) => {
     const subject = encodeURIComponent(`Abmeldung Jugendspieler: ${p.lastName}, ${p.firstName}`);
     const body = encodeURIComponent(
@@ -430,62 +447,70 @@ export default function YouthManager({ clubId }) {
   };
 
   const TabButton = ({ id, label }) => (
-    <button onClick={() => setActiveTab(id)} style={{ padding: "10px 15px", border: "none", borderRadius: "8px", background: activeTab === id ? "#2146d0" : "#e0e7ff", color: activeTab === id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", flex: "1 1 auto", fontSize: "14px", transition: "background 0.2s" }}>
+    <button onClick={() => setActiveTab(id)} style={{ padding: "10px 12px", border: "none", borderRadius: "8px", background: activeTab === id ? "#2146d0" : "#e0e7ff", color: activeTab === id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "13px", textAlign: "center", flex: "1 1 calc(33% - 10px)", minWidth: "100px", transition: "background 0.2s" }}>
       {label}
     </button>
   );
 
   return (
-    <div style={{ padding: "15px", maxWidth: "900px", margin: "0 auto", fontFamily: "sans-serif", color: "#333" }}>
-      <h2 style={{ color: "#2146d0", marginBottom: "20px", textAlign: "center" }}>👦 Jugendabteilung ({clubId?.toUpperCase()})</h2>
+    <div style={{ padding: "10px", maxWidth: "900px", margin: "0 auto", fontFamily: "sans-serif", color: "#333", boxSizing: "border-box" }}>
+      <h2 style={{ color: "#2146d0", marginBottom: "15px", textAlign: "center", fontSize: "20px" }}>👦 Jugendabteilung ({clubId?.toUpperCase()})</h2>
 
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "25px", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", flex: 1 }}>
-          <TabButton id="dashboard" label="📊 Dashboard" />
-          <TabButton id="add" label="➕ Neuer Spieler" />
-          <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
-          <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
-          <TabButton id="teams" label="⚙️ Teams" />
-          <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
-        </div>
-        
+      {/* MOBIL OPTIMIERTES MENÜ */}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "15px" }}>
+        <TabButton id="dashboard" label="📊 Dashboard" />
+        <TabButton id="add" label="➕ Neuer Spieler" />
+        <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
+        <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
+        <TabButton id="teams" label="⚙️ Teams" />
+        <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
+      </div>
+
+      {/* EXPORT BUTTONS BEREICH */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
         <button 
-          onClick={exportToCSV}
-          style={{ padding: "10px 15px", background: "#27ae60", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+          onClick={() => exportCSV("active")}
+          style={{ flex: 1, minWidth: "160px", padding: "10px", background: "#27ae60", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}
         >
-          📥 Excel/CSV Export
+          📥 Aktive Spieler (CSV)
+        </button>
+        <button 
+          onClick={() => exportCSV("history")}
+          style={{ flex: 1, minWidth: "160px", padding: "10px", background: "#7f8c8d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}
+        >
+          📥 Historie (CSV)
         </button>
       </div>
 
       {activeTab === "dashboard" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
           
-          <div style={{ background: "#2146d0", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "white", textAlign: "center" }}>
-            <h3 style={{ marginTop: 0, borderBottom: "1px solid rgba(255,255,255,0.3)", paddingBottom: "10px", fontSize: "16px" }}>🏆 Gemeldete Teams im Spielbetrieb</h3>
-            <div style={{ fontSize: "36px", fontWeight: "bold", margin: "10px 0" }}>
-              {totalRegisteredTeams} <span style={{ fontSize: "18px", fontWeight: "normal", opacity: 0.8 }}>Mannschaften insgesamt</span>
+          <div style={{ background: "#2146d0", padding: "15px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "white", textAlign: "center" }}>
+            <h3 style={{ marginTop: 0, borderBottom: "1px solid rgba(255,255,255,0.3)", paddingBottom: "8px", fontSize: "15px" }}>🏆 Gemeldete Teams im Spielbetrieb</h3>
+            <div style={{ fontSize: "32px", fontWeight: "bold", margin: "8px 0" }}>
+              {totalRegisteredTeams} <span style={{ fontSize: "16px", fontWeight: "normal", opacity: 0.8 }}>Mannschaften insgesamt</span>
             </div>
           </div>
 
-          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", color: "#333" }}>
-            <h3 style={{ marginTop: 0, color: "#27ae60", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Spieler pro Mannschaft</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "15px", marginTop: "20px" }}>
+          <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", color: "#333" }}>
+            <h3 style={{ marginTop: 0, color: "#27ae60", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "15px" }}>Übersicht: Spieler pro Mannschaft</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "10px", marginTop: "15px" }}>
               {dashboardSortedTeams.length === 0 ? <p style={{ color: "#777" }}>Keine Zuweisungen vorhanden.</p> : dashboardSortedTeams.map(team => (
-                <div key={team} style={{ background: "#e8f8f5", border: "1px solid #a3e4d7", borderRadius: "8px", padding: "15px", textAlign: "center" }}>
-                  <div style={{ fontSize: "24px", fontWeight: "bold", color: "#16a085" }}>{playersPerTeam[team]}</div>
-                  <div style={{ fontSize: "14px", color: "#555", fontWeight: "bold", marginTop: "5px" }}>{team}</div>
+                <div key={team} style={{ background: "#e8f8f5", border: "1px solid #a3e4d7", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: "22px", fontWeight: "bold", color: "#16a085" }}>{playersPerTeam[team]}</div>
+                  <div style={{ fontSize: "13px", color: "#555", fontWeight: "bold", marginTop: "4px" }}>{team}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", color: "#333" }}>
-            <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Spieler pro Jahrgang</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "15px", marginTop: "20px" }}>
+          <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", color: "#333" }}>
+            <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "15px" }}>Übersicht: Spieler pro Jahrgang</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: "10px", marginTop: "15px" }}>
               {sortedYears.length === 0 ? <p style={{ color: "#777" }}>Keine Daten vorhanden.</p> : sortedYears.map(year => (
-                <div key={year} style={{ background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: "8px", padding: "15px", textAlign: "center" }}>
-                  <div style={{ fontSize: "24px", fontWeight: "bold", color: "#3730a3" }}>{playersPerYear[year]}</div>
-                  <div style={{ fontSize: "14px", color: "#555", fontWeight: "bold", marginTop: "5px" }}>Jg. {year}</div>
+                <div key={year} style={{ background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: "22px", fontWeight: "bold", color: "#3730a3" }}>{playersPerYear[year]}</div>
+                  <div style={{ fontSize: "13px", color: "#555", fontWeight: "bold", marginTop: "4px" }}>Jg. {year}</div>
                 </div>
               ))}
             </div>
@@ -498,28 +523,28 @@ export default function YouthManager({ clubId }) {
       {activeTab === "edit" && editPlayerFormData && <PlayerForm formData={editPlayerFormData} handleChange={(e) => handlePlayerChange(e, true)} onSubmit={handleUpdatePlayer} isSubmitting={isSubmitting} title={`✏️ Bearbeiten: ${editPlayerFormData.firstName} ${editPlayerFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setActiveTab("active")} teamsList={sortedTeamsList} />}
 
       {activeTab === "active" && (
-        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "15px", color: "#333" }}>
-          <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>💡 Klicke auf den Namen eines Spielers, um das Team zuzuweisen oder Daten zu bearbeiten.</p>
+        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "10px", color: "#333" }}>
+          <p style={{ fontSize: "12px", color: "#666", marginBottom: "12px" }}>💡 Klicke auf den Namen eines Spielers zum Bearbeiten.</p>
           {activePlayers.length === 0 ? <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Keine aktiven Spieler gemeldet.</p> : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
                 <thead style={{ background: "#2146d0", color: "white" }}>
                   <tr>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Name, Vorname</th>
-                    <th style={{ padding: "12px", textAlign: "center" }}>Jugend</th>
-                    <th style={{ padding: "12px", textAlign: "center" }}>Jahrgang</th>
-                    <th style={{ padding: "12px", textAlign: "center" }}>Passnummer</th>
-                    <th style={{ padding: "12px", textAlign: "right" }}>Aktion</th>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Name, Vorname</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Jugend</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Jg.</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Pass-Nr.</th>
+                    <th style={{ padding: "10px", textAlign: "right", fontSize: "13px" }}>Aktion</th>
                   </tr>
                 </thead>
                 <tbody>
                   {activePlayers.map((p, i) => (
                     <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
-                      <td onClick={() => { setEditPlayerFormData({ ...initialPlayerState, ...p }); setActiveTab("edit"); }} style={{ padding: "12px", fontWeight: "bold", color: "#2980b9", cursor: "pointer", textDecoration: "underline" }}>{p.lastName}, {p.firstName} ✏️</td>
-                      <td style={{ padding: "12px", textAlign: "center", color: "#555", fontWeight: "bold" }}>{p.youthTeam || "-"}</td>
-                      <td style={{ padding: "12px", textAlign: "center", color: "#333" }}>{p.birthYear || "?"}</td>
-                      <td style={{ padding: "12px", textAlign: "center", color: p.passNumber ? "#333" : "#aaa", fontWeight: "bold" }}>{p.passNumber || "-"}</td>
-                      <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => setPlayerToDeregister(p)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Abmelden</button></td>
+                      <td onClick={() => { setEditPlayerFormData({ ...initialPlayerState, ...p }); setActiveTab("edit"); }} style={{ padding: "10px", fontWeight: "bold", color: "#2980b9", cursor: "pointer", textDecoration: "underline", fontSize: "13px" }}>{p.lastName}, {p.firstName} ✏️</td>
+                      <td style={{ padding: "10px", textAlign: "center", color: "#555", fontWeight: "bold", fontSize: "13px" }}>{p.youthTeam || "-"}</td>
+                      <td style={{ padding: "10px", textAlign: "center", color: "#333", fontSize: "13px" }}>{p.birthYear || "?"}</td>
+                      <td style={{ padding: "10px", textAlign: "center", color: p.passNumber ? "#333" : "#aaa", fontWeight: "bold", fontSize: "13px" }}>{p.passNumber || "-"}</td>
+                      <td style={{ padding: "10px", textAlign: "right" }}><button onClick={() => setPlayerToDeregister(p)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>Abmelden</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -531,10 +556,10 @@ export default function YouthManager({ clubId }) {
 
       {/* --- TRAINER BEREICH --- */}
       {activeTab === "coaches" && (
-        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "15px", color: "#333" }}>
+        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "10px", color: "#333" }}>
           
           {!showCoachForm && !editCoachFormData && (
-            <button onClick={() => setShowCoachForm(true)} style={{ marginBottom: "20px", padding: "10px 15px", background: "#1abc9c", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
+            <button onClick={() => setShowCoachForm(true)} style={{ marginBottom: "15px", padding: "10px 15px", background: "#1abc9c", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
               ➕ Neuen Trainer anlegen
             </button>
           )}
@@ -545,26 +570,26 @@ export default function YouthManager({ clubId }) {
           {!showCoachForm && !editCoachFormData && (
             coaches.length === 0 ? <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Keine Trainer erfasst.</p> : (
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "650px" }}>
                   <thead style={{ background: "#16a085", color: "white" }}>
                     <tr>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Trainer</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Zuständigkeit</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Kontakt / Schlüssel</th>
-                      <th style={{ padding: "12px", textAlign: "right" }}>Aktion</th>
+                      <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Trainer</th>
+                      <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Zuständig</th>
+                      <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Kontakt / Schlüssel</th>
+                      <th style={{ padding: "10px", textAlign: "right", fontSize: "13px" }}>Aktion</th>
                     </tr>
                   </thead>
                   <tbody>
                     {coaches.map((c, i) => (
                       <tr key={c.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f4fdfb" }}>
-                        <td onClick={() => setEditCoachFormData(c)} style={{ padding: "12px", fontWeight: "bold", color: "#16a085", cursor: "pointer", textDecoration: "underline" }}>{c.lastName}, {c.firstName} ✏️</td>
-                        <td style={{ padding: "12px", color: "#555", fontWeight: "bold" }}>{c.youthTeam}</td>
-                        <td style={{ padding: "12px", fontSize: "13px", color: "#333" }}>
+                        <td onClick={() => setEditCoachFormData(c)} style={{ padding: "10px", fontWeight: "bold", color: "#16a085", cursor: "pointer", textDecoration: "underline", fontSize: "13px" }}>{c.lastName}, {c.firstName} ✏️</td>
+                        <td style={{ padding: "10px", color: "#555", fontWeight: "bold", fontSize: "13px" }}>{c.youthTeam}</td>
+                        <td style={{ padding: "10px", fontSize: "12px", color: "#333" }}>
                           <div>📞 {c.phone || "-"}</div>
                           <div>✉️ {c.email || "-"}</div>
                           <div>🔑 {c.keyNumber || "-"}</div>
                         </td>
-                        <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => handleDeleteCoach(c)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Löschen</button></td>
+                        <td style={{ padding: "10px", textAlign: "right" }}><button onClick={() => handleDeleteCoach(c)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>Löschen</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -576,44 +601,44 @@ export default function YouthManager({ clubId }) {
       )}
 
       {activeTab === "teams" && (
-        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "20px", color: "#333" }}>
-          <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "10px", marginBottom: "20px" }}>Jugend-Mannschaften & Jahrgänge</h3>
+        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "15px", color: "#333" }}>
+          <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "8px", marginBottom: "15px", fontSize: "16px" }}>Jugend-Mannschaften & Jahrgänge</h3>
           
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "20px", background: "#f8f9fa", padding: "15px", borderRadius: "8px", border: "1px solid #ddd", alignItems: "center" }}>
-            <input type="text" placeholder="Team-Name (z.B. E-Jugend)" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} style={{ flex: "1 1 130px", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", background: "#fff", color: "#333" }} />
-            <input type="text" placeholder="Jahrgänge (z.B. 2016/2017)" value={newTeamYears} onChange={(e) => setNewTeamYears(e.target.value)} style={{ flex: "1 1 130px", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", background: "#fff", color: "#333" }} />
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "15px", background: "#f8f9fa", padding: "12px", borderRadius: "8px", border: "1px solid #ddd", alignItems: "center" }}>
+            <input type="text" placeholder="Team-Name (z.B. E-Jugend)" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} style={{ flex: "1 1 120px", padding: "9px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "#fff", color: "#333" }} />
+            <input type="text" placeholder="Jahrgänge (z.B. 2016/2017)" value={newTeamYears} onChange={(e) => setNewTeamYears(e.target.value)} style={{ flex: "1 1 120px", padding: "9px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "#fff", color: "#333" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-              <label style={{ fontSize: "11px", fontWeight: "bold", color: "#555" }}>Anzahl gemeldet:</label>
-              <input type="number" min="0" value={newTeamCount} onChange={(e) => setNewTeamCount(e.target.value)} style={{ width: "70px", padding: "9px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", background: "#fff", color: "#333", textAlign: "center" }} />
+              <label style={{ fontSize: "10px", fontWeight: "bold", color: "#555" }}>Anzahl:</label>
+              <input type="number" min="0" value={newTeamCount} onChange={(e) => setNewTeamCount(e.target.value)} style={{ width: "60px", padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "#fff", color: "#333", textAlign: "center" }} />
             </div>
-            <button onClick={handleAddTeam} style={{ padding: "10px 15px", background: "#27ae60", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", marginLeft: "auto" }}>➕ Team hinzufügen</button>
+            <button onClick={handleAddTeam} style={{ width: "100%", padding: "10px", background: "#27ae60", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "14px" }}>➕ Team hinzufügen</button>
           </div>
 
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead style={{ background: "#34495e", color: "white" }}>
                 <tr>
-                  <th style={{ padding: "12px", textAlign: "left" }}>Mannschaft</th>
-                  <th style={{ padding: "12px", textAlign: "left" }}>Erlaubte Jahrgänge</th>
-                  <th style={{ padding: "12px", textAlign: "center" }}>Gemeldete Teams</th>
-                  <th style={{ padding: "12px", textAlign: "right" }}>Aktion</th>
+                  <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Mannschaft</th>
+                  <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Jahrgänge</th>
+                  <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Gemeldet</th>
+                  <th style={{ padding: "10px", textAlign: "right", fontSize: "13px" }}>Aktion</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedTeamsList.map(t => (
                   <tr key={t.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "12px", fontWeight: "bold", color: "#333" }}>{t.name}</td>
-                    <td style={{ padding: "12px", color: "#555" }}>{t.years}</td>
-                    <td style={{ padding: "12px", textAlign: "center" }}>
+                    <td style={{ padding: "10px", fontWeight: "bold", color: "#333", fontSize: "13px" }}>{t.name}</td>
+                    <td style={{ padding: "10px", color: "#555", fontSize: "13px" }}>{t.years}</td>
+                    <td style={{ padding: "10px", textAlign: "center" }}>
                       <input 
                         type="number" 
                         min="0"
                         value={t.count !== undefined ? t.count : 1} 
                         onChange={(e) => handleUpdateTeamCount(t.id, e.target.value)}
-                        style={{ width: "60px", padding: "6px", textAlign: "center", borderRadius: "6px", border: "1px solid #ccc", fontWeight: "bold", background: "#fff", color: "#333" }}
+                        style={{ width: "50px", padding: "5px", textAlign: "center", borderRadius: "6px", border: "1px solid #ccc", fontWeight: "bold", background: "#fff", color: "#333", fontSize: "13px" }}
                       />
                     </td>
-                    <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => handleDeleteTeam(t.id)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px" }}>Löschen</button></td>
+                    <td style={{ padding: "10px", textAlign: "right" }}><button onClick={() => handleDeleteTeam(t.id)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>Löschen</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -623,27 +648,27 @@ export default function YouthManager({ clubId }) {
       )}
 
       {activeTab === "history" && (
-        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "15px", color: "#333" }}>
+        <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "10px", color: "#333" }}>
           
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
-            <h3 style={{ margin: 0, color: "#7f8c8d" }}>Abgemeldete Spieler</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <label style={{ fontSize: "13px", fontWeight: "bold", color: "#555" }}>Sortieren nach:</label>
-              <select value={historySortBy} onChange={(e) => setHistorySortBy(e.target.value)} style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "#fff", color: "#333" }}>
-                <option value="name">Alphabetisch (Name)</option>
-                <option value="date">Abmeldedatum (Neu nach Alt)</option>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+            <h3 style={{ margin: 0, color: "#7f8c8d", fontSize: "15px" }}>Abgemeldete Spieler</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Sortieren:</label>
+              <select value={historySortBy} onChange={(e) => setHistorySortBy(e.target.value)} style={{ padding: "5px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "12px", background: "#fff", color: "#333" }}>
+                <option value="name">Alphabetisch</option>
+                <option value="date">Datum (Neu-Alt)</option>
               </select>
             </div>
           </div>
 
           {sortedHistoryPlayers.length === 0 ? <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Bisher keine abgemeldeten Spieler.</p> : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "650px" }}>
                 <thead style={{ background: "#95a5a6", color: "white" }}>
                   <tr>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Name, Vorname</th>
-                    <th style={{ padding: "12px", textAlign: "center" }}>Abgemeldet am</th>
-                    <th style={{ padding: "12px", textAlign: "right" }}>Aktion</th>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Name, Vorname</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Abgemeldet am</th>
+                    <th style={{ padding: "10px", textAlign: "right", fontSize: "13px" }}>Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -654,30 +679,30 @@ export default function YouthManager({ clubId }) {
                     return (
                       <>
                         <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
-                          <td style={{ padding: "12px", fontWeight: "bold", color: "#7f8c8d" }}>{p.lastName}, {p.firstName}</td>
-                          <td style={{ padding: "12px", textAlign: "center", color: "#7f8c8d" }}>{details.date ? new Date(details.date).toLocaleDateString("de-DE") : "Unbekannt"}</td>
-                          <td style={{ padding: "12px", textAlign: "right", display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                          <td style={{ padding: "10px", fontWeight: "bold", color: "#7f8c8d", fontSize: "13px" }}>{p.lastName}, {p.firstName}</td>
+                          <td style={{ padding: "10px", textAlign: "center", color: "#7f8c8d", fontSize: "13px" }}>{details.date ? new Date(details.date).toLocaleDateString("de-DE") : "Unbekannt"}</td>
+                          <td style={{ padding: "10px", textAlign: "right", display: "flex", gap: "4px", justifyContent: "flex-end", flexWrap: "wrap" }}>
                             <button 
                               onClick={() => setExpandedHistoryId(isExpanded ? null : p.id)} 
-                              style={{ background: "#34495e", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
+                              style={{ background: "#34495e", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
                             >
-                              {isExpanded ? "Details einklappen 🔼" : "Details anzeigen 🔽"}
+                              {isExpanded ? "▲ Details" : "▼ Details"}
                             </button>
-                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }} title="Per E-Mail/Teilen senden">
+                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }} title="Teilen">
                               📤 Teilen
                             </button>
-                            <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Wieder anmelden</button>
+                            <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>Aktiv</button>
                           </td>
                         </tr>
 
                         {/* AUFGEKLAPPTE DETAILS */}
                         {isExpanded && (
                           <tr key={`${p.id}-details`} style={{ background: "#f1f2f6" }}>
-                            <td colSpan="3" style={{ padding: "15px", fontSize: "13px", color: "#333", borderBottom: "2px solid #ddd" }}>
-                              <div style={{ fontWeight: "bold", marginBottom: "8px", color: "#2c3e50" }}>📋 Abmeldedokumentation für {p.firstName} {p.lastName}:</div>
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
+                            <td colSpan="3" style={{ padding: "12px", fontSize: "12px", color: "#333", borderBottom: "2px solid #ddd" }}>
+                              <div style={{ fontWeight: "bold", marginBottom: "6px", color: "#2c3e50" }}>📋 Abmeldedokumentation für {p.firstName} {p.lastName}:</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "4px" }}>
                                 <div>📅 <strong>Erfolgt am:</strong> {details.date ? new Date(details.date).toLocaleDateString("de-DE") : "-"}</div>
-                                <div>📞 <strong>Art der Abmeldung:</strong> {details.method || "-"}</div>
+                                <div>📞 <strong>Art:</strong> {details.method || "-"}</div>
                                 <div>⏱ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
                                 <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
                               </div>
@@ -696,17 +721,17 @@ export default function YouthManager({ clubId }) {
 
       {/* --- MODAL FÜR ABMELDUNG --- */}
       {playerToDeregister && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
-          <form onSubmit={confirmDeregistration} style={{ background: "white", padding: "25px", borderRadius: "10px", width: "100%", maxWidth: "450px", boxShadow: "0 4px 10px rgba(0,0,0,0.2)", color: "#333" }}>
-            <h3 style={{ marginTop: 0, color: "#c0392b", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "10px", boxSizing: "border-box" }}>
+          <form onSubmit={confirmDeregistration} style={{ background: "white", padding: "20px", borderRadius: "10px", width: "100%", maxWidth: "450px", boxShadow: "0 4px 10px rgba(0,0,0,0.2)", color: "#333", maxHeight: "90vh", overflowY: "auto" }}>
+            <h3 style={{ marginTop: 0, color: "#c0392b", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>
               ⚠️ Abmeldung: {playerToDeregister.firstName} {playerToDeregister.lastName}
             </h3>
             
-            <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>
+            <p style={{ fontSize: "12px", color: "#666", marginBottom: "12px" }}>
               Bitte dokumentiere die Details zur Abmeldung für die Vereinsakten:
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "15px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Abmeldung erfolgt wann:</label>
                 <input 
@@ -714,7 +739,7 @@ export default function YouthManager({ clubId }) {
                   value={deregisterData.date} 
                   onChange={(e) => setDeregisterData({ ...deregisterData, date: e.target.value })} 
                   required 
-                  style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
+                  style={{ padding: "9px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
                 />
               </div>
 
@@ -723,7 +748,7 @@ export default function YouthManager({ clubId }) {
                 <select 
                   value={deregisterData.method} 
                   onChange={(e) => setDeregisterData({ ...deregisterData, method: e.target.value })} 
-                  style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }}
+                  style={{ padding: "9px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }}
                 >
                   <option value="E-Mail">E-Mail</option>
                   <option value="Textnachricht">Textnachricht (WhatsApp/SMS)</option>
@@ -737,23 +762,23 @@ export default function YouthManager({ clubId }) {
                   type="date" 
                   value={deregisterData.confirmedDate} 
                   onChange={(e) => setDeregisterData({ ...deregisterData, confirmedDate: e.target.value })} 
-                  style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
+                  style={{ padding: "9px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
                 />
               </div>
 
               <div style={{ background: "#f8f9fa", padding: "10px", borderRadius: "6px", border: "1px solid #ddd" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: "bold", cursor: "pointer" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: "bold", cursor: "pointer" }}>
                   <input 
                     type="checkbox" 
                     checked={deregisterData.reportedToSVON} 
                     onChange={(e) => setDeregisterData({ ...deregisterData, reportedToSVON: e.target.checked })} 
-                    style={{ width: "18px", height: "18px" }} 
+                    style={{ width: "16px", height: "16px" }} 
                   />
                   An SVON gemeldet
                 </label>
 
                 {deregisterData.reportedToSVON && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "10px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "8px" }}>
                     <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Meldungsdatum an SVON:</label>
                     <input 
                       type="date" 
@@ -766,11 +791,11 @@ export default function YouthManager({ clubId }) {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button type="submit" style={{ flex: 1, padding: "12px", background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>
-                💾 Dokumentieren & Abmelden
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button type="submit" style={{ flex: 1, padding: "11px", background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "13px" }}>
+                💾 Speichern
               </button>
-              <button type="button" onClick={() => setPlayerToDeregister(null)} style={{ padding: "12px", background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>
+              <button type="button" onClick={() => setPlayerToDeregister(null)} style={{ padding: "11px", background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "13px" }}>
                 Abbrechen
               </button>
             </div>
