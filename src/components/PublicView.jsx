@@ -18,11 +18,13 @@ export default function PublicView({ onBackToAdmin }) {
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(
-    "Notification" in window && Notification.permission === "granted"
-  );
+  // --- NEU: State für Ein/Aus-Schalter der Benachrichtigungen ---
+  const [wantsNotifications, setWantsNotifications] = useState(false);
+  const wantsNotificationsRef = useRef(false); // Wird für den Hintergrund-Snapshot benötigt
+  
   const historyLengthRef = useRef(0);
 
+  // Teams laden & sortieren
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
@@ -31,7 +33,7 @@ export default function PublicView({ onBackToAdmin }) {
         const customOrder = [
           "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
           "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
-          "E-Jugend Funino", "F-Jugend","F-Jugend Funino", "G-Jugend"
+          "E-Jugend Funino", "F-Jugend", "F-Jugend Funino", "G-Jugend"
         ];
 
         const sortedTeams = [...teamsList].sort((a, b) => {
@@ -49,6 +51,7 @@ export default function PublicView({ onBackToAdmin }) {
     return () => unsubTeams();
   }, []);
 
+  // Live-Spiel laden
   useEffect(() => {
     if (!selectedTeam) return;
 
@@ -79,9 +82,12 @@ export default function PublicView({ onBackToAdmin }) {
           setIsRunning(false);
         }
 
+        // Benachrichtigungen prüfen (Nur wenn der Schalter auf AN steht)
         if (newHistory.length > historyLengthRef.current && historyLengthRef.current !== 0) {
-          const lastEvent = newHistory[newHistory.length - 1];
-          triggerNotification(lastEvent, data.homeTeam || selectedTeam, data.awayTeam || "Gast");
+          if (wantsNotificationsRef.current) {
+            const lastEvent = newHistory[newHistory.length - 1];
+            triggerNotification(lastEvent, data.homeTeam || selectedTeam, data.awayTeam || "Gast");
+          }
         }
         historyLengthRef.current = newHistory.length;
 
@@ -102,6 +108,7 @@ export default function PublicView({ onBackToAdmin }) {
     return () => unsubLive();
   }, [selectedTeam]);
 
+  // Lokale Uhr
   useEffect(() => {
     let interval;
     if (isRunning) {
@@ -126,18 +133,31 @@ export default function PublicView({ onBackToAdmin }) {
     return "📝";
   };
 
-  const requestNotifications = () => {
-    if (!("Notification" in window)) {
-      alert("Dein Browser unterstützt leider keine Live-Benachrichtigungen.");
+  // --- NEU: Toggle-Funktion für Benachrichtigungen & iPhone-Erklärung ---
+  const toggleNotifications = () => {
+    // Wenn aktuell AN -> Ausschalten
+    if (wantsNotifications) {
+      setWantsNotifications(false);
+      wantsNotificationsRef.current = false;
       return;
     }
+
+    // Wenn aktuell AUS -> Anschalten versuchen
+    if (!("Notification" in window)) {
+      alert("Dein Browser unterstützt Push-Nachrichten leider nicht direkt.\n\nTIPP FÜR iPHONE-NUTZER: Tippe unten auf 'Teilen' (Viereck mit Pfeil) und wähle 'Zum Home-Bildschirm'. Wenn du die App dann vom Home-Bildschirm startest, klappen auch die Benachrichtigungen!");
+      return;
+    }
+
     Notification.requestPermission().then((permission) => {
       if (permission === "granted") {
-        setNotificationsEnabled(true);
+        setWantsNotifications(true);
+        wantsNotificationsRef.current = true;
         new Notification("SVON Live-Ticker", {
           body: "Benachrichtigungen aktiviert! Du erfährst sofort, wenn ein Tor fällt.",
           icon: logo
         });
+      } else {
+        alert("Du hast die Benachrichtigungen in deinen Einstellungen blockiert.");
       }
     });
   };
@@ -182,15 +202,24 @@ export default function PublicView({ onBackToAdmin }) {
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
       
-      {!notificationsEnabled ? (
-        <button 
-          onClick={requestNotifications}
-          style={{ marginBottom: "15px", padding: "6px 12px", background: "#f39c12", color: "white", border: "none", borderRadius: "15px", cursor: "pointer", fontSize: "12px", fontWeight: "bold", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
-          🔔 Live-Benachrichtigungen aktivieren
-        </button>
-      ) : (
-        <p style={{ color: "#27ae60", fontSize: "12px", marginBottom: "15px", fontWeight: "bold" }}>🔔 Benachrichtigungen aktiv</p>
-      )}
+      {/* --- NEU: Dynamischer Ein-/Ausschalt-Button --- */}
+      <button 
+        onClick={toggleNotifications}
+        style={{ 
+          marginBottom: "15px", 
+          padding: "8px 15px", 
+          background: wantsNotifications ? "#e74c3c" : "#f39c12", // Rot, wenn an (zum Deaktivieren) - Orange, wenn aus
+          color: "white", 
+          border: "none", 
+          borderRadius: "15px", 
+          cursor: "pointer", 
+          fontSize: "12px", 
+          fontWeight: "bold", 
+          boxShadow: "0 2px 4px rgba(0,0,0,0.1)" 
+        }}
+      >
+        {wantsNotifications ? "🔕 Benachrichtigungen deaktivieren" : "🔔 Live-Benachrichtigungen aktivieren"}
+      </button>
 
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold" }}>
@@ -245,6 +274,7 @@ export default function PublicView({ onBackToAdmin }) {
           </div>
         )}
       </div>
+
     </div>
   );
 }
