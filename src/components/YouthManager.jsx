@@ -143,13 +143,24 @@ export default function YouthManager({ clubId }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
   
-  // Sortierung Historie
-  const [historySortBy, setHistorySortBy] = useState("name"); // "name" oder "date"
+  // Sortierung & Aufklappen Historie
+  const [historySortBy, setHistorySortBy] = useState("name");
+  const [expandedHistoryId, setExpandedHistoryId] = useState(null);
+
+  // States für Abmelde-Modal
+  const [playerToDeregister, setPlayerToDeregister] = useState(null);
+  const [deregisterData, setDeregisterData] = useState({
+    date: new Date().toISOString().split("T")[0],
+    method: "E-Mail",
+    confirmedDate: "",
+    reportedToSVON: false,
+    svonReportDate: new Date().toISOString().split("T")[0]
+  });
 
   // States Teamverwaltung
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamYears, setNewTeamYears] = useState("");
-  const [newTeamCount, setNewTeamCount] = useState(1); // Anzahl gemeldeter Mannschaften
+  const [newTeamCount, setNewTeamCount] = useState(1);
 
   // States Spieler
   const initialPlayerState = { youthTeam: "", firstName: "", lastName: "", birthDate: "", age: "", birthYear: "", registeredSVON: false, registeredDFB: false, passNumber: "", photoConsent: false, address: "", city: "", fatherName: "", fatherPhone: "", motherName: "", motherPhone: "" };
@@ -180,7 +191,7 @@ export default function YouthManager({ clubId }) {
           { id: "7", name: "Bambini", years: "2018 u. jünger", count: 0 }
         ];
       }
-      loaded.sort((a, b) => a.name.localeCompare(b.name));
+      loadedTeams.sort((a, b) => a.name.localeCompare(b.name));
       setTeamSettings(loadedTeams);
     });
     return () => unsub();
@@ -213,13 +224,13 @@ export default function YouthManager({ clubId }) {
   const activePlayers = allPlayers.filter(p => p.status === "aktiv");
   const inactivePlayers = allPlayers.filter(p => p.status === "abgemeldet");
 
-  // Historie Sortierung anwenden
+  // Historie Sortierung
   const sortedHistoryPlayers = [...inactivePlayers].sort((a, b) => {
     if (historySortBy === "name") {
       return (a.lastName || "").localeCompare(b.lastName || "");
     } else {
-      const dateA = a.deregisteredAt ? new Date(a.deregisteredAt).getTime() : 0;
-      const dateB = b.deregisteredAt ? new Date(b.deregisteredAt).getTime() : 0;
+      const dateA = a.deregistrationDetails?.date ? new Date(a.deregistrationDetails.date).getTime() : 0;
+      const dateB = b.deregistrationDetails?.date ? new Date(b.deregistrationDetails.date).getTime() : 0;
       return dateB - dateA;
     }
   });
@@ -280,13 +291,34 @@ export default function YouthManager({ clubId }) {
     } catch (error) { console.error(error); alert("Fehler!"); } finally { setIsSubmitting(false); }
   };
 
-  const handleDeregisterPlayer = async (player) => {
-    if (!window.confirm(`${player.firstName} wirklich abmelden?`)) return;
-    await updateDoc(doc(db, "youth_players", player.id), { status: "abgemeldet", deregisteredAt: new Date().toISOString() });
+  // Abmelden mit erweiterten Modal-Daten abspeichern
+  const confirmDeregistration = async (e) => {
+    e.preventDefault();
+    if (!playerToDeregister) return;
+
+    try {
+      const playerRef = doc(db, "youth_players", playerToDeregister.id);
+      await updateDoc(playerRef, {
+        status: "abgemeldet",
+        deregistrationDetails: {
+          date: deregisterData.date,
+          method: deregisterData.method,
+          confirmedDate: deregisterData.confirmedDate || "Nicht angegeben",
+          reportedToSVON: deregisterData.reportedToSVON,
+          svonReportDate: deregisterData.reportedToSVON ? (deregisterData.svonReportDate || "Nicht angegeben") : "Nicht gemeldet"
+        }
+      });
+      setPlayerToDeregister(null);
+      alert("Spieler erfolgreich abgemeldet und dokumentiert!");
+    } catch (error) {
+      console.error("Fehler beim Abmelden:", error);
+      alert("Fehler beim Speichern der Abmeldung.");
+    }
   };
+
   const handleReactivatePlayer = async (player) => {
     if (!window.confirm(`${player.firstName} wieder AKTIV setzen?`)) return;
-    await updateDoc(doc(db, "youth_players", player.id), { status: "aktiv", reactivatedAt: new Date().toISOString() });
+    await updateDoc(doc(db, "youth_players", player.id), { status: "aktiv", deregistrationDetails: null });
   };
 
   // --- HANDLER: TRAINER ---
@@ -369,16 +401,13 @@ export default function YouthManager({ clubId }) {
       {activeTab === "dashboard" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           
-          {/* DASHBOARD: GESAMT-GEMELDETE MANNSCHAFTEN */}
           <div style={{ background: "#2146d0", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", color: "white", textAlign: "center" }}>
             <h3 style={{ marginTop: 0, borderBottom: "1px solid rgba(255,255,255,0.3)", paddingBottom: "10px", fontSize: "16px" }}>🏆 Gemeldete Teams im Spielbetrieb</h3>
             <div style={{ fontSize: "36px", fontWeight: "bold", margin: "10px 0" }}>
               {totalRegisteredTeams} <span style={{ fontSize: "18px", fontWeight: "normal", opacity: 0.8 }}>Mannschaften insgesamt</span>
             </div>
-            <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>Du kannst die Anzahl pro Altersklasse im Reiter "⚙️ Teams" anpassen (z.B. 2x E-Jugend).</p>
           </div>
 
-          {/* DASHBOARD: TEAMS */}
           <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", color: "#333" }}>
             <h3 style={{ marginTop: 0, color: "#27ae60", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Spieler pro Mannschaft</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "15px", marginTop: "20px" }}>
@@ -391,7 +420,6 @@ export default function YouthManager({ clubId }) {
             </div>
           </div>
 
-          {/* DASHBOARD: JAHRGÄNGE */}
           <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", color: "#333" }}>
             <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>Übersicht: Spieler pro Jahrgang</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "15px", marginTop: "20px" }}>
@@ -432,7 +460,7 @@ export default function YouthManager({ clubId }) {
                       <td style={{ padding: "12px", textAlign: "center", color: "#555", fontWeight: "bold" }}>{p.youthTeam || "-"}</td>
                       <td style={{ padding: "12px", textAlign: "center", color: "#333" }}>{p.birthYear || "?"}</td>
                       <td style={{ padding: "12px", textAlign: "center", color: p.passNumber ? "#333" : "#aaa", fontWeight: "bold" }}>{p.passNumber || "-"}</td>
-                      <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => handleDeregisterPlayer(p)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Abmelden</button></td>
+                      <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => setPlayerToDeregister(p)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Abmelden</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -560,17 +588,131 @@ export default function YouthManager({ clubId }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedHistoryPlayers.map((p, i) => (
-                    <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
-                      <td style={{ padding: "12px", fontWeight: "bold", color: "#7f8c8d" }}>{p.lastName}, {p.firstName}</td>
-                      <td style={{ padding: "12px", textAlign: "center", color: "#7f8c8d" }}>{p.deregisteredAt ? new Date(p.deregisteredAt).toLocaleDateString("de-DE") : "Unbekannt"}</td>
-                      <td style={{ padding: "12px", textAlign: "right" }}><button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Wieder anmelden</button></td>
-                    </tr>
-                  ))}
+                  {sortedHistoryPlayers.map((p, i) => {
+                    const isExpanded = expandedHistoryId === p.id;
+                    const details = p.deregistrationDetails || {};
+
+                    return (
+                      <>
+                        <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
+                          <td style={{ padding: "12px", fontWeight: "bold", color: "#7f8c8d" }}>{p.lastName}, {p.firstName}</td>
+                          <td style={{ padding: "12px", textAlign: "center", color: "#7f8c8d" }}>{details.date ? new Date(details.date).toLocaleDateString("de-DE") : "Unbekannt"}</td>
+                          <td style={{ padding: "12px", textAlign: "right", display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                            <button 
+                              onClick={() => setExpandedHistoryId(isExpanded ? null : p.id)} 
+                              style={{ background: "#34495e", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
+                            >
+                              {isExpanded ? "Details einklappen 🔼" : "Details anzeigen 🔽"}
+                            </button>
+                            <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Wieder anmelden</button>
+                          </td>
+                        </tr>
+
+                        {/* AUFGEKLAPPTE DETAILS */}
+                        {isExpanded && (
+                          <tr key={`${p.id}-details`} style={{ background: "#f1f2f6" }}>
+                            <td colSpan="3" style={{ padding: "15px", fontSize: "13px", color: "#333", borderBottom: "2px solid #ddd" }}>
+                              <div style={{ fontWeight: "bold", marginBottom: "8px", color: "#2c3e50" }}>📋 Abmeldedokumentation für {p.firstName} {p.lastName}:</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
+                                <div>📅 <strong>Erfolgt am:</strong> {details.date ? new Date(details.date).toLocaleDateString("de-DE") : "-"}</div>
+                                <div>📞 <strong>Art der Abmeldung:</strong> {details.method || "-"}</div>
+                                <div>⏱️️ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
+                                <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* --- MODAL FÜR ABMELDUNG --- */}
+      {playerToDeregister && (
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
+          <form onSubmit={confirmDeregistration} style={{ background: "white", padding: "25px", borderRadius: "10px", width: "100%", maxWidth: "450px", boxShadow: "0 4px 10px rgba(0,0,0,0.2)", color: "#333" }}>
+            <h3 style={{ marginTop: 0, color: "#c0392b", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>
+              ⚠️️ Abmeldung: {playerToDeregister.firstName} {playerToDeregister.lastName}
+            </h3>
+            
+            <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>
+              Bitte dokumentiere die Details zur Abmeldung für die Vereinsakten:
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Abmeldung erfolgt wann:</label>
+                <input 
+                  type="date" 
+                  value={deregisterData.date} 
+                  onChange={(e) => setDeregisterData({ ...deregisterData, date: e.target.value })} 
+                  required 
+                  style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Art der Abmeldung:</label>
+                <select 
+                  value={deregisterData.method} 
+                  onChange={(e) => setDeregisterData({ ...deregisterData, method: e.target.value })} 
+                  style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }}
+                >
+                  <option value="E-Mail">E-Mail</option>
+                  <option value="Textnachricht">Textnachricht (WhatsApp/SMS)</option>
+                  <option value="Telefon">Telefon</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Abmeldung bestätigt auf (Datum):</label>
+                <input 
+                  type="date" 
+                  value={deregisterData.confirmedDate} 
+                  onChange={(e) => setDeregisterData({ ...deregisterData, confirmedDate: e.target.value })} 
+                  style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
+                />
+              </div>
+
+              <div style={{ background: "#f8f9fa", padding: "10px", borderRadius: "6px", border: "1px solid #ddd" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: "bold", cursor: "pointer" }}>
+                  <input 
+                    type="checkbox" 
+                    checked={deregisterData.reportedToSVON} 
+                    onChange={(e) => setDeregisterData({ ...deregisterData, reportedToSVON: e.target.checked })} 
+                    style={{ width: "18px", height: "18px" }} 
+                  />
+                  An SVON gemeldet
+                </label>
+
+                {deregisterData.reportedToSVON && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "10px" }}>
+                    <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Meldungsdatum an SVON:</label>
+                    <input 
+                      type="date" 
+                      value={deregisterData.svonReportDate} 
+                      onChange={(e) => setDeregisterData({ ...deregisterData, svonReportDate: e.target.value })} 
+                      style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333" }} 
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button type="submit" style={{ flex: 1, padding: "12px", background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>
+                💾 Dokumentieren & Abmelden
+              </button>
+              <button type="button" onClick={() => setPlayerToDeregister(null)} style={{ padding: "12px", background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>
+                Abbrechen
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
