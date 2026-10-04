@@ -13,7 +13,7 @@ export default function MatchView() {
   const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
-  const [lineups, setLineups] = useState({}); // NEU: Kader pro Mannschaft
+  const [lineups, setLineups] = useState({});
 
   // --- CLOUD-STATE: Live-Spiel ---
   const [matchDate, setMatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -97,7 +97,7 @@ export default function MatchView() {
     };
   }, []);
 
-  // 2. SPIELER LADEN & Spielerauswahl bei Teamwechsel zurücksetzen
+  // 2. SPIELER LADEN
   useEffect(() => {
     setSelectedPlayer("");
     if (!selectedTeam) return;
@@ -178,7 +178,6 @@ export default function MatchView() {
     }
   };
 
-  // Kader in Cloud speichern
   const togglePlayerInLineup = async (player) => {
     const currentTeamLineup = lineups[selectedTeam] || [];
     let updatedLineup;
@@ -288,7 +287,7 @@ export default function MatchView() {
     setHomeGoals(newHomeGoals);
     setAwayGoals(newAwayGoals);
     setHistory(newHistory);
-    setSelectedPlayer(""); // Zurücksetzen nach Aktion
+    setSelectedPlayer("");
 
     syncLiveMatch({
       homeGoals: newHomeGoals,
@@ -519,7 +518,6 @@ export default function MatchView() {
         </select>
       </div>
 
-      {/* --- NAVIGATION TABS (INKL. KADER) --- */}
       <div style={{ display: "flex", gap: "6px", marginBottom: "20px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
@@ -633,7 +631,7 @@ export default function MatchView() {
 
           <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-          {/* --- SCHNELL-AUSWAHL FÜR SPIELER AUS DEM KADER --- */}
+          {/* --- SPIELER-SCHNELL-AUSWAHL OHNE SCROLLBALKEN --- */}
           <div style={{ marginBottom: "20px", textAlign: "left" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
               <label style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>
@@ -654,7 +652,7 @@ export default function MatchView() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", maxHeight: "150px", overflowY: "auto", background: "white", padding: "8px", borderRadius: "8px", border: "1px solid #ccc" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", background: "white", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}>
                 {currentLineup.map((p) => (
                   <button
                     key={p}
@@ -717,7 +715,6 @@ export default function MatchView() {
         </div>
       )}
 
-      {/* --- NEUER REITER: KADER AUSWÄHLEN --- */}
       {activeTab === "lineup" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           <h3 style={{ fontSize: "1.2rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📋 Kader für heute ({selectedTeam})</h3>
@@ -805,7 +802,7 @@ export default function MatchView() {
                       </span>
                       
                       <button onClick={() => shareMatchToSocialMedia(match)} title="Highlights teilen" style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>📤 Teilen</button>
-                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
+                      <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
                     </div>
                   )}
                 </div>
