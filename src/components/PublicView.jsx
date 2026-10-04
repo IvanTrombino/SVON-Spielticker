@@ -21,8 +21,7 @@ export default function PublicView({ onBackToAdmin }) {
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
 
-  // --- Globale Stats & Historie für die Fans ---
-  const [scorersData, setScorersData] = useState({});
+  // --- Globale Historie für die Fans ---
   const [savedMatches, setSavedMatches] = useState([]);
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
@@ -59,17 +58,12 @@ export default function PublicView({ onBackToAdmin }) {
       }
     });
 
-    const unsubScorers = onSnapshot(doc(db, "ticker", "scorers"), (snap) => {
-      if (snap.exists()) setScorersData(snap.data());
-    });
-
     const unsubMatches = onSnapshot(doc(db, "ticker", "matches"), (snap) => {
       if (snap.exists()) setSavedMatches(snap.data().matchesList || []);
     });
 
     return () => {
       unsubTeams();
-      unsubScorers();
       unsubMatches();
     };
   }, []);
@@ -217,9 +211,23 @@ export default function PublicView({ onBackToAdmin }) {
   // --- FILTER FÜR DIE FANS ---
   const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
   
-  // Torschützen sortieren
-  const teamScorersObj = scorersData[selectedTeam] || {};
-  const sortedScorers = Object.entries(teamScorersObj).sort((a, b) => b[1] - a[1]);
+  // --- DYNAMISCHE TORSCHÜTZEN-BERECHCHNUNG AUS DEN GESPEICHERTEN SPIELEN ---
+  const calculatedScorers = {};
+  filteredMatches.forEach(match => {
+    if (match.history && Array.isArray(match.history)) {
+      match.history.forEach(event => {
+        if (event.type === "goal") {
+          // Prüfen ob es ein eigenes Tor ist (Spieler ist bekannt und kein Gegner/Unbekannt)
+          const playerName = event.player;
+          if (playerName && playerName !== "Gegner" && playerName !== "Unbekannt") {
+            calculatedScorers[playerName] = (calculatedScorers[playerName] || 0) + 1;
+          }
+        }
+      });
+    }
+  });
+
+  const sortedScorers = Object.entries(calculatedScorers).sort((a, b) => b[1] - a[1]);
 
   const getFussballDeLink = () => {
     return "https://www.fussball.de/verein/sv-orsingen-nenzingen-suedbaden/-/id/00ES8GN9F000000RVV0AG08LVUPGND5I#!/";
@@ -319,7 +327,7 @@ export default function PublicView({ onBackToAdmin }) {
         </select>
       </div>
 
-      {/* FAN-NAVIGATION (REITER - ANGEPASSTER NAME) */}
+      {/* FAN-NAVIGATION (REITER) */}
       <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
@@ -401,7 +409,6 @@ export default function PublicView({ onBackToAdmin }) {
       {activeTab === "history" && (
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           
-          {/* PROMINENTER HINWEIS & FUSSBALL.DE BUTTON */}
           <div style={{ marginBottom: "20px", background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "10px", padding: "15px", textAlign: "center" }}>
             <p style={{ margin: "0 0 10px 0", fontSize: "13px", fontWeight: "bold", color: "#0056b3" }}>
               📅 Suche nach den nächsten Spielen, Uhrzeiten oder der Tabelle?
