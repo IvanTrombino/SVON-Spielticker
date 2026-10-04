@@ -174,7 +174,7 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
         <div style={{ background: "#27ae60", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Zuschauer-Modus ({clubId.toUpperCase()})</span>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Live-Ticker Zuschauer Ansicht ({clubId.toUpperCase()})</span>
           <button 
             onClick={handleBackToHome}
             style={{ background: "white", color: "#27ae60", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
@@ -216,7 +216,7 @@ export default function App() {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
         <img src={logo} alt="Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
-        <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>SVON Live-Ticker</h1>
+        <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>SV Orsingen-Nenzingen</h1>
         <p style={{ color: "#666", marginBottom: "5px", textAlign: "center" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
         <button onClick={() => { setClubId(""); window.location.hash = ""; localStorage.removeItem("svon_current_club"); }} style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline", marginBottom: "20px" }}>
           Verein wechseln
@@ -228,11 +228,11 @@ export default function App() {
             onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
             style={{ padding: "16px", background: "#27ae60", color: "white", border: "none", borderRadius: "10px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
-            👀 Zuschauer-Ansicht
+            👀 Live-Ticker Zuschauer Ansicht
           </button>
 
           <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "16px" }}>📋 Trainer-Bereich</h3>
+            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "16px" }}>📋 Live-Ticker Trainer Bereich</h3>
             <form onSubmit={handleTrainerLogin}>
               <input 
                 type="password" 
@@ -250,7 +250,7 @@ export default function App() {
           </div>
 
           <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#c0392b", margin: "0 0 10px 0", fontSize: "16px" }}>🔒 Admin-Bereich (Inkl. Teams)</h3>
+            <h3 style={{ color: "#c0392b", margin: "0 0 10px 0", fontSize: "16px" }}>🔒 Admin-Bereich</h3>
             <form onSubmit={handleAdminLogin}>
               <input 
                 type="password" 
