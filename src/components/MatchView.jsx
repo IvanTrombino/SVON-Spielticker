@@ -34,13 +34,29 @@ export default function MatchView() {
   
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
+  // --- NEU: Funktion zum Senden der Push-Benachrichtigung über ntfy.sh ---
+  const sendNtfyPush = async (eventTitle, eventMessage) => {
+    try {
+      await fetch("https://ntfy.sh/svon-liveticker", {
+        method: "POST",
+        body: eventMessage,
+        headers: {
+          "Title": eventTitle,
+          "Priority": "urgent",
+          "Tags": "soccer,goal"
+        }
+      });
+    } catch (error) {
+      console.error("Push-Fehler:", error);
+    }
+  };
+
   // 1. GLOBALE DATEN LADEN (MIT BENUTZERDEFINIERTER SORTIERUNG)
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists()) {
         const teamsList = snap.data().teamsList || [];
         
-        // --- NEU: Deine exakte Wunsch-Reihenfolge ---
         const customOrder = [
           "1. Mannschaft",
           "2. Mannschaft",
@@ -61,10 +77,10 @@ export default function MatchView() {
           const indexA = customOrder.indexOf(a);
           const indexB = customOrder.indexOf(b);
           
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB; // Beide in der Liste -> nach Liste sortieren
-          if (indexA !== -1) return -1; // Nur A ist in der Liste -> A nach oben
-          if (indexB !== -1) return 1;  // Nur B ist in der Liste -> B nach oben
-          return a.localeCompare(b);    // Keines in der Liste -> Fallback: alphabetisch ans Ende
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
         });
 
         setTeams(sortedTeams);
@@ -86,7 +102,7 @@ export default function MatchView() {
     };
   }, []);
 
-  // 2. SPIELER LADEN (Bleiben alphabetisch, da Namen)
+  // 2. SPIELER LADEN
   useEffect(() => {
     if (!selectedTeam) return;
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
@@ -148,7 +164,6 @@ export default function MatchView() {
     return () => unsubLive(); 
   }, [selectedTeam]);
 
-  // Cloud Sync
   const syncLiveMatch = async (updates) => {
     if (!selectedTeam) return;
     try {
@@ -178,7 +193,6 @@ export default function MatchView() {
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // AUTO-STOP NACH 130 MINUTEN
   useEffect(() => {
     if (isRunning && time >= 130 * 60) {
       setIsRunning(false);
@@ -233,6 +247,13 @@ export default function MatchView() {
       if (isHomeEvent) newHomeGoals++;
       else newAwayGoals++;
       
+      // --- PUSH BENACHRICHTIGUNG AUSLÖSEN ---
+      const scoringTeamName = isHomeEvent ? homeTeam : awayTeam;
+      sendNtfyPush(
+        `⚽ TOOOOR für ${scoringTeamName}!`,
+        `${minute}. Minute - Torschütze: ${playerName} (${newHomeGoals}:${newAwayGoals})`
+      );
+
       if (isOurEvent && selectedPlayer) {
         const teamScorers = scorers[selectedTeam] || {};
         const pGoals = teamScorers[selectedPlayer] || 0;
@@ -297,7 +318,7 @@ export default function MatchView() {
   const finishMatch = () => {
     if (window.confirm("Spiel beenden und in 'Letzte Spiele' speichern?")) {
       const formattedDate = new Date(matchDate).toLocaleDateString("de-DE");
-      const displayDate = kickoffTime ? `${formattedDate} - ${kickoffTime} Uhr` : formattedDate;
+      const displayDate = kickoffTime ? `${formattedDate} ${kickoffTime} Uhr` : formattedDate;
 
       const newMatch = {
         id: Date.now(),
