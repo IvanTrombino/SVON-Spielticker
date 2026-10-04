@@ -5,16 +5,18 @@ import { db } from "../firebase";
 
 export default function MatchView() {
   // --- NAVIGATION & TEAM-AUSWAHL ---
-  const [activeTab, setActiveTab] = useState("ticker"); // "ticker" oder "history"
-  const [selectedTeam, setSelectedTeam] = useState(""); // Das aktuell im Admin-Ticker gesteuerte Team
+  const [activeTab, setActiveTab] = useState("ticker");
+  const [selectedTeam, setSelectedTeam] = useState("");
 
-  // --- CLOUD-STATE: Metadaten (aus anderen Menüs) ---
+  // --- CLOUD-STATE: Metadaten ---
   const [teams, setTeams] = useState([]);
-  const [players, setPlayers] = useState({});
+  const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
 
   // --- CLOUD-STATE: Live-Spiel ---
+  const [matchDate, setMatchDate] = useState(new Date().toISOString().split("T")[0]);
+  const [kickoffTime, setKickoffTime] = useState("");
   const [isSvonAway, setIsSvonAway] = useState(false);
   const [homeTeam, setHomeTeam] = useState("SVON");
   const [awayTeam, setAwayTeam] = useState("Gast");
@@ -30,21 +32,15 @@ export default function MatchView() {
   const [editHomeGoals, setEditHomeGoals] = useState(0);
   const [editAwayGoals, setEditAwayGoals] = useState(0);
 
-  // 1. GLOBALE DATEN AUS DER CLOUD LADEN (Teams, Spieler, Torschützen, Alte Spiele)
+  // 1. GLOBALE DATEN LADEN
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists()) {
         const teamsList = snap.data().teamsList || [];
         setTeams(teamsList);
         if (teamsList.length > 0 && !selectedTeam) {
-          setSelectedTeam(teamsList[0]); // Standardmäßig das erste Team wählen
+          setSelectedTeam(teamsList[0]);
         }
-      }
-    });
-    
-    const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
-      if (snap.exists()) {
-        setPlayers(snap.data() || {});
       }
     });
     
@@ -58,13 +54,25 @@ export default function MatchView() {
 
     return () => {
       unsubTeams();
-      unsubPlayers();
       unsubScorers();
       unsubMatches();
     };
-  }, []);
+  }, [selectedTeam]);
 
-  // 2. LIVE-TICKER FÜR DAS AUSGEWÄHLTE TEAM AUS DER CLOUD LADEN
+  // 2. SPIELER LADEN
+  useEffect(() => {
+    const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
+      if (snap.exists()) {
+        const allPlayersObj = snap.data() || {};
+        setPlayers(allPlayersObj[selectedTeam] || []);
+      } else {
+        setPlayers([]);
+      }
+    });
+    return () => unsubPlayers();
+  }, [selectedTeam]);
+
+  // 3. LIVE-TICKER LADEN
   useEffect(() => {
     if (!selectedTeam) return;
 
@@ -72,14 +80,29 @@ export default function MatchView() {
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        
+        // Direkte Zuweisung, damit eigene Eingaben nie überschrieben werden
         setIsSvonAway(data.isSvonAway || false);
-        setHomeTeam(data.homeTeam || selectedTeam);
-        setAwayTeam(data.awayTeam || "Gast");
+        setHomeTeam(data.homeTeam !== undefined ? data.homeTeam : selectedTeam);
+        setAwayTeam(data.awayTeam !== undefined ? data.awayTeam : "Gast");
         setHomeGoals(data.homeGoals || 0);
         setAwayGoals(data.awayGoals || 0);
         setHistory(data.history || []);
-        if (data.time !== undefined) setTime(data.time);
-        setIsRunning(data.isRunning || false);
+        if (data.matchDate) setMatchDate(data.matchDate);
+        if (data.kickoffTime !== undefined) setKickoffTime(data.kickoffTime);
+        
+        if (data.isRunning) {
+          if (data.startTime) {
+            const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
+            setTime(elapsed);
+          } else if (data.time !== undefined) {
+            setTime(data.time);
+          }
+          setIsRunning(true);
+        } else {
+          if (data.time !== undefined) setTime(data.time);
+          setIsRunning(false);
+        }
       } else {
         setIsSvonAway(false);
         setHomeTeam(selectedTeam);
@@ -89,13 +112,15 @@ export default function MatchView() {
         setTime(0);
         setIsRunning(false);
         setHistory([]);
+        setMatchDate(new Date().toISOString().split("T")[0]);
+        setKickoffTime("");
       }
     });
 
     return () => unsubLive(); 
   }, [selectedTeam]);
 
-  // Hilfsfunktion: Live-Updates in das teambezogene Firebase-Dokument feuern
+  // Cloud Sync
   const syncLiveMatch = async (updates) => {
     if (!selectedTeam) return;
     try {
@@ -114,13 +139,13 @@ export default function MatchView() {
     }
   };
 
+  // Stoppuhr
   useEffect(() => {
     let interval;
     if (isRunning) {
       interval = setInterval(() => setTime((prev) => prev + 1), 1000);
     } else {
       clearInterval(interval);
-      syncLiveMatch({ time }); 
     }
     return () => clearInterval(interval);
   }, [isRunning]);
@@ -130,9 +155,6 @@ export default function MatchView() {
     const s = totalSeconds % 60;
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
-
-  // Hier werden die Spieler nun fehlerfrei für das ausgewählte Team ausgelesen
-  const availablePlayers = players[selectedTeam] || [];
 
   const toggleHomeAway = () => {
     if (history.length > 0) {
@@ -237,9 +259,13 @@ export default function MatchView() {
 
   const finishMatch = () => {
     if (window.confirm("Spiel beenden und in 'Letzte Spiele' speichern?")) {
+      // Datumsausgabe formatieren für Historie
+      const formattedDate = new Date(matchDate).toLocaleDateString("de-DE");
+      const displayDate = kickoffTime ? `${formattedDate} - ${kickoffTime} Uhr` : formattedDate;
+
       const newMatch = {
         id: Date.now(),
-        date: new Date().toLocaleDateString("de-DE"),
+        date: displayDate,
         team: selectedTeam,
         homeTeam,
         awayTeam,
@@ -257,7 +283,12 @@ export default function MatchView() {
         awayGoals: 0,
         time: 0,
         isRunning: false,
-        history: []
+        history: [],
+        startTime: null,
+        homeTeam: isSvonAway ? "Gast" : selectedTeam,
+        awayTeam: isSvonAway ? selectedTeam : "Gast",
+        matchDate: new Date().toISOString().split("T")[0],
+        kickoffTime: ""
       };
       
       setHomeGoals(0);
@@ -266,6 +297,10 @@ export default function MatchView() {
       setIsRunning(false);
       setHistory([]);
       setSelectedPlayer("");
+      setHomeTeam(resetData.homeTeam);
+      setAwayTeam(resetData.awayTeam);
+      setMatchDate(resetData.matchDate);
+      setKickoffTime("");
 
       syncLiveMatch(resetData);
     }
@@ -273,8 +308,16 @@ export default function MatchView() {
 
   const resetGame = () => {
     if (window.confirm("Aktuelles Spiel wirklich verwerfen?")) {
-      const resetData = { homeGoals: 0, awayGoals: 0, time: 0, isRunning: false, history: [] };
+      const resetData = { 
+        homeGoals: 0, awayGoals: 0, time: 0, isRunning: false, history: [], startTime: null,
+        homeTeam: isSvonAway ? "Gast" : selectedTeam,
+        awayTeam: isSvonAway ? selectedTeam : "Gast",
+        matchDate: new Date().toISOString().split("T")[0],
+        kickoffTime: ""
+      };
       setHomeGoals(0); setAwayGoals(0); setTime(0); setIsRunning(false); setHistory([]); setSelectedPlayer("");
+      setHomeTeam(resetData.homeTeam); setAwayTeam(resetData.awayTeam);
+      setMatchDate(resetData.matchDate); setKickoffTime("");
       syncLiveMatch(resetData);
     }
   };
@@ -305,13 +348,12 @@ export default function MatchView() {
     setEditingMatchId(null);
   };
 
-  const generatePDF = () => {
-    window.print();
-  };
+  const generatePDF = () => window.print();
 
   const getEventIcon = (type) => {
     if (type === "goal") return "⚽";
     if (type === "yellow") return "🟨";
+    if (type === "yellowred") return "🟨🟥";
     if (type === "red") return "🟥";
     return "📝";
   };
@@ -328,15 +370,11 @@ export default function MatchView() {
   };
 
   const tabButtonStyle = (tabName) => ({
-    flex: 1,
-    padding: "10px",
+    flex: 1, padding: "10px",
     background: activeTab === tabName ? "#2146d0" : "#e0e0e0",
     color: activeTab === tabName ? "white" : "#333",
-    border: "none",
-    borderRadius: "8px",
-    fontWeight: "bold",
-    cursor: "pointer",
-    fontSize: "14px"
+    border: "none", borderRadius: "8px", fontWeight: "bold",
+    cursor: "pointer", fontSize: "14px"
   });
 
   return (
@@ -353,7 +391,6 @@ export default function MatchView() {
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 15px 0", fontSize: "1.5rem" }}>⚽ SVON Ticker (Admin)</h2>
 
-      {/* --- TEAM-AUSWAHL FÜR DEN TRAINER --- */}
       <div className="no-print" style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
           Zu steuernde Mannschaft:
@@ -369,7 +406,6 @@ export default function MatchView() {
         </select>
       </div>
 
-      {/* --- OBERER MENÜ-SCHALTER (REITER) --- */}
       <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
@@ -379,34 +415,44 @@ export default function MatchView() {
         </button>
       </div>
 
-      {/* ========================================================= */}
-      {/* ANSICHT 1: DER LIVE-TICKER                                  */}
-      {/* ========================================================= */}
       {activeTab === "ticker" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
-          {/* --- KOPFBEREICH: TEAMS --- */}
+          {/* --- NEU: DATUM & ANSTOSSZEIT --- */}
+          <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <label style={{ fontSize: "12px", color: "#666", display: "block", marginBottom: "4px" }}>Datum</label>
+              <input 
+                type="date" 
+                value={matchDate} 
+                onChange={(e) => { setMatchDate(e.target.value); syncLiveMatch({ matchDate: e.target.value }); }} 
+                style={inputStyle} 
+              />
+            </div>
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <label style={{ fontSize: "12px", color: "#666", display: "block", marginBottom: "4px" }}>Anstoßzeit</label>
+              <input 
+                type="time" 
+                value={kickoffTime} 
+                onChange={(e) => { setKickoffTime(e.target.value); syncLiveMatch({ kickoffTime: e.target.value }); }} 
+                style={inputStyle} 
+              />
+            </div>
+          </div>
+
           <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "15px", width: "100%" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "left" }}>Heimteam</label>
-              {!isSvonAway ? (
-                <input 
-                  value={homeTeam} 
-                  disabled 
-                  style={{...inputStyle, background: "#eee", textAlign: "center", fontWeight: "bold"}} 
-                />
-              ) : (
-                <input 
-                  value={homeTeam === selectedTeam ? "" : homeTeam} 
-                  onChange={(e) => { 
-                    const val = e.target.value;
-                    setHomeTeam(val); 
-                    syncLiveMatch({ homeTeam: val === "" ? "Gegner" : val }); 
-                  }} 
-                  placeholder="Gegner..." 
-                  style={{...inputStyle, textAlign: "center"}} 
-                />
-              )}
+              <input 
+                value={homeTeam} 
+                onChange={(e) => { 
+                  setHomeTeam(e.target.value); 
+                  syncLiveMatch({ homeTeam: e.target.value }); 
+                }} 
+                disabled={!isSvonAway}
+                placeholder="Teamname..." 
+                style={{...inputStyle, textAlign: "center", background: !isSvonAway ? "#eee" : "white", fontWeight: !isSvonAway ? "bold" : "normal"}} 
+              />
             </div>
 
             <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "10px", cursor: "pointer", background: "#e0e0e0", border: "none", borderRadius: "8px", fontSize: "18px", marginTop: "18px", flexShrink: 0 }}>
@@ -415,42 +461,47 @@ export default function MatchView() {
 
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "right" }}>Gastteam</label>
-              {isSvonAway ? (
-                <input 
-                  value={awayTeam} 
-                  disabled 
-                  style={{...inputStyle, background: "#eee", textAlign: "center", fontWeight: "bold"}} 
-                />
-              ) : (
-                <input 
-                  value={awayTeam === "Gast" ? "" : awayTeam} 
-                  onChange={(e) => { 
-                    const val = e.target.value;
-                    setAwayTeam(val); 
-                    syncLiveMatch({ awayTeam: val === "" ? "Gast" : val }); 
-                  }} 
-                  placeholder="Gegner..." 
-                  style={{...inputStyle, textAlign: "center"}} 
-                />
-              )}
+              <input 
+                value={awayTeam} 
+                onChange={(e) => { 
+                  setAwayTeam(e.target.value); 
+                  syncLiveMatch({ awayTeam: e.target.value }); 
+                }} 
+                disabled={isSvonAway}
+                placeholder="Teamname..." 
+                style={{...inputStyle, textAlign: "center", background: isSvonAway ? "#eee" : "white", fontWeight: isSvonAway ? "bold" : "normal"}} 
+              />
             </div>
           </div>
 
-          {/* --- SPIELSTAND --- */}
           <div style={{ fontSize: "clamp(3rem, 12vw, 4.5rem)", fontWeight: "bold", margin: "10px 0", lineHeight: "1" }}>
             {homeGoals} : {awayGoals}
           </div>
 
-          {/* --- UHRZEIT & STEUERUNG --- */}
           <div className="no-print" style={{ marginBottom: "25px" }}>
             <div style={{ fontSize: "2rem", fontFamily: "monospace", marginBottom: "12px" }}>
               {formatTime(time)}
             </div>
             <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
-              <button onClick={() => { setIsRunning(!isRunning); syncLiveMatch({ isRunning: !isRunning }); }} style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: isRunning ? "#e74c3c" : "#2ecc71", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
-                {isRunning ? "⏸ Pause" : "▶️ Start"}
+              <button onClick={() => { 
+                  if (isRunning) {
+                    setIsRunning(false);
+                    syncLiveMatch({ isRunning: false, time: time });
+                  } else {
+                    const newStartTime = Date.now() - (time * 1000);
+                    setIsRunning(true);
+                    syncLiveMatch({ isRunning: true, startTime: newStartTime, time: time });
+                  }
+                }} 
+                style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: isRunning ? "#e74c3c" : "#2ecc71", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
+                {isRunning ? "⏸ Pause" : "▶ Start"}
               </button>
-              <button onClick={() => { setIsRunning(false); setTime(45 * 60); syncLiveMatch({ isRunning: false, time: 45 * 60 }); }} style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
+              <button onClick={() => { 
+                  setIsRunning(false); 
+                  setTime(45 * 60); 
+                  syncLiveMatch({ isRunning: false, time: 45 * 60, startTime: null }); 
+                }} 
+                style={{ flex: 1, maxWidth: "140px", padding: "12px", backgroundColor: "#f39c12", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: "bold" }}>
                 ⏱ Halbzeit
               </button>
             </div>
@@ -458,11 +509,10 @@ export default function MatchView() {
 
           <hr className="no-print" style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-          {/* --- AKTIONEN: TORE & KARTEN --- */}
           <div className="no-print">
             <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} style={{ ...inputStyle, marginBottom: "15px" }}>
               <option value="">-- {selectedTeam} Spieler wählen --</option>
-              {availablePlayers.map((p) => (
+              {players.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
@@ -474,12 +524,15 @@ export default function MatchView() {
               <button onClick={() => addEvent("home", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {homeTeam}</button>
               <button onClick={() => addEvent("away", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {awayTeam}</button>
               
+              {/* --- NEU: GELB/ROTE KARTE --- */}
+              <button onClick={() => addEvent("home", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {homeTeam}</button>
+              <button onClick={() => addEvent("away", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {awayTeam}</button>
+
               <button onClick={() => addEvent("home", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {homeTeam}</button>
               <button onClick={() => addEvent("away", "red")} style={{...actionButtonStyle, background: "#e74c3c"}}>🟥 {awayTeam}</button>
             </div>
           </div>
 
-          {/* --- ADMIN & PDF --- */}
           <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
             <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️ Zurück</button>
             <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑️ Verwerfen</button>
@@ -489,7 +542,6 @@ export default function MatchView() {
 
           <hr style={{ margin: "25px 0", borderColor: "#eee" }} />
 
-          {/* --- SPIELBERICHT (TIMELINE) --- */}
           <h3 style={{ fontSize: "1.2rem", marginBottom: "10px" }}>📝 Spielbericht</h3>
           {history.length === 0 ? (
             <p style={{ color: "#999", fontSize: "14px" }}>Noch keine Ereignisse.</p>
@@ -507,9 +559,6 @@ export default function MatchView() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* ANSICHT 2: LETZTE SPIELE                                  */}
-      {/* ========================================================= */}
       {activeTab === "history" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🏆 Gespeicherte Spiele</h3>
@@ -532,19 +581,9 @@ export default function MatchView() {
 
                   {editingMatchId === match.id ? (
                     <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                      <input 
-                        type="number" 
-                        value={editHomeGoals} 
-                        onChange={(e) => setEditHomeGoals(e.target.value)} 
-                        style={{ width: "40px", textAlign: "center", padding: "4px" }} 
-                      />
+                      <input type="number" value={editHomeGoals} onChange={(e) => setEditHomeGoals(e.target.value)} style={{ width: "40px", textAlign: "center", padding: "4px" }} />
                       <span>:</span>
-                      <input 
-                        type="number" 
-                        value={editAwayGoals} 
-                        onChange={(e) => setEditAwayGoals(e.target.value)} 
-                        style={{ width: "40px", textAlign: "center", padding: "4px" }} 
-                      />
+                      <input type="number" value={editAwayGoals} onChange={(e) => setEditAwayGoals(e.target.value)} style={{ width: "40px", textAlign: "center", padding: "4px" }} />
                       <button onClick={() => saveEditedMatch(match.id)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>💾</button>
                       <button onClick={() => setEditingMatchId(null)} style={{ background: "#7f8c8d", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✖</button>
                     </div>
@@ -558,13 +597,11 @@ export default function MatchView() {
                     </div>
                   )}
                 </div>
-
               </div>
             ))
           )}
         </div>
       )}
-
     </div>
   );
 }
