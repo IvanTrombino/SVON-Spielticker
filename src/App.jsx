@@ -4,27 +4,23 @@ import MatchView from "./components/MatchView";
 import PublicView from "./components/PublicView";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
+import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
-  const [view, setView] = useState("match"); 
-  
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
-  const [passwordInput, setPasswordInput] = useState("");
- 
-  const [teams, setTeams] = useState(() => {
-    const saved = localStorage.getItem("svon_teams");
-    return saved ? JSON.parse(saved) : [];
+  // Startet standardmäßig auf der Startseite ("home")
+  const [view, setView] = useState(() => {
+    return localStorage.getItem("svon_current_view") || "home";
   });
- 
+  
+  const [passwordInput, setPasswordInput] = useState("");
+  const [teams, setTeams] = useState([]);
+
+  // URL-Erkennung für den direkten Zuschauer-Link (#zuschauer)
   useEffect(() => {
     if (window.location.hash === "#zuschauer") {
       setView("public");
     }
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem("svon_teams", JSON.stringify(teams));
-  }, [teams]);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
@@ -44,10 +40,11 @@ export default function App() {
     }
   };
 
-  const handleLogin = (e) => {
+  const handleAdminLogin = (e) => {
     e.preventDefault();
     if (passwordInput === "svon2026") {
-      setIsAuthenticated(true);
+      setView("match"); // Nach erfolgreichem Login in den Spiel-Modus wechseln
+      localStorage.setItem("svon_current_view", "match");
       setPasswordInput("");
     } else {
       alert("Falsches Passwort!");
@@ -55,104 +52,127 @@ export default function App() {
     }
   };
 
-  if (view === "public") {
-    return <PublicView onBackToAdmin={() => { setView("match"); window.location.hash = ""; }} />;
-  }
+  const handleBackToHome = () => {
+    setView("home");
+    localStorage.removeItem("svon_current_view");
+    window.location.hash = "";
+  };
 
-  if (!isAuthenticated) {
+  // --- 1. STARTSEITE MIT DEN AUSWAHL-BUTTONS ---
+  if (view === "home") {
     return (
-      <div style={{ minHeight: "100vh", background: "#f0f2f5", display: "flex", justifyContent: "center", alignItems: "center", padding: "20px" }}>
-        <div style={{ background: "white", padding: "30px", borderRadius: "12px", boxShadow: "0 4px 10px rgba(0,0,0,0.1)", maxWidth: "400px", width: "100%", textAlign: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px" }}>
+        <img src={logo} alt="SVON Logo" style={{ maxWidth: "100px", marginBottom: "15px" }} />
+        <h1 style={{ color: "#2146d0", marginBottom: "5px", textAlign: "center" }}>SVON Live-Ticker</h1>
+        <p style={{ color: "#666", marginBottom: "25px", textAlign: "center" }}>Bitte wähle deinen Bereich aus:</p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px", width: "100%", maxWidth: "320px" }}>
           
-          <h2 style={{ color: "#2146d0", marginBottom: "10px" }}>🔒 Trainer-Bereich</h2>
-          <p style={{ color: "#666", fontSize: "14px", marginBottom: "20px" }}>Bitte gib das Passwort ein, um fortzufahren.</p>
-
-          <form onSubmit={handleLogin}>
-            <input 
-              type="password" 
-              value={passwordInput} 
-              onChange={(e) => setPasswordInput(e.target.value)} 
-              placeholder="Passwort eingeben..." 
-              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "16px", boxSizing: "border-box", marginBottom: "15px", textAlign: "center" }}
-              autoFocus
-            />
-            <button 
-              type="submit" 
-              style={{ width: "100%", padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: "pointer", marginBottom: "10px" }}>
-              Anmelden
-            </button>
-          </form>
-
+          {/* Zuschauer Button */}
           <button 
-            onClick={() => setView("public")} 
-            style={{ background: "transparent", border: "none", color: "#666", cursor: "pointer", fontSize: "13px", textDecoration: "underline" }}>
-            ← Zurück zur Zuschauer-Ansicht
+            onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); }}
+            style={{ padding: "16px", background: "#27ae60", color: "white", border: "none", borderRadius: "10px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
+          >
+            👀 Zuschauer-Ansicht
           </button>
+
+          {/* Admin Login Box */}
+          <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
+            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "16px" }}>🔒 Trainer-Bereich</h3>
+            <form onSubmit={handleAdminLogin}>
+              <input 
+                type="password" 
+                value={passwordInput} 
+                onChange={(e) => setPasswordInput(e.target.value)} 
+                placeholder="Passwort eingeben..." 
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center" }}
+              />
+              <button 
+                type="submit" 
+                style={{ width: "100%", padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
+                Anmelden
+              </button>
+            </form>
+          </div>
 
         </div>
       </div>
     );
   }
- 
+
+  // --- 2. ZUSCHAUER-ANSICHT ---
+  if (view === "public") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
+        <div style={{ background: "#27ae60", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👀 Zuschauer-Modus</span>
+          <button 
+            onClick={handleBackToHome}
+            style={{ background: "white", color: "#27ae60", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+          >
+            🏠 Zur Startseite
+          </button>
+        </div>
+        <PublicView onBackToAdmin={handleBackToHome} />
+      </div>
+    );
+  }
+
+  // --- 3. ADMIN-BEREICH (Spiel & Administration) ---
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", paddingBottom: "40px" }}>
       <div
         style={{
           display: "flex",
-          justifyContent: "center",
-          gap: "10px",
-          padding: "15px",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "10px 15px",
           background: "#2146d0",
           boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
         }}
       >
-        <button
-          onClick={() => setView("match")}
-          style={{
-            padding: "10px 15px",
-            borderRadius: "8px",
-            border: 0,
-            background: view === "match" ? "white" : "rgba(255,255,255,0.2)",
-            color: view === "match" ? "#2146d0" : "white",
-            fontWeight: "bold",
-            cursor: "pointer"
-          }}
+        <button 
+          onClick={handleBackToHome}
+          style={{ background: "white", color: "#2146d0", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
         >
-          ⚽ Spiel
-        </button>
- 
-        <button
-          onClick={() => setView("admin")}
-          style={{
-            padding: "10px 15px",
-            borderRadius: "8px",
-            border: 0,
-            background: view === "admin" ? "white" : "rgba(255,255,255,0.2)",
-            color: view === "admin" ? "#2146d0" : "white",
-            fontWeight: "bold",
-            cursor: "pointer"
-          }}
-        >
-          ⚙ Administration
+          🏠 Startseite
         </button>
 
-        <button
-          onClick={() => { setView("public"); window.location.hash = "zuschauer"; }}
-          style={{
-            padding: "10px 15px",
-            borderRadius: "8px",
-            border: 0,
-            background: "#27ae60",
-            color: "white",
-            fontWeight: "bold",
-            cursor: "pointer"
-          }}
-          title="Zur Zuschaueransicht wechseln"
-        >
-          👀 Zuschauer-Ansicht
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={() => setView("match")}
+            style={{
+              padding: "8px 12px",
+              borderRadius: "6px",
+              border: 0,
+              background: view === "match" ? "white" : "rgba(255,255,255,0.2)",
+              color: view === "match" ? "#2146d0" : "white",
+              fontWeight: "bold",
+              cursor: "pointer",
+              fontSize: "13px"
+            }}
+          >
+            ⚽ Spiel
+          </button>
+
+          <button
+            onClick={() => setView("admin")}
+            style={{
+              padding: "8px 12px",
+              borderRadius: "6px",
+              border: 0,
+              background: view === "admin" ? "white" : "rgba(255,255,255,0.2)",
+              color: view === "admin" ? "#2146d0" : "white",
+              fontWeight: "bold",
+              cursor: "pointer",
+              fontSize: "13px"
+            }}
+          >
+            ⚙ Administration
+          </button>
+        </div>
       </div>
- 
+
       <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
         {view === "match" && <MatchView teams={teams} />}
         {view === "admin" && <AdminPanel teams={teams} setTeams={saveTeamsToCloud} />}
