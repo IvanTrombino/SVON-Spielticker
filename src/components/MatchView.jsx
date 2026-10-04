@@ -39,11 +39,11 @@ export default function MatchView() {
     try {
       await fetch("https://ntfy.sh/svon-liveticker", {
         method: "POST",
-        body: eventMessage,
+        // Wir übergeben den Titel und die Nachricht im Textkörper, 
+        // das umgeht bei manchen Browsern Header-Blockaden
+        body: `${eventTitle}: ${eventMessage}`,
         headers: {
-          "Title": eventTitle,
-          "Priority": "urgent",
-          "Tags": "soccer,goal"
+          "Priority": "urgent"
         }
       });
     } catch (error) {
