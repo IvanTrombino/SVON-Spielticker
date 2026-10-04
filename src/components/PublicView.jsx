@@ -5,8 +5,6 @@ import { db } from "../firebase";
 
 export default function PublicView({ onBackToAdmin }) {
   const [teams, setTeams] = useState([]);
-  
-  // Startseite ist standardmäßig immer die 1. Mannschaft
   const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
   
   const [homeTeam, setHomeTeam] = useState("SVON");
@@ -17,17 +15,14 @@ export default function PublicView({ onBackToAdmin }) {
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // Datum und Anstoßzeit
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
 
-  // Push-Benachrichtigungen
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     "Notification" in window && Notification.permission === "granted"
   );
   const historyLengthRef = useRef(0);
 
-  // Teams laden
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
@@ -37,7 +32,6 @@ export default function PublicView({ onBackToAdmin }) {
     return () => unsubTeams();
   }, []);
 
-  // Live-Daten dynamisch abonnieren
   useEffect(() => {
     if (!selectedTeam) return;
 
@@ -55,7 +49,6 @@ export default function PublicView({ onBackToAdmin }) {
         const newHistory = data.history || [];
         setHistory(newHistory);
 
-        // Zeit berechnen (exakt wie in MatchView)
         if (data.isRunning) {
           if (data.startTime) {
             const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
@@ -69,7 +62,6 @@ export default function PublicView({ onBackToAdmin }) {
           setIsRunning(false);
         }
 
-        // Benachrichtigungen auslösen, wenn ein NEUES Ereignis dazu kam
         if (newHistory.length > historyLengthRef.current && historyLengthRef.current !== 0) {
           const lastEvent = newHistory[newHistory.length - 1];
           triggerNotification(lastEvent, data.homeTeam || selectedTeam, data.awayTeam || "Gast");
@@ -93,7 +85,6 @@ export default function PublicView({ onBackToAdmin }) {
     return () => unsubLive();
   }, [selectedTeam]);
 
-  // Lokale Stoppuhr: Zählt die Zeit in der PublicView live mit!
   useEffect(() => {
     let interval;
     if (isRunning) {
@@ -118,7 +109,6 @@ export default function PublicView({ onBackToAdmin }) {
     return "📝";
   };
 
-  // Funktion zum Anfragen der Benachrichtigungs-Rechte
   const requestNotifications = () => {
     if (!("Notification" in window)) {
       alert("Dein Browser unterstützt leider keine Live-Benachrichtigungen.");
@@ -135,7 +125,6 @@ export default function PublicView({ onBackToAdmin }) {
     });
   };
 
-  // Funktion zum Abfeuern der Benachrichtigung
   const triggerNotification = (event, currentHome, currentAway) => {
     if (Notification.permission === "granted") {
       let title = "SVON Live-Ticker";
@@ -160,7 +149,6 @@ export default function PublicView({ onBackToAdmin }) {
     }
   };
 
-  // Datum formatieren
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
 
   return (
@@ -177,7 +165,6 @@ export default function PublicView({ onBackToAdmin }) {
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
       
-      {/* Benachrichtigungs-Button */}
       {!notificationsEnabled ? (
         <button 
           onClick={requestNotifications}
@@ -188,7 +175,6 @@ export default function PublicView({ onBackToAdmin }) {
         <p style={{ color: "#27ae60", fontSize: "12px", marginBottom: "15px", fontWeight: "bold" }}>🔔 Benachrichtigungen aktiv</p>
       )}
 
-      {/* MANNSCHAFTS-AUSWAHL DROPDOWN */}
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold" }}>
           Mannschaft auswählen:
@@ -198,7 +184,6 @@ export default function PublicView({ onBackToAdmin }) {
           onChange={(e) => setSelectedTeam(e.target.value)}
           style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
         >
-          {/* Fallback falls 1. Mannschaft (noch) nicht im Teams-Array ist */}
           {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
           {teams.map((t) => (
             <option key={t} value={t}>{t}</option>
@@ -206,10 +191,8 @@ export default function PublicView({ onBackToAdmin }) {
         </select>
       </div>
 
-      {/* LIVE SPIELANZEIGE */}
       <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", marginBottom: "20px" }}>
         
-        {/* Datum & Uhrzeit Anzeige */}
         {(displayDate || kickoffTime) && (
           <div style={{ fontSize: "12px", color: "#666", marginBottom: "15px", background: "#eee", padding: "6px", borderRadius: "6px", display: "inline-block" }}>
             📅 {displayDate} {kickoffTime && `| ⏱ ${kickoffTime} Uhr`}
@@ -224,8 +207,9 @@ export default function PublicView({ onBackToAdmin }) {
           {homeGoals} : {awayGoals}
         </div>
 
-        <div style={{ fontSize: "1.5rem", fontFamily: "monospace", color: isRunning ? "#27ae60" : "#e74c3c", marginBottom: "15px", fontWeight: "bold" }}>
-          {formatTime(time)} {isRunning ? "LIVE" : "Pause"}
+        {/* LOGIK-FIX: Zeigt "Pause" nur noch an, wenn das Spiel auch wirklich schon gestartet wurde (time > 0) */}
+        <div style={{ fontSize: "1.5rem", fontFamily: "monospace", color: isRunning ? "#27ae60" : (time > 0 ? "#e74c3c" : "#333"), marginBottom: "15px", fontWeight: "bold" }}>
+          {formatTime(time)} {isRunning ? "LIVE" : (time > 0 ? "Pause" : "")}
         </div>
 
         <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
