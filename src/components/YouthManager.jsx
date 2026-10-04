@@ -254,6 +254,57 @@ export default function YouthManager({ clubId }) {
   }, {});
   const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => a.localeCompare(b));
 
+  // --- EXPORT FUNKTION (CSV/EXCEL) ---
+  const exportToCSV = () => {
+    if (activePlayers.length === 0) {
+      alert("Keine aktiven Spieler zum Exportieren vorhanden.");
+      return;
+    }
+
+    const headers = ["Nachname", "Vorname", "Jugend", "Jahrgang", "Passnummer", "SVON", "DFB", "Anschrift", "Wohnort", "Vater", "Telefon Vater", "Mutter", "Telefon Mutter"];
+    
+    const rows = activePlayers.map(p => [
+      `"${p.lastName || ""}"`,
+      `"${p.firstName || ""}"`,
+      `"${p.youthTeam || ""}"`,
+      `"${p.birthYear || ""}"`,
+      `"${p.passNumber || ""}"`,
+      `"${p.registeredSVON ? "Ja" : "Nein"}"`,
+      `"${p.registeredDFB ? "Ja" : "Nein"}"`,
+      `"${p.address || ""}"`,
+      `"${p.city || ""}"`,
+      `"${p.fatherName || ""}"`,
+      `"${p.fatherPhone || ""}"`,
+      `"${p.motherName || ""}"`,
+      `"${p.motherPhone || ""}"`
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(";"), ...rows.map(e => e.join(";"))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Jugendspieler_${clubId?.toUpperCase()}_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- TEILEN FUNKTION (E-MAIL / NACHRICHT) ---
+  const shareDeregistration = (p, details) => {
+    const subject = encodeURIComponent(`Abmeldung Jugendspieler: ${p.lastName}, ${p.firstName}`);
+    const body = encodeURIComponent(
+      `Hallo Vorstand / Jugendleitung,\n\nhiermit wird folgende Abmeldung dokumentiert:\n\n` +
+      `Spieler: ${p.firstName} ${p.lastName}\n` +
+      `Mannschaft: ${p.youthTeam || "Keine Zuweisung"}\n` +
+      `Abmeldung erfolgt am: ${details.date || "-"}\n` +
+      `Art der Abmeldung: ${details.method || "-"}\n` +
+      `Bestätigt auf: ${details.confirmedDate || "-"}\n` +
+      `An SVON gemeldet: ${details.reportedToSVON ? `Ja (am ${details.svonReportDate || "-"})` : "Nein"}\n\n` +
+      `Mit sportlichen Grüßen\nJugendleitung SVON`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
   // --- HANDLER: SPIELER ---
   const handlePlayerChange = (e, isEditMode = false) => {
     const { name, value, type, checked } = e.target;
@@ -291,7 +342,6 @@ export default function YouthManager({ clubId }) {
     } catch (error) { console.error(error); alert("Fehler!"); } finally { setIsSubmitting(false); }
   };
 
-  // Abmelden mit erweiterten Modal-Daten abspeichern
   const confirmDeregistration = async (e) => {
     e.preventDefault();
     if (!playerToDeregister) return;
@@ -389,13 +439,22 @@ export default function YouthManager({ clubId }) {
     <div style={{ padding: "15px", maxWidth: "900px", margin: "0 auto", fontFamily: "sans-serif", color: "#333" }}>
       <h2 style={{ color: "#2146d0", marginBottom: "20px", textAlign: "center" }}>👦 Jugendabteilung ({clubId?.toUpperCase()})</h2>
 
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "25px" }}>
-        <TabButton id="dashboard" label="📊 Dashboard" />
-        <TabButton id="add" label="➕ Neuer Spieler" />
-        <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
-        <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
-        <TabButton id="teams" label="⚙️ Teams" />
-        <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "25px", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", flex: 1 }}>
+          <TabButton id="dashboard" label="📊 Dashboard" />
+          <TabButton id="add" label="➕ Neuer Spieler" />
+          <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
+          <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
+          <TabButton id="teams" label="⚙️ Teams" />
+          <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
+        </div>
+        
+        <button 
+          onClick={exportToCSV}
+          style={{ padding: "10px 15px", background: "#27ae60", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+        >
+          📥 Excel/CSV Export
+        </button>
       </div>
 
       {activeTab === "dashboard" && (
@@ -604,6 +663,9 @@ export default function YouthManager({ clubId }) {
                             >
                               {isExpanded ? "Details einklappen 🔼" : "Details anzeigen 🔽"}
                             </button>
+                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }} title="Per E-Mail/Teilen senden">
+                              📤 Teilen
+                            </button>
                             <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>Wieder anmelden</button>
                           </td>
                         </tr>
@@ -616,7 +678,7 @@ export default function YouthManager({ clubId }) {
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
                                 <div>📅 <strong>Erfolgt am:</strong> {details.date ? new Date(details.date).toLocaleDateString("de-DE") : "-"}</div>
                                 <div>📞 <strong>Art der Abmeldung:</strong> {details.method || "-"}</div>
-                                <div>⏱️️ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
+                                <div>⏱ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
                                 <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
                               </div>
                             </td>
@@ -637,7 +699,7 @@ export default function YouthManager({ clubId }) {
         <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
           <form onSubmit={confirmDeregistration} style={{ background: "white", padding: "25px", borderRadius: "10px", width: "100%", maxWidth: "450px", boxShadow: "0 4px 10px rgba(0,0,0,0.2)", color: "#333" }}>
             <h3 style={{ marginTop: 0, color: "#c0392b", borderBottom: "2px solid #eee", paddingBottom: "10px" }}>
-              ⚠️️ Abmeldung: {playerToDeregister.firstName} {playerToDeregister.lastName}
+              ⚠️ Abmeldung: {playerToDeregister.firstName} {playerToDeregister.lastName}
             </h3>
             
             <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>
