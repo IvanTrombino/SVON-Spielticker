@@ -670,10 +670,14 @@ export default function MatchView() {
                   </span>
                 </div>
 
+                {/* --- HIER GEÄNDERT: LÖSCHEN GANZ NACH LINKS VOR DIE MANNSCHAFT --- */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontWeight: "bold", fontSize: "15px", flex: 1 }}>
-                    {match.homeTeam} vs {match.awayTeam}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                    <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "transparent", color: "#e74c3c", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "15px", flexShrink: 0 }}>🗑</button>
+                    <span style={{ fontWeight: "bold", fontSize: "15px" }}>
+                      {match.homeTeam} vs {match.awayTeam}
+                    </span>
+                  </div>
 
                   {editingMatchId === match.id ? (
                     <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
@@ -689,10 +693,6 @@ export default function MatchView() {
                         {match.homeGoals} : {match.awayGoals}
                       </span>
                       
-                      {/* --- LÖSCHEN GANZ NACH LINKS GESETZT & DEZENTER GEMACHT --- */}
-                      <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "transparent", color: "#e74c3c", border: "none", borderRadius: "4px", padding: "5px 6px", cursor: "pointer", fontSize: "15px" }}>🗑</button>
-                      
-                      {/* --- TEILEN & BEARBEITEN RECHTS DAVON --- */}
                       <button onClick={() => shareMatchToSocialMedia(match)} title="Highlights teilen" style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>📤 Teilen</button>
                       <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
                     </div>
@@ -702,7 +702,7 @@ export default function MatchView() {
                 {expandedMatchId === match.id && match.history && match.history.length > 0 && (
                   <div style={{ marginTop: "15px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
                     <h4 style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
-                    {[...match.history].reverse().match((event) => (
+                    {[...match.history].reverse().map((event) => (
                       <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
                         <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
                         <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
