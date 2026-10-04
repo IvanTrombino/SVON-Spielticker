@@ -6,14 +6,42 @@ export default function TeamManager() {
   const [teams, setTeams] = useState([]);
   const [newTeam, setNewTeam] = useState("");
 
-  // Teams in Echtzeit direkt aus der Cloud laden und sortieren
+  // Hilfsfunktion: Sortiert die Teams nach deiner exakten Wunsch-Hierarchie
+  const sortTeams = (teamList) => {
+    const customOrder = [
+      "1. Mannschaft", 
+      "2. Mannschaft", 
+      "3. Mannschaft", 
+      "Damen",
+      "A-Jugend", 
+      "B-Jugend", 
+      "C-Jugend", 
+      "D-Jugend", 
+      "E-Jugend",
+      "E-Jugend Funino", 
+      "F-Jugend", 
+      "F-Jugend Funino", 
+      "G-Jugend"
+    ];
+
+    return [...teamList].sort((a, b) => {
+      const indexA = customOrder.indexOf(a);
+      const indexB = customOrder.indexOf(b);
+      
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  };
+
+  // Teams in Echtzeit aus der Cloud laden und sofort sortieren
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const loadedTeams = data.teamsList || [];
-        // Sortiert die Liste direkt beim Laden aus Firebase
-        setTeams(loadedTeams.sort((a, b) => a.localeCompare(b)));
+        setTeams(sortTeams(loadedTeams));
       } else {
         setTeams([]);
       }
@@ -36,8 +64,8 @@ export default function TeamManager() {
     const trimmedTeam = newTeam.trim();
     if (teams.includes(trimmedTeam)) return;
 
-    // Neues Team hinzufügen und die Liste sofort alphabetisch sortieren
-    const updatedTeams = [...teams, trimmedTeam].sort((a, b) => a.localeCompare(b));
+    // Neues Team hinzufügen und die Liste sofort wieder nach Hierarchie sortieren
+    const updatedTeams = sortTeams([...teams, trimmedTeam]);
     
     setTeams(updatedTeams);
     saveTeamsToCloud(updatedTeams);

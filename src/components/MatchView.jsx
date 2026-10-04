@@ -53,6 +53,7 @@ export default function MatchView() {
           "E-Jugend",
           "E-Jugend Funino",
           "F-Jugend",
+          "F-Jugend Funino",
           "G-Jugend"
         ];
 

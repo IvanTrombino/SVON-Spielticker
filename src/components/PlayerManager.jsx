@@ -17,7 +17,7 @@ export default function PlayerManager() {
         const customOrder = [
           "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
           "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
-          "E-Jugend Funino", "F-Jugend", "G-Jugend"
+          "E-Jugend Funino", "F-Jugend","F-Jugend Funino", "G-Jugend"
         ];
 
         const sortedTeams = [...teamsList].sort((a, b) => {
