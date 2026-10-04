@@ -309,16 +309,23 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             <h3 style={{ fontSize: "1.1rem", color: "#c53030", margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "8px" }}>
               🔴 Aktive Live-Spiele
             </h3>
-            {Object.entries(allTeamsLiveStatus).filter(([_, status]) => status.isRunning).length === 0 ? (
+            {/* HIER DIE ÄNDERUNG: isRunning || time > 0 bedeutet, das Spiel ist aktiv oder in der Pause */}
+            {Object.entries(allTeamsLiveStatus).filter(([_, status]) => status.isRunning || status.time > 0).length === 0 ? (
               <p style={{ color: "#718096", fontSize: "13px", margin: "0" }}>Aktuell findet kein Live-Spiel statt.</p>
             ) : (
               Object.entries(allTeamsLiveStatus)
-                .filter(([_, status]) => status.isRunning)
+                .filter(([_, status]) => status.isRunning || status.time > 0)
                 .map(([teamName, status]) => {
                   // Spielminute berechnen
                   const matchMinute = status.startTime 
                     ? Math.floor((overviewNow - status.startTime) / 60000) + 1 
                     : Math.floor((status.time || 0) / 60);
+
+                  const isPaused = !status.isRunning && status.time > 0;
+                  const isHalftime = isPaused && status.time === 45 * 60;
+                  
+                  // Text für die Anzeige generieren
+                  const timeText = isHalftime ? "⏸ Halbzeit" : isPaused ? "⏸ Pause" : `⏱ ${matchMinute}. Min`;
 
                   return (
                     <div key={teamName} onClick={() => setSelectedTeam(teamName)} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #fc8181", cursor: "pointer", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
@@ -331,7 +338,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
                           {status.homeGoals} : {status.awayGoals} ➔
                         </div>
                         <div style={{ fontSize: "11px", color: "#c53030", fontWeight: "bold", marginTop: "2px" }}>
-                          ⏱ {matchMinute}. Min
+                          {timeText}
                         </div>
                       </div>
                     </div>
@@ -340,7 +347,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             )}
           </div>
 
-          {/* NÄCHSTE SPIELE (Erweitert um Heim/Auswärts und Ort + gefiltert) */}
+          {/* NÄCHSTE SPIELE */}
           <div style={{ background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "12px", padding: "15px", marginBottom: "20px" }}>
             <h3 style={{ fontSize: "1.1rem", color: "#2146d0", margin: "0 0 12px 0" }}>
               📅 Nächste Spiele
