@@ -272,7 +272,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
       <h2 style={{ color: "#2146d0", margin: "0 0 5px 0", fontSize: "1.5rem" }}>Live-Ticker</h2>
       <p style={{ color: "#666", fontSize: "12px", marginBottom: "15px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
       
-      {/* MANNSCHAFTS-AUSWAHL (Inklusive Gesamtübersicht) */}
+      {/* MANNSCHAFTS-AUSWAHL (Inklusive Gesamtübersicht & Dark-Mode Fix) */}
       <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
           Ansicht / Mannschaft wählen:
@@ -280,7 +280,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
         <select 
           value={selectedTeam} 
           onChange={(e) => { setSelectedTeam(e.target.value); setActiveTab("ticker"); }}
-          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa", boxSizing: "border-box", fontWeight: "bold", color: selectedTeam === "übersicht" ? "#27ae60" : "#333" }}
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", backgroundColor: "#f8f9fa", color: "#333", boxSizing: "border-box", fontWeight: "bold" }}
         >
           <option value="übersicht">📊 Gesamtübersicht (Aktive & Nächste Spiele)</option>
           {teams && teams.map((t) => (
@@ -317,7 +317,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             )}
           </div>
 
-          {/* NÄCHSTE SPIELE */}
+          {/* NÄCHSTE SPIELE (Erweitert um Heim/Auswärts und Ort) */}
           <div style={{ background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "12px", padding: "15px", marginBottom: "20px" }}>
             <h3 style={{ fontSize: "1.1rem", color: "#2146d0", margin: "0 0 12px 0" }}>
               📅 Nächste Spiele
@@ -328,17 +328,30 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
               teams.map((teamName) => {
                 const nextMatch = nextMatches[teamName];
                 return (
-                  <div key={teamName} style={{ background: "white", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <strong style={{ fontSize: "13px", color: "#2146d0" }}>{teamName}</strong>
-                      <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>
-                        {nextMatch?.opponent ? `vs ${nextMatch.opponent}` : "Gegner noch offen"}
+                  <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+                    <div style={{ flex: 1, paddingRight: "10px" }}>
+                      <strong style={{ fontSize: "14px", color: "#2146d0", display: "block", marginBottom: "4px" }}>{teamName}</strong>
+                      
+                      <div style={{ fontSize: "13px", color: "#333", fontWeight: "bold", marginBottom: "4px" }}>
+                        {nextMatch?.opponent ? (
+                          <>
+                            {nextMatch.isHome ? "🏠 vs " : "🚌 @ "}
+                            {nextMatch.opponent}
+                          </>
+                        ) : "Gegner noch offen"}
                       </div>
+
+                      {nextMatch?.location && (
+                        <div style={{ fontSize: "11px", color: "#666", display: "flex", alignItems: "center", gap: "4px" }}>
+                          📍 {nextMatch.location}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: "11px", color: "#666", textAlign: "right" }}>
-                      {nextMatch?.date ? `📅 ${nextMatch.date}` : ""}
-                      {nextMatch?.time ? ` ⏱️ ${nextMatch.time} Uhr` : ""}
-                      {!nextMatch?.date && !nextMatch?.time && <span style={{ fontStyle: "italic", color: "#999" }}>Kein Termin</span>}
+
+                    <div style={{ fontSize: "12px", color: "#555", textAlign: "right", whiteSpace: "nowrap" }}>
+                      {nextMatch?.date && <div style={{ marginBottom: "2px", fontWeight: "bold" }}>{nextMatch.date}</div>}
+                      {nextMatch?.time && <div>⏱️ {nextMatch.time} Uhr</div>}
+                      {!nextMatch?.date && !nextMatch?.time && <span style={{ fontStyle: "italic", color: "#999", fontSize: "11px" }}>Kein Termin</span>}
                     </div>
                   </div>
                 );
@@ -471,7 +484,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
                     {expandedMatchId === match.id && match.history && match.history.length > 0 && (
                       <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
                         <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
-                        {[...match.history].reverse().log?.() || [...match.history].reverse().map((event) => (
+                        {[...match.history].reverse().map((event) => (
                           <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
                             <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
                             <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>

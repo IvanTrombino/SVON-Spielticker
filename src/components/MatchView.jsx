@@ -11,7 +11,7 @@ export default function MatchView({ clubId, teams }) {
   // --- CLOUD-STATE: Metadaten ---
   const [players, setPlayers] = useState([]); 
   const [scorers, setScorers] = useState({});
-  const [savedMatches, setSavedMatches] = useState([]); // WICHTIG: Hier sind die eckigen Klammern wieder da!
+  const [savedMatches, setSavedMatches] = useState([]);
   const [lineups, setLineups] = useState({});
   const [nextMatches, setNextMatches] = useState({});
 
@@ -19,6 +19,8 @@ export default function MatchView({ clubId, teams }) {
   const [nextOpponent, setNextOpponent] = useState("");
   const [nextDate, setNextDate] = useState("");
   const [nextTime, setNextTime] = useState("");
+  const [nextIsHome, setNextIsHome] = useState(true); // NEU: Heimspiel oder Auswärtsspiel
+  const [nextLocation, setNextLocation] = useState(""); // NEU: Spielort
 
   // --- CLOUD-STATE: Live-Spiel ---
   const [matchDate, setMatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -53,6 +55,8 @@ export default function MatchView({ clubId, teams }) {
     setNextOpponent(currentNext.opponent || "");
     setNextDate(currentNext.date || "");
     setNextTime(currentNext.time || "");
+    setNextIsHome(currentNext.isHome !== undefined ? currentNext.isHome : true);
+    setNextLocation(currentNext.location || "");
   }, [selectedTeam, nextMatches]);
 
   // --- VEREINSSPEZIFISCHE PUSH-BENACHRICHTIGUNG ---
@@ -189,7 +193,9 @@ export default function MatchView({ clubId, teams }) {
       [selectedTeam]: {
         opponent: nextOpponent,
         date: nextDate,
-        time: nextTime
+        time: nextTime,
+        isHome: nextIsHome,
+        location: nextLocation
       }
     };
     setNextMatches(updatedNextMatches);
@@ -498,8 +504,15 @@ export default function MatchView({ clubId, teams }) {
 
   // --- MOBIL-OPTIMIERTE STYLES ---
   const inputStyle = {
-    padding: "8px", borderRadius: "8px", border: "1px solid #ccc",
-    width: "100%", boxSizing: "border-box", fontSize: "14px"
+    padding: "8px", 
+    borderRadius: "8px", 
+    border: "1px solid #ccc",
+    width: "100%", 
+    boxSizing: "border-box", 
+    fontSize: "14px",
+    color: "#333",              // ERZWUNGENE FARBE GEGEN DARK-MODE
+    backgroundColor: "#fff",    // ERZWUNGENER HINTERGRUND
+    WebkitAppearance: "none"
   };
 
   const actionButtonStyle = {
@@ -531,7 +544,7 @@ export default function MatchView({ clubId, teams }) {
         <select 
           value={selectedTeam} 
           onChange={(e) => setSelectedTeam(e.target.value)}
-          style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "14px", background: "#f8f9fa", boxSizing: "border-box" }}
+          style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "14px", background: "#f8f9fa", color: "#333", boxSizing: "border-box" }}
         >
           {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
           {teams && teams.map((t) => (
@@ -590,11 +603,11 @@ export default function MatchView({ clubId, teams }) {
                 }} 
                 disabled={!isSvonAway}
                 placeholder="Heim..." 
-                style={{...inputStyle, textAlign: "center", fontSize: "13px", padding: "8px 4px", background: !isSvonAway ? "#eee" : "white", fontWeight: !isSvonAway ? "bold" : "normal"}} 
+                style={{...inputStyle, textAlign: "center", fontSize: "13px", padding: "8px 4px", backgroundColor: !isSvonAway ? "#eee" : "white", fontWeight: !isSvonAway ? "bold" : "normal"}} 
               />
             </div>
 
-            <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "8px", cursor: "pointer", background: "#e0e0e0", border: "none", borderRadius: "8px", fontSize: "15px", marginTop: "16px", flexShrink: 0 }}>
+            <button onClick={toggleHomeAway} title="Heimrecht tauschen" style={{ padding: "8px", cursor: "pointer", background: "#e0e0e0", color: "#333", border: "none", borderRadius: "8px", fontSize: "15px", marginTop: "16px", flexShrink: 0 }}>
               🔄
             </button>
 
@@ -608,7 +621,7 @@ export default function MatchView({ clubId, teams }) {
                 }} 
                 disabled={isSvonAway}
                 placeholder="Gast..." 
-                style={{...inputStyle, textAlign: "center", fontSize: "13px", padding: "8px 4px", background: isSvonAway ? "#eee" : "white", fontWeight: isSvonAway ? "bold" : "normal"}} 
+                style={{...inputStyle, textAlign: "center", fontSize: "13px", padding: "8px 4px", backgroundColor: isSvonAway ? "#eee" : "white", fontWeight: isSvonAway ? "bold" : "normal"}} 
               />
             </div>
           </div>
@@ -749,18 +762,31 @@ export default function MatchView({ clubId, teams }) {
           </p>
 
           <form onSubmit={saveNextMatchToCloud}>
-            <div style={{ marginBottom: "12px" }}>
-              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Gegner (z.B. FC Radolfzell)</label>
-              <input 
-                type="text" 
-                value={nextOpponent} 
-                onChange={(e) => setNextOpponent(e.target.value)} 
-                placeholder="Gegner eingeben..." 
-                style={inputStyle}
-              />
+            <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Art</label>
+                <select 
+                  value={nextIsHome ? "heim" : "auswaerts"} 
+                  onChange={(e) => setNextIsHome(e.target.value === "heim")} 
+                  style={{...inputStyle, padding: "8px", cursor: "pointer"}}
+                >
+                  <option value="heim">🏠 Heimspiel</option>
+                  <option value="auswaerts">🚌 Auswärtsspiel</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Gegner</label>
+                <input 
+                  type="text" 
+                  value={nextOpponent} 
+                  onChange={(e) => setNextOpponent(e.target.value)} 
+                  placeholder="z.B. FC Radolfzell" 
+                  style={inputStyle}
+                />
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", marginBottom: "15px" }}>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
               <div style={{ flex: 1 }}>
                 <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Datum</label>
                 <input 
@@ -779,6 +805,17 @@ export default function MatchView({ clubId, teams }) {
                   style={inputStyle}
                 />
               </div>
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "4px" }}>Spielort (Optional)</label>
+              <input 
+                type="text" 
+                value={nextLocation} 
+                onChange={(e) => setNextLocation(e.target.value)} 
+                placeholder="z.B. Kunstrasenplatz Nenzingen" 
+                style={inputStyle}
+              />
             </div>
 
             <button 
@@ -865,9 +902,9 @@ export default function MatchView({ clubId, teams }) {
 
                   {editingMatchId === match.id ? (
                     <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-                      <input type="number" value={editHomeGoals} onChange={(e) => setEditHomeGoals(e.target.value)} style={{ width: "35px", textAlign: "center", padding: "2px" }} />
+                      <input type="number" value={editHomeGoals} onChange={(e) => setEditHomeGoals(e.target.value)} style={{ width: "35px", textAlign: "center", padding: "2px", color: "#333", backgroundColor: "#fff" }} />
                       <span>:</span>
-                      <input type="number" value={editAwayGoals} onChange={(e) => setEditAwayGoals(e.target.value)} style={{ width: "35px", textAlign: "center", padding: "2px" }} />
+                      <input type="number" value={editAwayGoals} onChange={(e) => setEditAwayGoals(e.target.value)} style={{ width: "35px", textAlign: "center", padding: "2px", color: "#333", backgroundColor: "#fff" }} />
                       <button onClick={() => saveEditedMatch(match.id)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "11px" }}>💾</button>
                       <button onClick={() => setEditingMatchId(null)} style={{ background: "transparent", color: "#7f8c8d", border: "none", padding: "4px 6px", cursor: "pointer", fontSize: "12px" }}>✖</button>
                     </div>
