@@ -190,14 +190,22 @@ export default function App() {
   if (view === "youth") {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
-        <div style={{ background: "#2980b9", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👦 Jugend-Bereich ({clubId.toUpperCase()})</span>
-          <button 
-            onClick={handleBackToHome}
-            style={{ background: "white", color: "#2980b9", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
-          >
-            🏠 Zur Startseite
-          </button>
+        <div style={{ background: "#2980b9", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white", flexWrap: "wrap", gap: "8px" }}>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👦 Jugenddatenbank ({clubId.toUpperCase()})</span>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button 
+              onClick={() => { setView("match"); window.location.hash = `#${clubId}`; }}
+              style={{ background: "white", color: "#2980b9", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+            >
+              ⬅️ Zurück zum Admin
+            </button>
+            <button 
+              onClick={handleBackToHome}
+              style={{ background: "#c0392b", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+            >
+              🏠 Startseite
+            </button>
+          </div>
         </div>
         <YouthAdminPage clubId={clubId} />
       </div>
@@ -259,13 +267,6 @@ export default function App() {
             </form>
           </div>
 
-          <button 
-            onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}
-            style={{ padding: "16px", background: "#2980b9", color: "white", border: "none", borderRadius: "10px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
-          >
-            👦 Jugend-Datenbank
-          </button>
-
         </div>
       </div>
     );
@@ -326,21 +327,42 @@ export default function App() {
           </button>
         </div>
 
-        <button
-          onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
-          style={{
-            padding: "8px 12px",
-            borderRadius: "6px",
-            border: 0,
-            background: "#27ae60",
-            color: "white",
-            fontWeight: "bold",
-            cursor: "pointer",
-            fontSize: "13px"
-          }}
-        >
-          👀 Zuschauer
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {/* NUR FÜR ADMIN: JUGEND-DATENBANK BUTTON IN DER LEISTE */}
+          {userRole === "admin" && (
+            <button
+              onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "6px",
+                border: 0,
+                background: "#2980b9",
+                color: "white",
+                fontWeight: "bold",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              👦 Jugend
+            </button>
+          )}
+
+          <button
+            onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: "6px",
+              border: 0,
+              background: "#27ae60",
+              color: "white",
+              fontWeight: "bold",
+              cursor: "pointer",
+              fontSize: "13px"
+            }}
+          >
+            👀 Zuschauer
+          </button>
+        </div>
       </div>
 
       <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
