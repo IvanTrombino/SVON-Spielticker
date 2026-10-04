@@ -7,7 +7,7 @@ export default function PublicView({ onBackToAdmin }) {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
   
-  // --- Tab-Navigation für die Fans (ticker, scorers, history) ---
+  // --- Tab-Navigation für die Fans ---
   const [activeTab, setActiveTab] = useState("ticker");
 
   const [homeTeam, setHomeTeam] = useState("SVON");
@@ -221,17 +221,16 @@ export default function PublicView({ onBackToAdmin }) {
   const teamScorersObj = scorersData[selectedTeam] || {};
   const sortedScorers = Object.entries(teamScorersObj).sort((a, b) => b[1] - a[1]);
 
-  // --- KORREKTER FUSSBALL.DE LINK ---
   const getFussballDeLink = () => {
     return "https://www.fussball.de/verein/sv-orsingen-nenzingen-suedbaden/-/id/00ES8GN9F000000RVV0AG08LVUPGND5I#!/";
   };
 
   const tabButtonStyle = (tabName) => ({
-    flex: 1, padding: "8px",
+    flex: 1, padding: "8px 4px",
     background: activeTab === tabName ? "#2146d0" : "#e0e0e0",
     color: activeTab === tabName ? "white" : "#333",
     border: "none", borderRadius: "8px", fontWeight: "bold",
-    cursor: "pointer", fontSize: "12px"
+    cursor: "pointer", fontSize: "11px"
   });
 
   return (
@@ -320,7 +319,7 @@ export default function PublicView({ onBackToAdmin }) {
         </select>
       </div>
 
-      {/* FAN-NAVIGATION (REITER) */}
+      {/* FAN-NAVIGATION (REITER - ANGEPASSTER NAME) */}
       <div style={{ display: "flex", gap: "5px", marginBottom: "15px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
@@ -329,7 +328,7 @@ export default function PublicView({ onBackToAdmin }) {
           🎯 Torschützen
         </button>
         <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
-          📜 Letzte Spiele ({filteredMatches.length})
+          📅 Spielplan & Letzte Spiele
         </button>
       </div>
 
@@ -398,12 +397,15 @@ export default function PublicView({ onBackToAdmin }) {
         </div>
       )}
 
-      {/* TAB 3: LETZTE SPIELE (INKL. FUSSBALL.DE LINK) */}
+      {/* TAB 3: SPIELPLAN & LETZTE SPIELE */}
       {activeTab === "history" && (
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           
-          {/* FUSSBALL.DE BUTTON */}
-          <div style={{ marginBottom: "20px", textAlign: "center" }}>
+          {/* PROMINENTER HINWEIS & FUSSBALL.DE BUTTON */}
+          <div style={{ marginBottom: "20px", background: "#e8f4f8", border: "1px solid #bce0fd", borderRadius: "10px", padding: "15px", textAlign: "center" }}>
+            <p style={{ margin: "0 0 10px 0", fontSize: "13px", fontWeight: "bold", color: "#0056b3" }}>
+              📅 Suche nach den nächsten Spielen, Uhrzeiten oder der Tabelle?
+            </p>
             <a 
               href={getFussballDeLink()} 
               target="_blank" 
@@ -420,11 +422,11 @@ export default function PublicView({ onBackToAdmin }) {
                 boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
               }}
             >
-              🌐 Alle Spielpläne & Tabelle auf Fussball.de öffnen
+              🌐 Zum offiziellen Spielplan & Tabelle auf Fussball.de
             </a>
           </div>
 
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>📜 Letzte Spiele ({selectedTeam})</h3>
+          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>📜 Letzte Spiele & Ergebnisse ({selectedTeam})</h3>
           
           {filteredMatches.length === 0 ? (
             <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine vergangenen Spiele für {selectedTeam} im Ticker gespeichert.</p>
