@@ -34,7 +34,6 @@ export default function MatchView() {
   const [editHomeGoals, setEditHomeGoals] = useState(0);
   const [editAwayGoals, setEditAwayGoals] = useState(0);
   
-  // --- NEU: State für das Aufklappen der Historie in "Letzte Spiele" ---
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
   // 1. GLOBALE DATEN LADEN
@@ -42,7 +41,8 @@ export default function MatchView() {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists()) {
         const teamsList = snap.data().teamsList || [];
-        setTeams(teamsList);
+        // NEU: Teams alphabetisch sortieren
+        setTeams([...teamsList].sort((a, b) => a.localeCompare(b)));
       }
     });
     
@@ -68,7 +68,7 @@ export default function MatchView() {
       if (snap.exists()) {
         const allPlayersObj = snap.data() || {};
         const teamPlayers = allPlayersObj[selectedTeam] || [];
-        // NEU: Auch hier alphabetisch sortieren
+        // NEU: Spieler alphabetisch sortieren
         setPlayers([...teamPlayers].sort((a, b) => a.localeCompare(b)));
       } else {
         setPlayers([]);
@@ -290,7 +290,6 @@ export default function MatchView() {
       setSavedMatches(newSavedMatches);
       saveMatchesToCloud(newSavedMatches);
       
-      // Komplettes Zurücksetzen für das nächste Spiel (Gegner wird geleert)
       const resetData = {
         homeGoals: 0,
         awayGoals: 0,
@@ -314,7 +313,6 @@ export default function MatchView() {
 
   const resetGame = () => {
     if (window.confirm("Spiel wirklich zurücksetzen? (Datum, Uhrzeit und Gegner bleiben erhalten)")) {
-      // Datum, Zeit und Gegner NICHT in resetData aufnehmen, damit sie in Firebase bleiben!
       const resetData = { 
         homeGoals: 0, 
         awayGoals: 0, 
@@ -413,7 +411,6 @@ export default function MatchView() {
           onChange={(e) => setSelectedTeam(e.target.value)}
           style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
         >
-          {/* Fallback, falls die 1. Mannschaft noch nicht in der Datenbank angelegt wurde */}
           {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
           {teams.map((t) => (
             <option key={t} value={t}>{t}</option>
@@ -547,7 +544,7 @@ export default function MatchView() {
           </div>
 
           <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
-            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️ Zurück</button>
+            <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️️ Zurück</button>
             <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑 Zurücksetzen</button>
             <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
             <button onClick={generatePDF} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#2980b9", color: "white", border: "none", borderRadius: "8px", fontSize: "16px" }}>🖨️ PDF Bericht</button>
@@ -585,7 +582,6 @@ export default function MatchView() {
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
                   <span>📅 {match.date} {match.team ? `(${match.team})` : ""}</span>
                   
-                  {/* --- NEU: Klickbarer Button um Ereignisse aufzuklappen --- */}
                   <span 
                     onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)}
                     style={{ cursor: "pointer", color: "#2980b9", fontWeight: "bold", textDecoration: "underline" }}
@@ -618,7 +614,6 @@ export default function MatchView() {
                   )}
                 </div>
 
-                {/* --- NEU: Der aufgeklappte Spielbericht --- */}
                 {expandedMatchId === match.id && match.history && match.history.length > 0 && (
                   <div style={{ marginTop: "15px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
                     <h4 style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>

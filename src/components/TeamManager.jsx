@@ -6,12 +6,14 @@ export default function TeamManager() {
   const [teams, setTeams] = useState([]);
   const [newTeam, setNewTeam] = useState("");
 
-  // Teams in Echtzeit direkt aus der Cloud laden
+  // Teams in Echtzeit direkt aus der Cloud laden und sortieren
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "ticker", "teams"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setTeams(data.teamsList || []);
+        const loadedTeams = data.teamsList || [];
+        // Sortiert die Liste direkt beim Laden aus Firebase
+        setTeams(loadedTeams.sort((a, b) => a.localeCompare(b)));
       } else {
         setTeams([]);
       }
@@ -34,7 +36,9 @@ export default function TeamManager() {
     const trimmedTeam = newTeam.trim();
     if (teams.includes(trimmedTeam)) return;
 
-    const updatedTeams = [...teams, trimmedTeam];
+    // Neues Team hinzufügen und die Liste sofort alphabetisch sortieren
+    const updatedTeams = [...teams, trimmedTeam].sort((a, b) => a.localeCompare(b));
+    
     setTeams(updatedTeams);
     saveTeamsToCloud(updatedTeams);
     setNewTeam("");
