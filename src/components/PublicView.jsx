@@ -24,7 +24,7 @@ export default function PublicView({ onBackToAdmin }) {
   // --- Globale Stats & Historie für die Fans ---
   const [scorersData, setScorersData] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
-  const [expandedMatchId, setExpandedMatchId] = useState(null); // NEU: Für das Aufklappen der Ereignisse
+  const [expandedMatchId, setExpandedMatchId] = useState(null);
 
   const [wantsNotifications, setWantsNotifications] = useState(false);
   const wantsNotificationsRef = useRef(false); 
@@ -217,9 +217,14 @@ export default function PublicView({ onBackToAdmin }) {
   // --- FILTER FÜR DIE FANS ---
   const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
   
-  // Mannschaftsinterne Torschützen sortieren
+  // Torschützen sortieren
   const teamScorersObj = scorersData[selectedTeam] || {};
   const sortedScorers = Object.entries(teamScorersObj).sort((a, b) => b[1] - a[1]);
+
+  // --- KORREKTER FUSSBALL.DE LINK ---
+  const getFussballDeLink = () => {
+    return "https://www.fussball.de/verein/sv-orsingen-nenzingen-suedbaden/-/id/00ES8GN9F000000RVV0AG08LVUPGND5I#!/";
+  };
 
   const tabButtonStyle = (tabName) => ({
     flex: 1, padding: "8px",
@@ -393,18 +398,40 @@ export default function PublicView({ onBackToAdmin }) {
         </div>
       )}
 
-      {/* TAB 3: LETZTE SPIELE (MIT AUFKLAPPBAREN EEREIGNISSEN) */}
+      {/* TAB 3: LETZTE SPIELE (INKL. FUSSBALL.DE LINK) */}
       {activeTab === "history" && (
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+          
+          {/* FUSSBALL.DE BUTTON */}
+          <div style={{ marginBottom: "20px", textAlign: "center" }}>
+            <a 
+              href={getFussballDeLink()} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{
+                display: "block",
+                padding: "12px",
+                background: "#0056b3",
+                color: "white",
+                borderRadius: "8px",
+                textDecoration: "none",
+                fontWeight: "bold",
+                fontSize: "14px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+              }}
+            >
+              🌐 Alle Spielpläne & Tabelle auf Fussball.de öffnen
+            </a>
+          </div>
+
           <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>📜 Letzte Spiele ({selectedTeam})</h3>
           
           {filteredMatches.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine vergangenen Spiele für {selectedTeam} gespeichert.</p>
+            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Keine vergangenen Spiele für {selectedTeam} im Ticker gespeichert.</p>
           ) : (
             filteredMatches.map((match) => (
               <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px" }}>
                 
-                {/* Kopfzeile mit Datum und Ereignis-Toggle */}
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
                   <span>📅 {match.date}</span>
                   
@@ -416,13 +443,11 @@ export default function PublicView({ onBackToAdmin }) {
                   </span>
                 </div>
 
-                {/* Spielpaarung und Endergebnis */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: "bold", fontSize: "15px", color: "#333" }}>
                   <span>{match.homeTeam} vs {match.awayTeam}</span>
                   <span style={{ color: "#2146d0", fontSize: "16px" }}>{match.homeGoals} : {match.awayGoals}</span>
                 </div>
 
-                {/* Aufklappbarer Spielverlauf */}
                 {expandedMatchId === match.id && match.history && match.history.length > 0 && (
                   <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
                     <h4 style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
