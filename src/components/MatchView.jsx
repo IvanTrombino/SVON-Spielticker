@@ -37,7 +37,6 @@ export default function MatchView() {
   // --- DYNAMISCHE PUSH-BENACHRICHTIGUNG JE NACH MANNSCHAFT ---
   const sendNtfyPush = async (eventTitle, eventMessage) => {
     try {
-      // Erstellt aus dem Teamnamen einen sauberen Kanal (z.B. "E-Jugend" -> "svonejugend")
       const safeChannelName = `svon${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
       await fetch(`https://ntfy.sh/${safeChannelName}`, {
@@ -52,32 +51,21 @@ export default function MatchView() {
     }
   };
 
-  // 1. GLOBALE DATEN LADEN (MIT BENUTZERDEFINIERTER SORTIERUNG)
+  // 1. GLOBALE DATEN LADEN
   useEffect(() => {
     const unsubTeams = onSnapshot(doc(db, "ticker", "teams"), (snap) => {
       if (snap.exists()) {
         const teamsList = snap.data().teamsList || [];
         
         const customOrder = [
-          "1. Mannschaft",
-          "2. Mannschaft",
-          "3. Mannschaft",
-          "Damen",
-          "A-Jugend",
-          "B-Jugend",
-          "C-Jugend",
-          "D-Jugend",
-          "E-Jugend",
-          "E-Jugend Funino",
-          "F-Jugend",
-          "F-Jugend Funino",
-          "G-Jugend"
+          "1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen",
+          "A-Jugend", "B-Jugend", "C-Jugend", "D-Jugend", "E-Jugend",
+          "E-Jugend Funino", "F-Jugend", "F-Jugend Funino", "G-Jugend"
         ];
 
         const sortedTeams = [...teamsList].sort((a, b) => {
           const indexA = customOrder.indexOf(a);
           const indexB = customOrder.indexOf(b);
-          
           if (indexA !== -1 && indexB !== -1) return indexA - indexB;
           if (indexA !== -1) return -1;
           if (indexB !== -1) return 1;
@@ -321,6 +309,7 @@ export default function MatchView() {
     });
   };
 
+  // --- SPIEL BEENDEN & HIGHLIGHTS TEILEN ---
   const finishMatch = () => {
     if (window.confirm("Spiel beenden und in 'Letzte Spiele' speichern?")) {
       const formattedDate = new Date(matchDate).toLocaleDateString("de-DE");
@@ -345,6 +334,11 @@ export default function MatchView() {
       const newSavedMatches = [newMatch, ...savedMatches];
       setSavedMatches(newSavedMatches);
       saveMatchesToCloud(newSavedMatches);
+
+      // --- FRAGE OB HIGHLIGHTS GETEILT WERDEN SOLLEN ---
+      if (window.confirm("Möchtest du das Spielergebnis und die Highlights jetzt per WhatsApp / Social Media teilen?")) {
+        shareMatchToSocialMedia(newMatch);
+      }
       
       const resetData = {
         homeGoals: 0,
@@ -364,6 +358,43 @@ export default function MatchView() {
       setMatchDate(resetData.matchDate); setKickoffTime("");
 
       syncLiveMatch(resetData);
+    }
+  };
+
+  // --- FUNKTION ZUM TEILEN EINES SPIELS ---
+  const shareMatchToSocialMedia = (match) => {
+    let text = `⚽ SVON Spielbericht (${match.team || selectedTeam})\n`;
+    text += `📅 ${match.date}\n\n`;
+    text += `🏆 ${match.homeTeam} vs ${match.awayTeam}\n`;
+    text += `👉 Endstand: ${match.homeGoals} : ${match.awayGoals}\n\n`;
+
+    if (match.history && match.history.length > 0) {
+      text += `📝 Highlights & Verlauf:\n`;
+      const sortedHistory = [...match.history].reverse();
+      sortedHistory.forEach((event) => {
+        const teamName = event.team === "home" ? match.homeTeam : match.awayTeam;
+        let icon = "📝";
+        if (event.type === "goal") icon = "⚽";
+        else if (event.type === "yellow") icon = "🟨";
+        else if (event.type === "yellowred") icon = "🟨🟥";
+        else if (event.type === "red") icon = "🟥";
+
+        text += `${event.minute}' ${icon} ${teamName}: ${event.player}\n`;
+      });
+    } else {
+      text += `Keine Ereignisse aufgezeichnet.\n`;
+    }
+
+    text += `\n🟢⚪ SV Orsingen-Nenzingen`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: "SVON Spielbericht",
+        text: text,
+      }).catch((error) => console.log("Teilen abgebrochen", error));
+    } else {
+      navigator.clipboard.writeText(text);
+      alert("Spielbericht wurde in die Zwischenablage kopiert und kann eingefügt werden!");
     }
   };
 
@@ -415,8 +446,6 @@ export default function MatchView() {
     setEditingMatchId(null);
   };
 
-  const generatePDF = () => window.print();
-
   const getEventIcon = (type) => {
     if (type === "goal") return "⚽";
     if (type === "yellow") return "🟨";
@@ -446,19 +475,10 @@ export default function MatchView() {
 
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
-      <style>
-        {`
-          @media print {
-            .no-print { display: none !important; }
-            body { background: white; }
-          }
-        `}
-      </style>
-
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
       <h2 style={{ color: "#2146d0", margin: "0 0 15px 0", fontSize: "1.5rem" }}>⚽ SVON Ticker (Admin)</h2>
 
-      <div className="no-print" style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
+      <div style={{ background: "white", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginBottom: "15px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
         <label style={{ display: "block", fontSize: "13px", color: "#555", marginBottom: "6px", fontWeight: "bold", textAlign: "left" }}>
           Zu steuernde Mannschaft:
         </label>
@@ -474,7 +494,7 @@ export default function MatchView() {
         </select>
       </div>
 
-      <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
         <button onClick={() => setActiveTab("ticker")} style={tabButtonStyle("ticker")}>
           ⏱️ Live-Ticker
         </button>
@@ -486,7 +506,7 @@ export default function MatchView() {
       {activeTab === "ticker" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
-          <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+          <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
             <div style={{ flex: 1, textAlign: "left" }}>
               <label style={{ fontSize: "12px", color: "#666", display: "block", marginBottom: "4px" }}>Datum</label>
               <input 
@@ -507,7 +527,7 @@ export default function MatchView() {
             </div>
           </div>
 
-          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "15px", width: "100%" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "15px", width: "100%" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", textAlign: "left" }}>Heimteam</label>
               <input 
@@ -545,7 +565,7 @@ export default function MatchView() {
             {homeGoals} : {awayGoals}
           </div>
 
-          <div className="no-print" style={{ marginBottom: "25px" }}>
+          <div style={{ marginBottom: "25px" }}>
             <div style={{ fontSize: "2rem", fontFamily: "monospace", marginBottom: "12px" }}>
               {formatTime(time)}
             </div>
@@ -582,9 +602,9 @@ export default function MatchView() {
             </div>
           </div>
 
-          <hr className="no-print" style={{ margin: "20px 0", borderColor: "#eee" }} />
+          <hr style={{ margin: "20px 0", borderColor: "#eee" }} />
 
-          <div className="no-print">
+          <div>
             <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} style={{ ...inputStyle, marginBottom: "15px" }}>
               <option value="">-- {selectedTeam} Spieler wählen --</option>
               {players.map((p) => (
@@ -607,11 +627,10 @@ export default function MatchView() {
             </div>
           </div>
 
-          <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
             <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩ Zurück</button>
             <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑 Zurücksetzen</button>
             <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
-            <button onClick={generatePDF} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#2980b9", color: "white", border: "none", borderRadius: "8px", fontSize: "16px" }}>🖨️ PDF Bericht</button>
           </div>
 
           <hr style={{ margin: "25px 0", borderColor: "#eee" }} />
@@ -668,10 +687,12 @@ export default function MatchView() {
                       <button onClick={() => setEditingMatchId(null)} style={{ background: "#7f8c8d", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✖</button>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{ fontWeight: "bold", fontSize: "16px", color: "#2146d0" }}>
                         {match.homeGoals} : {match.awayGoals}
                       </span>
+                      {/* --- NEU: TEILEN-BUTTON IN DER HISTORIE --- */}
+                      <button onClick={() => shareMatchToSocialMedia(match)} title="Highlights teilen" style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>📤</button>
                       <button onClick={() => startEditingMatch(match)} title="Ergebnis bearbeiten" style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
                       <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>🗑</button>
                     </div>
