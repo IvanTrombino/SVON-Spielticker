@@ -6,7 +6,9 @@ import { db } from "../firebase";
 export default function MatchView() {
   // --- NAVIGATION & TEAM-AUSWAHL ---
   const [activeTab, setActiveTab] = useState("ticker");
-  const [selectedTeam, setSelectedTeam] = useState("");
+  
+  // Startseite ist standardmäßig die 1. Mannschaft
+  const [selectedTeam, setSelectedTeam] = useState("1. Mannschaft");
 
   // --- CLOUD-STATE: Metadaten ---
   const [teams, setTeams] = useState([]);
@@ -31,6 +33,9 @@ export default function MatchView() {
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [editHomeGoals, setEditHomeGoals] = useState(0);
   const [editAwayGoals, setEditAwayGoals] = useState(0);
+  
+  // --- NEU: State für das Aufklappen der Historie in "Letzte Spiele" ---
+  const [expandedMatchId, setExpandedMatchId] = useState(null);
 
   // 1. GLOBALE DATEN LADEN
   useEffect(() => {
@@ -38,9 +43,6 @@ export default function MatchView() {
       if (snap.exists()) {
         const teamsList = snap.data().teamsList || [];
         setTeams(teamsList);
-        if (teamsList.length > 0 && !selectedTeam) {
-          setSelectedTeam(teamsList[0]);
-        }
       }
     });
     
@@ -57,10 +59,11 @@ export default function MatchView() {
       unsubScorers();
       unsubMatches();
     };
-  }, [selectedTeam]);
+  }, []);
 
   // 2. SPIELER LADEN
   useEffect(() => {
+    if (!selectedTeam) return;
     const unsubPlayers = onSnapshot(doc(db, "ticker", "players"), (snap) => {
       if (snap.exists()) {
         const allPlayersObj = snap.data() || {};
@@ -81,7 +84,6 @@ export default function MatchView() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        // Direkte Zuweisung, damit eigene Eingaben nie überschrieben werden
         setIsSvonAway(data.isSvonAway || false);
         setHomeTeam(data.homeTeam !== undefined ? data.homeTeam : selectedTeam);
         setAwayTeam(data.awayTeam !== undefined ? data.awayTeam : "Gast");
@@ -149,6 +151,15 @@ export default function MatchView() {
     }
     return () => clearInterval(interval);
   }, [isRunning]);
+
+  // AUTO-STOP NACH 130 MINUTEN (7800 Sekunden)
+  useEffect(() => {
+    if (isRunning && time >= 130 * 60) {
+      setIsRunning(false);
+      syncLiveMatch({ isRunning: false, time: time });
+      alert("⏰ Automatischer Stopp: Das Spiel hat 130 Minuten erreicht und wurde pausiert.");
+    }
+  }, [time, isRunning]);
 
   const formatTime = (totalSeconds) => {
     const m = Math.floor(totalSeconds / 60);
@@ -259,7 +270,6 @@ export default function MatchView() {
 
   const finishMatch = () => {
     if (window.confirm("Spiel beenden und in 'Letzte Spiele' speichern?")) {
-      // Datumsausgabe formatieren für Historie
       const formattedDate = new Date(matchDate).toLocaleDateString("de-DE");
       const displayDate = kickoffTime ? `${formattedDate} - ${kickoffTime} Uhr` : formattedDate;
 
@@ -278,6 +288,7 @@ export default function MatchView() {
       setSavedMatches(newSavedMatches);
       saveMatchesToCloud(newSavedMatches);
       
+      // Komplettes Zurücksetzen für das nächste Spiel (Gegner wird geleert)
       const resetData = {
         homeGoals: 0,
         awayGoals: 0,
@@ -291,33 +302,33 @@ export default function MatchView() {
         kickoffTime: ""
       };
       
-      setHomeGoals(0);
-      setAwayGoals(0);
-      setTime(0);
-      setIsRunning(false);
-      setHistory([]);
-      setSelectedPlayer("");
-      setHomeTeam(resetData.homeTeam);
-      setAwayTeam(resetData.awayTeam);
-      setMatchDate(resetData.matchDate);
-      setKickoffTime("");
+      setHomeGoals(0); setAwayGoals(0); setTime(0); setIsRunning(false); setHistory([]); setSelectedPlayer("");
+      setHomeTeam(resetData.homeTeam); setAwayTeam(resetData.awayTeam);
+      setMatchDate(resetData.matchDate); setKickoffTime("");
 
       syncLiveMatch(resetData);
     }
   };
 
   const resetGame = () => {
-    if (window.confirm("Aktuelles Spiel wirklich verwerfen?")) {
+    if (window.confirm("Spiel wirklich zurücksetzen? (Datum, Uhrzeit und Gegner bleiben erhalten)")) {
+      // Datum, Zeit und Gegner NICHT in resetData aufnehmen, damit sie in Firebase bleiben!
       const resetData = { 
-        homeGoals: 0, awayGoals: 0, time: 0, isRunning: false, history: [], startTime: null,
-        homeTeam: isSvonAway ? "Gast" : selectedTeam,
-        awayTeam: isSvonAway ? selectedTeam : "Gast",
-        matchDate: new Date().toISOString().split("T")[0],
-        kickoffTime: ""
+        homeGoals: 0, 
+        awayGoals: 0, 
+        time: 0, 
+        isRunning: false, 
+        history: [], 
+        startTime: null 
       };
-      setHomeGoals(0); setAwayGoals(0); setTime(0); setIsRunning(false); setHistory([]); setSelectedPlayer("");
-      setHomeTeam(resetData.homeTeam); setAwayTeam(resetData.awayTeam);
-      setMatchDate(resetData.matchDate); setKickoffTime("");
+      
+      setHomeGoals(0); 
+      setAwayGoals(0); 
+      setTime(0); 
+      setIsRunning(false); 
+      setHistory([]); 
+      setSelectedPlayer("");
+      
       syncLiveMatch(resetData);
     }
   };
@@ -400,6 +411,8 @@ export default function MatchView() {
           onChange={(e) => setSelectedTeam(e.target.value)}
           style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", background: "#f8f9fa" }}
         >
+          {/* Fallback, falls die 1. Mannschaft noch nicht in der Datenbank angelegt wurde */}
+          {!teams.includes("1. Mannschaft") && <option value="1. Mannschaft">1. Mannschaft</option>}
           {teams.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
@@ -418,7 +431,6 @@ export default function MatchView() {
       {activeTab === "ticker" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
-          {/* --- NEU: DATUM & ANSTOSSZEIT --- */}
           <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
             <div style={{ flex: 1, textAlign: "left" }}>
               <label style={{ fontSize: "12px", color: "#666", display: "block", marginBottom: "4px" }}>Datum</label>
@@ -524,7 +536,6 @@ export default function MatchView() {
               <button onClick={() => addEvent("home", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {homeTeam}</button>
               <button onClick={() => addEvent("away", "yellow")} style={{...actionButtonStyle, background: "#f1c40f", color: "#333"}}>🟨 {awayTeam}</button>
               
-              {/* --- NEU: GELB/ROTE KARTE --- */}
               <button onClick={() => addEvent("home", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {homeTeam}</button>
               <button onClick={() => addEvent("away", "yellowred")} style={{...actionButtonStyle, background: "#e67e22", color: "white"}}>🟨🟥 {awayTeam}</button>
 
@@ -535,7 +546,7 @@ export default function MatchView() {
 
           <div className="no-print" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px" }}>
             <button onClick={undoLastEvent} disabled={history.length === 0} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#7f8c8d", color: "white", border: "none", borderRadius: "8px" }}>↩️ Zurück</button>
-            <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑️ Verwerfen</button>
+            <button onClick={resetGame} style={{ flex: "1 1 calc(50% - 8px)", padding: "10px", backgroundColor: "#c0392b", color: "white", border: "none", borderRadius: "8px" }}>🗑 Zurücksetzen</button>
             <button onClick={finishMatch} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>💾 Spiel beenden & Speichern</button>
             <button onClick={generatePDF} style={{ flex: "1 1 100%", padding: "12px", backgroundColor: "#2980b9", color: "white", border: "none", borderRadius: "8px", fontSize: "16px" }}>🖨️ PDF Bericht</button>
           </div>
@@ -571,7 +582,14 @@ export default function MatchView() {
                 
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
                   <span>📅 {match.date} {match.team ? `(${match.team})` : ""}</span>
-                  <span>{match.history?.length || 0} Ereignisse</span>
+                  
+                  {/* --- NEU: Klickbarer Button um Ereignisse aufzuklappen --- */}
+                  <span 
+                    onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)}
+                    style={{ cursor: "pointer", color: "#2980b9", fontWeight: "bold", textDecoration: "underline" }}
+                  >
+                    {match.history?.length || 0} Ereignisse {expandedMatchId === match.id ? "▲" : "▼"}
+                  </span>
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -597,6 +615,20 @@ export default function MatchView() {
                     </div>
                   )}
                 </div>
+
+                {/* --- NEU: Der aufgeklappte Spielbericht --- */}
+                {expandedMatchId === match.id && match.history && match.history.length > 0 && (
+                  <div style={{ marginTop: "15px", paddingTop: "10px", borderTop: "1px dashed #ccc" }}>
+                    <h4 style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#555" }}>Spielverlauf:</h4>
+                    {[...match.history].reverse().map((event) => (
+                      <div key={event.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "4px 0", fontSize: "13px" }}>
+                        <span style={{ fontWeight: "bold", width: "30px", color: "#666" }}>{event.minute}'</span>
+                        <span style={{ fontSize: "1.2rem" }}>{getEventIcon(event.type)}</span>
+                        <span><strong>{event.team === "home" ? match.homeTeam : match.awayTeam}</strong>: {event.player}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))
           )}
