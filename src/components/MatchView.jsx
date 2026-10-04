@@ -382,7 +382,7 @@ export default function MatchView() {
       text += `Keine Ereignisse aufgezeichnet.\n`;
     }
 
-    text += `\n🟢⚪ SV Orsingen-Nenzingen`;
+    text += `\nSV Orsingen-Nenzingen\nEine Gemeinde. Ein Verein. Eine Familie.`;
 
     if (navigator.share) {
       navigator.share({
@@ -470,6 +470,9 @@ export default function MatchView() {
     cursor: "pointer", fontSize: "14px"
   });
 
+  // --- FILTER FÜR DIE GESPEICHERTEN SPIELE NACH AKTUELLER MANNSCHAFT ---
+  const filteredMatches = savedMatches.filter(m => (m.team || "1. Mannschaft") === selectedTeam);
+
   return (
     <div style={{ padding: "15px", textAlign: "center", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
       <img src={logo} alt="SVON Logo" style={{ maxWidth: "70px", marginBottom: "10px" }} />
@@ -496,7 +499,7 @@ export default function MatchView() {
           ⏱️ Live-Ticker
         </button>
         <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
-          📜 Letzte Spiele ({savedMatches.length})
+          📜 Letzte Spiele ({filteredMatches.length})
         </button>
       </div>
 
@@ -651,16 +654,16 @@ export default function MatchView() {
 
       {activeTab === "history" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
-          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🏆 Gespeicherte Spiele</h3>
+          <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", textAlign: "center", color: "#2146d0" }}>🏆 Gespeicherte Spiele ({selectedTeam})</h3>
           
-          {savedMatches.length === 0 ? (
-            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Noch keine Spiele gespeichert.</p>
+          {filteredMatches.length === 0 ? (
+            <p style={{ color: "#999", fontSize: "14px", textAlign: "center" }}>Noch keine gespeicherten Spiele für {selectedTeam}.</p>
           ) : (
-            savedMatches.map((match) => (
+            filteredMatches.map((match) => (
               <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "12px", marginBottom: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
                 
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#666", marginBottom: "6px" }}>
-                  <span>📅 {match.date} {match.team ? `(${match.team})` : ""}</span>
+                  <span>📅 {match.date}</span>
                   
                   <span 
                     onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)}
@@ -670,7 +673,6 @@ export default function MatchView() {
                   </span>
                 </div>
 
-                {/* --- HIER GEÄNDERT: LÖSCHEN GANZ NACH LINKS VOR DIE MANNSCHAFT --- */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
                     <button onClick={() => deleteSavedMatch(match.id)} title="Spiel löschen" style={{ background: "transparent", color: "#e74c3c", border: "none", borderRadius: "4px", padding: "4px 6px", cursor: "pointer", fontSize: "15px", flexShrink: 0 }}>🗑</button>
