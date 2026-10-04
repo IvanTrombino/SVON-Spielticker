@@ -317,7 +317,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             )}
           </div>
 
-          {/* NÄCHSTE SPIELE (Erweitert um Heim/Auswärts und Ort) */}
+          {/* NÄCHSTE SPIELE (Ersetzte Icons durch klaren Text) */}
           <div style={{ background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "12px", padding: "15px", marginBottom: "20px" }}>
             <h3 style={{ fontSize: "1.1rem", color: "#2146d0", margin: "0 0 12px 0" }}>
               📅 Nächste Spiele
@@ -335,7 +335,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
                       <div style={{ fontSize: "13px", color: "#333", fontWeight: "bold", marginBottom: "4px" }}>
                         {nextMatch?.opponent ? (
                           <>
-                            {nextMatch.isHome ? "🏠 vs " : "🚌 @ "}
+                            {nextMatch.isHome ? "Heimspiel gegen " : "Auswärtsspiel gegen "}
                             {nextMatch.opponent}
                           </>
                         ) : "Gegner noch offen"}
@@ -343,7 +343,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
 
                       {nextMatch?.location && (
                         <div style={{ fontSize: "11px", color: "#666", display: "flex", alignItems: "center", gap: "4px" }}>
-                          📍 {nextMatch.location}
+                          Spielort: {nextMatch.location}
                         </div>
                       )}
                     </div>
