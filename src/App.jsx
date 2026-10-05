@@ -12,7 +12,6 @@ import logo from "./assets/SVON-Wappen.png";
 export default function App() {
   const [clubId, setClubId] = useState(() => {
     const hash = window.location.hash.replace("#", "").trim();
-    // NEU: "trainer" zur Ausnahme hinzugefügt
     if (hash && hash !== "zuschauer" && hash !== "jugend" && hash !== "trainer") { 
       return hash.toLowerCase();
     }
@@ -41,7 +40,6 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "").trim();
-      // NEU: "trainer" zur Ausnahme hinzugefügt
       if (hash && hash !== "zuschauer" && hash !== "jugend" && hash !== "trainer") { 
         const cleanClub = hash.toLowerCase();
         setClubId(cleanClub);
@@ -52,7 +50,7 @@ export default function App() {
       } else if (hash === "jugend" && clubId) { 
         setView("youth");
         localStorage.setItem("svon_current_view", "youth");
-      } else if (hash === "trainer" && clubId) { // NEU: Trainer-Routing
+      } else if (hash === "trainer" && clubId) { 
         setView("coachportal");
         localStorage.setItem("svon_current_view", "coachportal");
       }
@@ -64,7 +62,7 @@ export default function App() {
       setView("public");
     } else if (window.location.hash === "#jugend" && clubId) {
       setView("youth");
-    } else if (window.location.hash === "#trainer" && clubId) { // NEU: Trainer-Routing Init
+    } else if (window.location.hash === "#trainer" && clubId) { 
       setView("coachportal");
     }
 
@@ -220,7 +218,6 @@ export default function App() {
     );
   }
 
-  // NEU: Ansicht für das Trainer-Portal
   if (view === "coachportal") {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
@@ -261,14 +258,7 @@ export default function App() {
             👀 Live-Ticker Zuschauer Ansicht
           </button>
 
-          {/* NEU: Der Button für das Jugend-Trainer Portal */}
-          <button 
-            onClick={() => { setView("coachportal"); localStorage.setItem("svon_current_view", "coachportal"); window.location.hash = "#trainer"; }}
-            style={{ padding: "15px", background: "#f39c12", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
-          >
-            📋 Jugend-Trainer Portal
-          </button>
-
+          {/* Die weiße Live-Ticker Box ist nun OBERHALB des Coach-Portals */}
           <div style={{ background: "white", padding: "18px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
             <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "15px" }}>⚽ Live-Ticker Trainer Bereich</h3>
             <form onSubmit={handleTrainerLogin}>
@@ -286,6 +276,14 @@ export default function App() {
               </button>
             </form>
           </div>
+
+          {/* Der orange Button ist nun UNTERHALB der weißen Box */}
+          <button 
+            onClick={() => { setView("coachportal"); localStorage.setItem("svon_current_view", "coachportal"); window.location.hash = "#trainer"; }}
+            style={{ padding: "15px", background: "#f39c12", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
+          >
+            📋 Jugend-Trainer Portal
+          </button>
 
           <button 
             onClick={() => {
