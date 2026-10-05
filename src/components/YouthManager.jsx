@@ -199,11 +199,13 @@ export default function YouthManager({ clubId }) {
   // States für Spieler-Filter
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
 
-  // NEU: Eigene Sortierfunktion für Mannschaften ("Aktive" immer ganz oben)
+  // Sortierfunktion für Mannschaften ("Aktive" immer ganz oben)
   const sortTeamsLogic = (a, b) => {
-    if (a.name.toLowerCase() === "aktive") return -1;
-    if (b.name.toLowerCase() === "aktive") return 1;
-    return a.name.localeCompare(b.name);
+    const nameA = a.name || "";
+    const nameB = b.name || "";
+    if (nameA.toLowerCase() === "aktive") return -1;
+    if (nameB.toLowerCase() === "aktive") return 1;
+    return nameA.localeCompare(nameB);
   };
 
   // 1. Teams laden
@@ -258,13 +260,13 @@ export default function YouthManager({ clubId }) {
   const activePlayers = allPlayers.filter(p => p.status === "aktiv");
   const inactivePlayers = allPlayers.filter(p => p.status === "abgemeldet");
 
-  // NEU: Dynamische Filter-Optionen aus den vorhandenen Spielern generieren
+  // Dynamische Filter-Optionen generieren
   const uniquePLZs = [...new Set(activePlayers.map(p => p.postalCode).filter(Boolean))].sort();
   const uniqueCities = [...new Set(activePlayers.map(p => p.city).filter(Boolean))].sort();
-  const uniqueBirthYears = [...new Set(activePlayers.map(p => p.birthYear).filter(Boolean))].sort((a, b) => b.localeCompare(a)); // Absteigend/Aufsteigend sortiert
+  const uniqueBirthYears = [...new Set(activePlayers.map(p => p.birthYear).filter(Boolean))].sort((a, b) => b.localeCompare(a)); 
   const uniqueAges = [...new Set(activePlayers.map(p => p.age).filter(Boolean))].sort((a, b) => Number(a) - Number(b));
 
-  // Aktive Spieler filtern (Jetzt mit exakter Übereinstimmung "===" wegen den Dropdowns)
+  // Aktive Spieler filtern
   const filteredActivePlayers = activePlayers.filter(p => {
     return (
       (!playerFilters.youthTeam || p.youthTeam === playerFilters.youthTeam) &&
@@ -303,7 +305,7 @@ export default function YouthManager({ clubId }) {
     acc[team] = (acc[team] || 0) + 1;
     return acc;
   }, {});
-  // Sortierung für das Dashboard: "Aktive" nach oben, Rest alphabetisch
+  
   const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => {
     if (a.toLowerCase() === "aktive") return -1;
     if (b.toLowerCase() === "aktive") return 1;
@@ -650,7 +652,7 @@ export default function YouthManager({ clubId }) {
             </div>
           )}
 
-          {/* NEU: FILTER-LEISTE MIT DROPDOWNS */}
+          {/* FILTER-LEISTE MIT DROPDOWNS */}
           <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "8px", border: "1px solid #ddd", marginBottom: "15px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "13px", fontWeight: "bold", color: "#555" }}>🔍 Filter:</span>
             
@@ -788,6 +790,7 @@ export default function YouthManager({ clubId }) {
         </div>
       )}
 
+      {/* --- TEAMS BEREICH --- */}
       {activeTab === "teams" && (
         <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "15px", color: "#333" }}>
           <h3 style={{ marginTop: 0, color: "#2146d0", borderBottom: "2px solid #eee", paddingBottom: "8px", marginBottom: "15px", fontSize: "16px" }}>Jugend-Mannschaften & Jahrgänge</h3>
@@ -916,7 +919,7 @@ export default function YouthManager({ clubId }) {
                             >
                               {isExpanded ? "▲ Details" : "▼ Details"}
                             </button>
-                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" title="Teilen">
+                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }} title="Teilen">
                               📤 Teilen
                             </button>
                             <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>Aktiv</button>
