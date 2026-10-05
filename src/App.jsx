@@ -3,15 +3,17 @@ import AdminPanel from "./components/AdminPanel";
 import MatchView from "./components/MatchView";
 import PublicView from "./components/PublicView";
 import YouthAdminPage from "./components/YouthAdminPage"; 
+import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trainer-Portal
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth"; // Firebase Auth importiert
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
   const [clubId, setClubId] = useState(() => {
     const hash = window.location.hash.replace("#", "").trim();
-    if (hash && hash !== "zuschauer" && hash !== "jugend") { 
+    // NEU: "trainer" zur Ausnahme hinzugefügt
+    if (hash && hash !== "zuschauer" && hash !== "jugend" && hash !== "trainer") { 
       return hash.toLowerCase();
     }
     return localStorage.getItem("svon_current_club") || "";
@@ -21,7 +23,6 @@ export default function App() {
     return localStorage.getItem("svon_current_view") || "home";
   });
   
-  // Überprüfung, ob ein Firebase-User eingeloggt ist (ersetzt die alte Rolle)
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -29,7 +30,6 @@ export default function App() {
   const [trainerPasswordInput, setTrainerPasswordInput] = useState("");
   const [teams, setTeams] = useState([]);
 
-  // Firebase Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setFirebaseUser(currentUser);
@@ -41,7 +41,8 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "").trim();
-      if (hash && hash !== "zuschauer" && hash !== "jugend") { 
+      // NEU: "trainer" zur Ausnahme hinzugefügt
+      if (hash && hash !== "zuschauer" && hash !== "jugend" && hash !== "trainer") { 
         const cleanClub = hash.toLowerCase();
         setClubId(cleanClub);
         localStorage.setItem("svon_current_club", cleanClub);
@@ -51,6 +52,9 @@ export default function App() {
       } else if (hash === "jugend" && clubId) { 
         setView("youth");
         localStorage.setItem("svon_current_view", "youth");
+      } else if (hash === "trainer" && clubId) { // NEU: Trainer-Routing
+        setView("coachportal");
+        localStorage.setItem("svon_current_view", "coachportal");
       }
     };
 
@@ -60,6 +64,8 @@ export default function App() {
       setView("public");
     } else if (window.location.hash === "#jugend" && clubId) {
       setView("youth");
+    } else if (window.location.hash === "#trainer" && clubId) { // NEU: Trainer-Routing Init
+      setView("coachportal");
     }
 
     return () => window.removeEventListener("hashchange", handleHashChange);
@@ -110,7 +116,6 @@ export default function App() {
   const handleTrainerLogin = (e) => {
     e.preventDefault();
     if (trainerPasswordInput === "2002") {
-      // Trainer bekommt die Rolle "trainer"
       localStorage.setItem("svon_user_role", "trainer");
       setView("match"); 
       localStorage.setItem("svon_current_view", "match");
@@ -215,6 +220,24 @@ export default function App() {
     );
   }
 
+  // NEU: Ansicht für das Trainer-Portal
+  if (view === "coachportal") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
+        <div style={{ background: "#f39c12", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>📋 Jugend-Trainer Portal ({clubId.toUpperCase()})</span>
+          <button 
+            onClick={handleBackToHome}
+            style={{ background: "white", color: "#f39c12", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+          >
+            🏠 Zur Startseite
+          </button>
+        </div>
+        <CoachPortal clubId={clubId} />
+      </div>
+    );
+  }
+
   if (view === "home") {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#f0f2f5", padding: "20px", boxSizing: "border-box" }}>
@@ -238,8 +261,16 @@ export default function App() {
             👀 Live-Ticker Zuschauer Ansicht
           </button>
 
+          {/* NEU: Der Button für das Jugend-Trainer Portal */}
+          <button 
+            onClick={() => { setView("coachportal"); localStorage.setItem("svon_current_view", "coachportal"); window.location.hash = "#trainer"; }}
+            style={{ padding: "15px", background: "#f39c12", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
+          >
+            📋 Jugend-Trainer Portal
+          </button>
+
           <div style={{ background: "white", padding: "18px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "15px" }}>📋 Live-Ticker Trainer Bereich</h3>
+            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "15px" }}>⚽ Live-Ticker Trainer Bereich</h3>
             <form onSubmit={handleTrainerLogin}>
               <input 
                 type="password" 
@@ -251,26 +282,25 @@ export default function App() {
               <button 
                 type="submit" 
                 style={{ width: "100%", padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
-                Als Trainer anmelden
+                In Ticker einloggen
               </button>
             </form>
           </div>
 
-          {/* Der Admin-Bereich führt jetzt direkt zur Firebase-Anmeldung bzw. öffnet den Admin-Bereich direkt, wenn man eingeloggt ist */}
           <button 
             onClick={() => {
               if (firebaseUser) {
                 setView("match");
                 localStorage.setItem("svon_current_view", "match");
               } else {
-                setView("youth"); // Leitet zum Login (Jugend/Admin-Login) weiter oder öffnet direkt den geschützten Bereich
+                setView("youth");
                 localStorage.setItem("svon_current_view", "youth");
                 window.location.hash = "#jugend";
               }
             }}
             style={{ padding: "15px", background: "#c0392b", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
-            🔒 Admin-Bereich (Login)
+            🔒 Jugend-Admin (Login)
           </button>
 
         </div>
@@ -336,7 +366,6 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
-          {/* NUR FÜR FIREBASE-ADMINS: JUGEND-DATENBANK BUTTON IN DER LEISTE */}
           {firebaseUser && (
             <button
               onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}

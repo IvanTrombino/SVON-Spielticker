@@ -109,7 +109,7 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
   </form>
 );
 
-// --- TRAINER FORMULAR ---
+// --- TRAINER FORMULAR (Mit neuem Passwort-Feld) ---
 const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList }) => (
   <form onSubmit={onSubmit} style={{ background: "#e8f8f5", padding: "15px", borderRadius: "10px", border: "1px solid #a3e4d7", marginBottom: "20px", color: "#333" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #a3e4d7", paddingBottom: "10px", marginBottom: "15px" }}>
@@ -137,8 +137,10 @@ const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, butt
     </div>
     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Handynummer" name="phone" value={formData.phone} onChange={handleChange} type="tel" />
-      <InputField label="E-Mail Adresse" name="email" value={formData.email} onChange={handleChange} type="email" />
+      <InputField label="E-Mail Adresse (für Login)" name="email" value={formData.email} onChange={handleChange} type="email" required={true} />
       <InputField label="Schlüssel-Nr." name="keyNumber" value={formData.keyNumber} onChange={handleChange} />
+      {/* NEUES FELD FÜR DAS PASSWORT */}
+      <InputField label="Passwort für Trainer-Login *" name="password" value={formData.password} onChange={handleChange} required={true} />
     </div>
 
     <button type="submit" disabled={isSubmitting} style={{ width: "100%", padding: "14px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
@@ -185,8 +187,8 @@ export default function YouthManager({ clubId }) {
   const [playerFormData, setPlayerFormData] = useState(initialPlayerState);
   const [editPlayerFormData, setEditPlayerFormData] = useState(null);
 
-  // States Trainer
-  const initialCoachState = { firstName: "", lastName: "", youthTeam: "", phone: "", email: "", keyNumber: "" };
+  // States Trainer (NEU: inkl. "password" im initialen State)
+  const initialCoachState = { firstName: "", lastName: "", youthTeam: "", phone: "", email: "", keyNumber: "", password: "" };
   const [coachFormData, setCoachFormData] = useState(initialCoachState);
   const [editCoachFormData, setEditCoachFormData] = useState(null);
   const [showCoachForm, setShowCoachForm] = useState(false);
