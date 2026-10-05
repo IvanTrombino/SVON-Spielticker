@@ -176,7 +176,7 @@ export default function YouthManager({ clubId }) {
   const [newTeamYears, setNewTeamYears] = useState("");
   const [newTeamCount, setNewTeamCount] = useState(1);
   
-  // NEU: States für Team-Bearbeitung
+  // States für Team-Bearbeitung
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [editTeamData, setEditTeamData] = useState({ name: "", years: "", count: 1 });
 
@@ -196,8 +196,15 @@ export default function YouthManager({ clubId }) {
   const [bulkTeam, setBulkTeam] = useState("none");
   const [isBulking, setIsBulking] = useState(false);
 
-  // NEU: States für Spieler-Filter
+  // States für Spieler-Filter
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
+
+  // NEU: Eigene Sortierfunktion für Mannschaften ("Aktive" immer ganz oben)
+  const sortTeamsLogic = (a, b) => {
+    if (a.name.toLowerCase() === "aktive") return -1;
+    if (b.name.toLowerCase() === "aktive") return 1;
+    return a.name.localeCompare(b.name);
+  };
 
   // 1. Teams laden
   useEffect(() => {
@@ -208,16 +215,17 @@ export default function YouthManager({ clubId }) {
         loadedTeams = docSnap.data().teams;
       } else {
         loadedTeams = [
+          { id: "0", name: "Aktive", years: "Erwachsene", count: 1 },
           { id: "1", name: "A-Jugend", years: "2006, 2007", count: 1 },
           { id: "2", name: "B-Jugend", years: "2008, 2009", count: 1 },
           { id: "3", name: "C-Jugend", years: "2010, 2011", count: 1 },
           { id: "4", name: "D-Jugend", years: "2012, 2013", count: 1 },
           { id: "5", name: "E-Jugend", years: "2014, 2015", count: 1 },
           { id: "6", name: "F-Jugend", years: "2016, 2017", count: 1 },
-          { id: "7", name: "Bambini", years: "2018 u. jünger", count: 0 }
+          { id: "7", name: "G-Jugend", years: "2018 u. jünger", count: 1 }
         ];
       }
-      loadedTeams.sort((a, b) => a.name.localeCompare(b.name));
+      loadedTeams.sort(sortTeamsLogic);
       setTeamSettings(loadedTeams);
     });
     return () => unsub();
@@ -250,14 +258,20 @@ export default function YouthManager({ clubId }) {
   const activePlayers = allPlayers.filter(p => p.status === "aktiv");
   const inactivePlayers = allPlayers.filter(p => p.status === "abgemeldet");
 
-  // NEU: Aktive Spieler filtern
+  // NEU: Dynamische Filter-Optionen aus den vorhandenen Spielern generieren
+  const uniquePLZs = [...new Set(activePlayers.map(p => p.postalCode).filter(Boolean))].sort();
+  const uniqueCities = [...new Set(activePlayers.map(p => p.city).filter(Boolean))].sort();
+  const uniqueBirthYears = [...new Set(activePlayers.map(p => p.birthYear).filter(Boolean))].sort((a, b) => b.localeCompare(a)); // Absteigend/Aufsteigend sortiert
+  const uniqueAges = [...new Set(activePlayers.map(p => p.age).filter(Boolean))].sort((a, b) => Number(a) - Number(b));
+
+  // Aktive Spieler filtern (Jetzt mit exakter Übereinstimmung "===" wegen den Dropdowns)
   const filteredActivePlayers = activePlayers.filter(p => {
     return (
       (!playerFilters.youthTeam || p.youthTeam === playerFilters.youthTeam) &&
-      (!playerFilters.postalCode || (p.postalCode && p.postalCode.includes(playerFilters.postalCode))) &&
-      (!playerFilters.city || (p.city && p.city.toLowerCase().includes(playerFilters.city.toLowerCase()))) &&
-      (!playerFilters.birthYear || (p.birthYear && p.birthYear.includes(playerFilters.birthYear))) &&
-      (!playerFilters.age || (p.age && p.age.includes(playerFilters.age)))
+      (!playerFilters.postalCode || p.postalCode === playerFilters.postalCode) &&
+      (!playerFilters.city || p.city === playerFilters.city) &&
+      (!playerFilters.birthYear || p.birthYear === playerFilters.birthYear) &&
+      (!playerFilters.age || p.age === playerFilters.age)
     );
   });
 
@@ -272,7 +286,7 @@ export default function YouthManager({ clubId }) {
     }
   });
 
-  const sortedTeamsList = [...teamSettings].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedTeamsList = [...teamSettings].sort(sortTeamsLogic);
 
   // DASHBOARD BERECHNUNGEN
   const totalRegisteredTeams = teamSettings.reduce((sum, t) => sum + (Number(t.count) || 0), 0);
@@ -289,7 +303,12 @@ export default function YouthManager({ clubId }) {
     acc[team] = (acc[team] || 0) + 1;
     return acc;
   }, {});
-  const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => a.localeCompare(b));
+  // Sortierung für das Dashboard: "Aktive" nach oben, Rest alphabetisch
+  const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => {
+    if (a.toLowerCase() === "aktive") return -1;
+    if (b.toLowerCase() === "aktive") return 1;
+    return a.localeCompare(b);
+  });
 
   // --- CSV EXPORT ---
   const exportCSV = (type) => {
@@ -351,7 +370,6 @@ export default function YouthManager({ clubId }) {
   };
 
   const toggleSelectAll = () => {
-    // Wenn alle gefilterten ausgewählt sind -> Auswahl aufheben. Sonst alle gefilterten auswählen.
     if (selectedPlayerIds.length === filteredActivePlayers.length && filteredActivePlayers.length > 0) {
       setSelectedPlayerIds([]);
     } else {
@@ -482,7 +500,7 @@ export default function YouthManager({ clubId }) {
   const handleAddTeam = async () => {
     if (!newTeamName.trim() || !newTeamYears.trim()) return alert("Bitte ausfüllen!");
     const updated = [...teamSettings, { id: Date.now().toString(), name: newTeamName.trim(), years: newTeamYears.trim(), count: Number(newTeamCount) || 0 }];
-    updated.sort((a, b) => a.name.localeCompare(b.name));
+    updated.sort(sortTeamsLogic);
     setTeamSettings(updated); 
     await saveTeamsToDb(updated); 
     setNewTeamName(""); 
@@ -503,7 +521,7 @@ export default function YouthManager({ clubId }) {
     await saveTeamsToDb(updated);
   };
 
-  // NEU: Bearbeitung für Teams (Jahrgänge & Name anpassen)
+  // Bearbeitung für Teams
   const handleStartEditTeam = (team) => {
     setEditingTeamId(team.id);
     setEditTeamData({ name: team.name, years: team.years, count: team.count || 0 });
@@ -515,7 +533,7 @@ export default function YouthManager({ clubId }) {
     const updated = teamSettings.map(t => 
       t.id === editingTeamId ? { ...t, name: editTeamData.name.trim(), years: editTeamData.years.trim(), count: Number(editTeamData.count) } : t
     );
-    updated.sort((a, b) => a.name.localeCompare(b.name));
+    updated.sort(sortTeamsLogic);
     setTeamSettings(updated);
     await saveTeamsToDb(updated);
     setEditingTeamId(null);
@@ -536,7 +554,7 @@ export default function YouthManager({ clubId }) {
         <TabButton id="dashboard" label="📊 Dashboard" />
         <TabButton id="add" label="➕ Neuer Spieler" />
         <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
-        <TabButton id="coaches" label={`🧑‍‍🏫 Trainer (${coaches.length})`} />
+        <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
         <TabButton id="teams" label="⚙️ Teams" />
         <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
       </div>
@@ -600,7 +618,7 @@ export default function YouthManager({ clubId }) {
       )}
 
       {activeTab === "add" && <PlayerForm formData={playerFormData} handleChange={(e) => handlePlayerChange(e, false)} onSubmit={handleAddPlayer} isSubmitting={isSubmitting} title="Neuen Spieler anlegen" buttonText="💾 Spieler anlegen" teamsList={sortedTeamsList} />}
-      {activeTab === "edit" && editPlayerFormData && <PlayerForm formData={editPlayerFormData} handleChange={(e) => handlePlayerChange(e, true)} onSubmit={handleUpdatePlayer} isSubmitting={isSubmitting} title={`✏️️ Bearbeiten: ${editPlayerFormData.firstName} ${editPlayerFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setActiveTab("active")} teamsList={sortedTeamsList} />}
+      {activeTab === "edit" && editPlayerFormData && <PlayerForm formData={editPlayerFormData} handleChange={(e) => handlePlayerChange(e, true)} onSubmit={handleUpdatePlayer} isSubmitting={isSubmitting} title={`✏️ Bearbeiten: ${editPlayerFormData.firstName} ${editPlayerFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setActiveTab("active")} teamsList={sortedTeamsList} />}
 
       {activeTab === "active" && (
         <div style={{ background: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", padding: "10px", color: "#333" }}>
@@ -632,20 +650,40 @@ export default function YouthManager({ clubId }) {
             </div>
           )}
 
-          {/* NEU: FILTER-LEISTE */}
+          {/* NEU: FILTER-LEISTE MIT DROPDOWNS */}
           <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "8px", border: "1px solid #ddd", marginBottom: "15px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "13px", fontWeight: "bold", color: "#555" }}>🔍 Filter:</span>
             
+            {/* Jugend-Filter */}
             <select value={playerFilters.youthTeam} onChange={e => setPlayerFilters({...playerFilters, youthTeam: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", flex: "1 1 120px" }}>
               <option value="">Alle Mannschaften</option>
               <option value="Ohne Team">-- Ohne Team --</option>
               {sortedTeamsList.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
             
-            <input type="text" placeholder="PLZ" value={playerFilters.postalCode} onChange={e => setPlayerFilters({...playerFilters, postalCode: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", width: "70px", flex: "1 1 70px" }} />
-            <input type="text" placeholder="Wohnort" value={playerFilters.city} onChange={e => setPlayerFilters({...playerFilters, city: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", flex: "1 1 120px" }} />
-            <input type="text" placeholder="Jahrgang" value={playerFilters.birthYear} onChange={e => setPlayerFilters({...playerFilters, birthYear: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", width: "80px", flex: "1 1 80px" }} />
-            <input type="text" placeholder="Alter" value={playerFilters.age} onChange={e => setPlayerFilters({...playerFilters, age: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", width: "60px", flex: "1 1 60px" }} />
+            {/* PLZ-Filter (Dynamisch) */}
+            <select value={playerFilters.postalCode} onChange={e => setPlayerFilters({...playerFilters, postalCode: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", flex: "1 1 80px" }}>
+              <option value="">Alle PLZ</option>
+              {uniquePLZs.map(plz => <option key={plz} value={plz}>{plz}</option>)}
+            </select>
+
+            {/* Wohnort-Filter (Dynamisch) */}
+            <select value={playerFilters.city} onChange={e => setPlayerFilters({...playerFilters, city: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", flex: "1 1 100px" }}>
+              <option value="">Alle Wohnorte</option>
+              {uniqueCities.map(city => <option key={city} value={city}>{city}</option>)}
+            </select>
+
+            {/* Jahrgang-Filter (Dynamisch) */}
+            <select value={playerFilters.birthYear} onChange={e => setPlayerFilters({...playerFilters, birthYear: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", flex: "1 1 80px" }}>
+              <option value="">Alle Jahrgänge</option>
+              {uniqueBirthYears.map(year => <option key={year} value={year}>{year}</option>)}
+            </select>
+
+            {/* Alter-Filter (Dynamisch) */}
+            <select value={playerFilters.age} onChange={e => setPlayerFilters({...playerFilters, age: e.target.value})} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", flex: "1 1 80px" }}>
+              <option value="">Jedes Alter</option>
+              {uniqueAges.map(age => <option key={age} value={age}>{age} Jahre</option>)}
+            </select>
             
             <button onClick={() => setPlayerFilters({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" })} style={{ padding: "8px 12px", background: "#7f8c8d", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>
               Zurücksetzen
@@ -670,7 +708,6 @@ export default function YouthManager({ clubId }) {
                     <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Name, Vorname</th>
                     <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Jugend</th>
                     <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Jg.</th>
-                    {/* NEUE SPALTE WOHNORT */}
                     <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Wohnort</th>
                     <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Pass-Nr.</th>
                     <th style={{ padding: "10px", textAlign: "right", fontSize: "13px" }}>Aktion</th>
@@ -692,7 +729,6 @@ export default function YouthManager({ clubId }) {
                         <td onClick={() => { setEditPlayerFormData({ ...initialPlayerState, ...p }); setActiveTab("edit"); }} style={{ padding: "10px", fontWeight: "bold", color: "#2980b9", cursor: "pointer", textDecoration: "underline", fontSize: "13px" }}>{p.lastName}, {p.firstName} ✏️</td>
                         <td style={{ padding: "10px", textAlign: "center", color: "#555", fontWeight: "bold", fontSize: "13px" }}>{p.youthTeam || "-"}</td>
                         <td style={{ padding: "10px", textAlign: "center", color: "#333", fontSize: "13px" }}>{p.birthYear || "?"}</td>
-                        {/* NEUER INHALT WOHNORT */}
                         <td style={{ padding: "10px", color: "#555", fontSize: "13px" }}>{p.city || "-"}</td>
                         <td style={{ padding: "10px", textAlign: "center", color: p.passNumber ? "#333" : "#aaa", fontWeight: "bold", fontSize: "13px" }}>{p.passNumber || "-"}</td>
                         <td style={{ padding: "10px", textAlign: "right" }}><button onClick={() => setPlayerToDeregister(p)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>Abmelden</button></td>
@@ -880,7 +916,7 @@ export default function YouthManager({ clubId }) {
                             >
                               {isExpanded ? "▲ Details" : "▼ Details"}
                             </button>
-                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }} title="Teilen">
+                            <button onClick={() => shareDeregistration(p, details)} style={{ background: "#2980b9", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" title="Teilen">
                               📤 Teilen
                             </button>
                             <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>Aktiv</button>
@@ -916,7 +952,7 @@ export default function YouthManager({ clubId }) {
         <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "10px", boxSizing: "border-box" }}>
           <form onSubmit={confirmDeregistration} style={{ background: "white", padding: "20px", borderRadius: "10px", width: "100%", maxWidth: "450px", boxShadow: "0 4px 10px rgba(0,0,0,0.2)", color: "#333", maxHeight: "90vh", overflowY: "auto" }}>
             <h3 style={{ marginTop: 0, color: "#c0392b", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>
-              ⚠️️ Abmeldung: {playerToDeregister.firstName} {playerToDeregister.lastName}
+              ⚠️ Abmeldung: {playerToDeregister.firstName} {playerToDeregister.lastName}
             </h3>
             
             <p style={{ fontSize: "12px", color: "#666", marginBottom: "12px" }}>
