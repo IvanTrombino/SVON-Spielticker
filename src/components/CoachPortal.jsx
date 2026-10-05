@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function CoachPortal({ clubId }) {
@@ -143,7 +143,7 @@ export default function CoachPortal({ clubId }) {
     };
   }, [loggedInCoach, clubId, activeViewTeam, editingTrainingId]);
 
-  // --- 4. TRAININGS-ANWESENHEIT SPEICHERN & BEARBEITEN ---
+  // --- 4. TRAININGS-ANWESENHEIT SPEICHERN, BEARBEITEN & LÖSCHEN ---
   const handleAttendanceChange = (playerId, status) => {
     setAttendanceRecords(prev => ({ ...prev, [playerId]: status }));
   };
@@ -166,6 +166,22 @@ export default function CoachPortal({ clubId }) {
     const initialAttendance = {};
     teamPlayers.forEach(p => initialAttendance[p.id] = "anwesend");
     setAttendanceRecords(initialAttendance);
+  };
+
+  // NEU: Lösch-Funktion für ein Training
+  const deleteTrainingSession = async (trainingId) => {
+    if (!window.confirm("Möchtest du diese Trainingseinheit wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")) return;
+    
+    try {
+      await deleteDoc(doc(db, "youth_trainings", trainingId));
+      if (editingTrainingId === trainingId) {
+        cancelEditing(); // Falls das gelöschte Training gerade bearbeitet wurde, brechen wir die Bearbeitung ab
+      }
+      alert("Training erfolgreich gelöscht!");
+    } catch (error) {
+      console.error(error);
+      alert("Fehler beim Löschen des Trainings.");
+    }
   };
 
   const saveTrainingSession = async () => {
@@ -317,7 +333,7 @@ export default function CoachPortal({ clubId }) {
         <TabButton id="stats" icon="📊" label="Statistik" />
       </div>
 
-      {/* TAB: MEIN TEAM (Tabelle statt Kacheln) */}
+      {/* TAB: MEIN TEAM (Tabelle) */}
       {activeTab === "team" && (
         <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
           <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Spielerliste ({teamPlayers.length})</h3>
@@ -400,7 +416,7 @@ export default function CoachPortal({ clubId }) {
                           <button 
                             onClick={() => handleAttendanceChange(p.id, "anwesend")}
                             style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "anwesend" ? "#27ae60" : "#ecf0f1", color: status === "anwesend" ? "white" : "#7f8c8d" }}
-                          >✅ Anwesend</button>
+                          >✅ Da</button>
                           <button 
                             onClick={() => handleAttendanceChange(p.id, "entschuldigt")}
                             style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "entschuldigt" ? "#f39c12" : "#ecf0f1", color: status === "entschuldigt" ? "white" : "#7f8c8d" }}
@@ -426,7 +442,7 @@ export default function CoachPortal({ clubId }) {
             )}
           </div>
 
-          {/* HISTORIE MIT DETAILS & BEARBEITEN */}
+          {/* HISTORIE MIT DETAILS, BEARBEITEN & LÖSCHEN */}
           <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Letzte Trainingseinheiten</h3>
             {pastTrainings.length === 0 ? (
@@ -436,7 +452,6 @@ export default function CoachPortal({ clubId }) {
                 {pastTrainings.map(t => {
                   const isExpanded = expandedTrainingId === t.id;
                   
-                  // Helper um Namen in Kategorien zu sortieren
                   const presentPlayers = [];
                   const excusedPlayers = [];
                   const missingPlayers = [];
@@ -463,22 +478,34 @@ export default function CoachPortal({ clubId }) {
                             <div style={{ fontWeight: "bold", color: "#27ae60", fontSize: "15px" }}>{t.presentCount} / {t.totalPlayers}</div>
                             <div style={{ fontSize: "11px", color: "#777" }}>Anwesend</div>
                           </div>
+                          
                           <button 
                             onClick={() => setExpandedTrainingId(isExpanded ? null : t.id)}
                             style={{ background: "#34495e", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
                           >
                             {isExpanded ? "▲ Zu" : "▼ Details"}
                           </button>
+                          
                           <button 
                             onClick={() => startEditingTraining(t)}
                             style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                            title="Bearbeiten"
                           >
                             ✏️
+                          </button>
+
+                          {/* NEUER LÖSCHEN-KNOPF */}
+                          <button 
+                            onClick={() => deleteTrainingSession(t.id)}
+                            style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                            title="Löschen"
+                          >
+                            🗑️️
                           </button>
                         </div>
                       </div>
 
-                      {/* AUSGEKLAPPTE DETAILS: Alle Spieler-Listen */}
+                      {/* AUSGEKLAPPTE DETAILS */}
                       {isExpanded && (
                         <div style={{ background: "#fff", padding: "12px", borderTop: "1px solid #c7d2fe", fontSize: "13px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -486,7 +513,7 @@ export default function CoachPortal({ clubId }) {
                               <div><strong style={{ color: "#27ae60" }}>✅ Anwesend:</strong> {presentPlayers.join(", ")}</div>
                             )}
                             {excusedPlayers.length > 0 && (
-                              <div><strong style={{ color: "#f39c12" }}>⚠️️ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>
+                              <div><strong style={{ color: "#f39c12" }}>⚠ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>
                             )}
                             {missingPlayers.length > 0 && (
                               <div><strong style={{ color: "#e74c3c" }}>❌ Fehlt:</strong> {missingPlayers.join(", ")}</div>
