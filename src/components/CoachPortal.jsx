@@ -14,9 +14,13 @@ export default function CoachPortal({ clubId }) {
   const [activeTab, setActiveTab] = useState("team");
   const [teamPlayers, setTeamPlayers] = useState([]);
   
+  // --- ZUSATZ-STATES FÜR JUGENDLEITUNG ---
+  const [availableTeams, setAvailableTeams] = useState([]);
+  const [selectedTeam, setSelectedTeam] = useState("");
+
   // --- ATTENDANCE STATES ---
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split("T")[0]);
-  const [attendanceRecords, setAttendanceRecords] = useState({}); // { playerId: "anwesend" | "entschuldigt" | "unentschuldigt" }
+  const [attendanceRecords, setAttendanceRecords] = useState({}); 
   const [isSavingTraining, setIsSavingTraining] = useState(false);
   const [pastTrainings, setPastTrainings] = useState([]);
   const [editingTrainingId, setEditingTrainingId] = useState(null);
@@ -61,23 +65,51 @@ export default function CoachPortal({ clubId }) {
     setEmail("");
     setPassword("");
     setTeamPlayers([]);
+    setSelectedTeam("");
   };
 
-  // --- 2. DATEN LADEN WENN EINGELOGGT ---
-  useEffect(() => {
-    if (!loggedInCoach) return;
+  // --- HILFSVARIABLEN FÜR DIE JUGENDLEITUNG ---
+  const isJugendleitung = loggedInCoach?.youthTeam === "Jugendleitung";
+  const activeViewTeam = isJugendleitung ? selectedTeam : loggedInCoach?.youthTeam;
 
-    // Spieler der eigenen Mannschaft laden
+  // --- 2. TEAMS LADEN (NUR FÜR JUGENDLEITUNG) ---
+  useEffect(() => {
+    if (!clubId || !isJugendleitung) return;
+    
+    const unsub = onSnapshot(doc(db, "youth_settings", clubId), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().teams) {
+        let loadedTeams = docSnap.data().teams;
+        loadedTeams.sort((a, b) => {
+          const nameA = a.name || "";
+          const nameB = b.name || "";
+          if (nameA.toLowerCase() === "aktive") return -1;
+          if (nameB.toLowerCase() === "aktive") return 1;
+          return nameA.localeCompare(nameB);
+        });
+        
+        setAvailableTeams(loadedTeams);
+        if (loadedTeams.length > 0 && !selectedTeam) {
+          setSelectedTeam(loadedTeams[0].name);
+        }
+      }
+    });
+    return () => unsub();
+  }, [clubId, isJugendleitung, selectedTeam]);
+
+
+  // --- 3. SPIELER & TRAININGS LADEN BASIEREND AUF "activeViewTeam" ---
+  useEffect(() => {
+    if (!loggedInCoach || !activeViewTeam) return;
+
     const qPlayers = query(
       collection(db, "youth_players"), 
       where("clubId", "==", clubId),
-      where("youthTeam", "==", loggedInCoach.youthTeam),
+      where("youthTeam", "==", activeViewTeam),
       where("status", "==", "aktiv")
     );
 
     const unsubPlayers = onSnapshot(qPlayers, (snapshot) => {
       const players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Alphabetisch sortieren (Nachname, dann Vorname)
       players.sort((a, b) => {
         const nameA = (a.lastName || "").toLowerCase();
         const nameB = (b.lastName || "").toLowerCase();
@@ -86,7 +118,6 @@ export default function CoachPortal({ clubId }) {
       });
       setTeamPlayers(players);
 
-      // Nur initialisieren, wenn wir NICHT gerade ein altes Training bearbeiten
       if (!editingTrainingId) {
         const initialAttendance = {};
         players.forEach(p => initialAttendance[p.id] = "anwesend");
@@ -94,16 +125,15 @@ export default function CoachPortal({ clubId }) {
       }
     });
 
-    // Vergangene Trainings dieser Mannschaft laden
     const qTrainings = query(
       collection(db, "youth_trainings"),
       where("clubId", "==", clubId),
-      where("team", "==", loggedInCoach.youthTeam)
+      where("team", "==", activeViewTeam)
     );
 
     const unsubTrainings = onSnapshot(qTrainings, (snapshot) => {
       const trainings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      trainings.sort((a, b) => new Date(b.date) - new Date(a.date)); // Neueste zuerst
+      trainings.sort((a, b) => new Date(b.date) - new Date(a.date));
       setPastTrainings(trainings);
     });
 
@@ -111,9 +141,9 @@ export default function CoachPortal({ clubId }) {
       unsubPlayers();
       unsubTrainings();
     };
-  }, [loggedInCoach, clubId, editingTrainingId]);
+  }, [loggedInCoach, clubId, activeViewTeam, editingTrainingId]);
 
-  // --- 3. TRAININGS-ANWESENHEIT SPEICHERN & BEARBEITEN ---
+  // --- 4. TRAININGS-ANWESENHEIT SPEICHERN & BEARBEITEN ---
   const handleAttendanceChange = (playerId, status) => {
     setAttendanceRecords(prev => ({ ...prev, [playerId]: status }));
   };
@@ -122,7 +152,6 @@ export default function CoachPortal({ clubId }) {
     setEditingTrainingId(training.id);
     setTrainingDate(training.date);
     
-    // Falls inzwischen neue Spieler dazukamen, setzen wir sie standardmäßig auf "anwesend"
     const loadedAttendance = { ...training.attendance };
     teamPlayers.forEach(p => {
       if (!loadedAttendance[p.id]) loadedAttendance[p.id] = "anwesend";
@@ -148,7 +177,7 @@ export default function CoachPortal({ clubId }) {
       
       const payload = {
         clubId,
-        team: loggedInCoach.youthTeam,
+        team: activeViewTeam,
         date: trainingDate,
         coachId: loggedInCoach.id,
         coachName: `${loggedInCoach.firstName} ${loggedInCoach.lastName}`,
@@ -164,7 +193,6 @@ export default function CoachPortal({ clubId }) {
       } else {
         await addDoc(collection(db, "youth_trainings"), { ...payload, createdAt: serverTimestamp() });
         alert("Neues Training erfolgreich gespeichert!");
-        // Reset nach dem Speichern
         const initialAttendance = {};
         teamPlayers.forEach(p => initialAttendance[p.id] = "anwesend");
         setAttendanceRecords(initialAttendance);
@@ -177,7 +205,7 @@ export default function CoachPortal({ clubId }) {
     }
   };
 
-  // --- 4. STATISTIK BERECHNEN ---
+  // --- 5. STATISTIK BERECHNEN ---
   const getPlayerStats = () => {
     const stats = teamPlayers.map(player => {
       let anwesend = 0;
@@ -196,7 +224,6 @@ export default function CoachPortal({ clubId }) {
       return { ...player, anwesend, entschuldigt, unentschuldigt, total, rate };
     });
 
-    // Nach Trainingsbeteiligung absteigend sortieren
     return stats.sort((a, b) => b.rate - a.rate);
   };
 
@@ -255,9 +282,28 @@ export default function CoachPortal({ clubId }) {
       
       {/* HEADERBAR */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
           <h2 style={{ margin: 0, color: "#2146d0", fontSize: "18px" }}>👋 Hallo, {loggedInCoach.firstName}</h2>
-          <div style={{ fontSize: "13px", color: "#555", fontWeight: "bold", marginTop: "4px" }}>Zuständig für: {loggedInCoach.youthTeam}</div>
+          
+          {isJugendleitung ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+              <span style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>Ansicht:</span>
+              <select 
+                value={selectedTeam} 
+                onChange={(e) => {
+                  setSelectedTeam(e.target.value);
+                  cancelEditing(); 
+                }}
+                style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", fontWeight: "bold", color: "#34495e" }}
+              >
+                {availableTeams.map(t => (
+                  <option key={t.id} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div style={{ fontSize: "13px", color: "#555", fontWeight: "bold", marginTop: "4px" }}>Zuständig für: {loggedInCoach.youthTeam}</div>
+          )}
         </div>
         <button onClick={handleLogout} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
           Abmelden
@@ -390,15 +436,17 @@ export default function CoachPortal({ clubId }) {
                 {pastTrainings.map(t => {
                   const isExpanded = expandedTrainingId === t.id;
                   
-                  // Helper um Namen der Fehlenden/Entschuldigten zu ermitteln
-                  const missingPlayers = [];
+                  // Helper um Namen in Kategorien zu sortieren
+                  const presentPlayers = [];
                   const excusedPlayers = [];
+                  const missingPlayers = [];
                   
                   Object.entries(t.attendance || {}).forEach(([playerId, status]) => {
                     const player = teamPlayers.find(p => p.id === playerId);
                     if (player) {
-                      if (status === "unentschuldigt") missingPlayers.push(player.firstName);
+                      if (status === "anwesend") presentPlayers.push(player.firstName);
                       if (status === "entschuldigt") excusedPlayers.push(player.firstName);
+                      if (status === "unentschuldigt") missingPlayers.push(player.firstName);
                     }
                   });
 
@@ -430,21 +478,23 @@ export default function CoachPortal({ clubId }) {
                         </div>
                       </div>
 
-                      {/* AUSGEKLAPPTE DETAILS: Wer hat gefehlt? */}
+                      {/* AUSGEKLAPPTE DETAILS: Alle Spieler-Listen */}
                       {isExpanded && (
                         <div style={{ background: "#fff", padding: "12px", borderTop: "1px solid #c7d2fe", fontSize: "13px" }}>
-                          {excusedPlayers.length === 0 && missingPlayers.length === 0 ? (
-                            <div style={{ color: "#27ae60", fontWeight: "bold" }}>Alle Spieler waren anwesend! 🌟</div>
-                          ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                              {excusedPlayers.length > 0 && (
-                                <div><strong style={{ color: "#f39c12" }}>Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>
-                              )}
-                              {missingPlayers.length > 0 && (
-                                <div><strong style={{ color: "#e74c3c" }}>Unentschuldigt:</strong> {missingPlayers.join(", ")}</div>
-                              )}
-                            </div>
-                          )}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {presentPlayers.length > 0 && (
+                              <div><strong style={{ color: "#27ae60" }}>✅ Anwesend:</strong> {presentPlayers.join(", ")}</div>
+                            )}
+                            {excusedPlayers.length > 0 && (
+                              <div><strong style={{ color: "#f39c12" }}>⚠️️ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>
+                            )}
+                            {missingPlayers.length > 0 && (
+                              <div><strong style={{ color: "#e74c3c" }}>❌ Fehlt:</strong> {missingPlayers.join(", ")}</div>
+                            )}
+                            {presentPlayers.length === 0 && excusedPlayers.length === 0 && missingPlayers.length === 0 && (
+                              <div style={{ color: "#7f8c8d", fontStyle: "italic" }}>Keine Spielerdaten für dieses Training gefunden (evtl. Mannschaft gewechselt).</div>
+                            )}
+                          </div>
                         </div>
                       )}
 
