@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, addDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function CoachPortal({ clubId }) {
@@ -19,6 +19,8 @@ export default function CoachPortal({ clubId }) {
   const [attendanceRecords, setAttendanceRecords] = useState({}); // { playerId: "anwesend" | "entschuldigt" | "unentschuldigt" }
   const [isSavingTraining, setIsSavingTraining] = useState(false);
   const [pastTrainings, setPastTrainings] = useState([]);
+  const [editingTrainingId, setEditingTrainingId] = useState(null);
+  const [expandedTrainingId, setExpandedTrainingId] = useState(null);
 
   // --- 1. LOGIN LOGIK ---
   const handleLogin = async (e) => {
@@ -75,13 +77,21 @@ export default function CoachPortal({ clubId }) {
 
     const unsubPlayers = onSnapshot(qPlayers, (snapshot) => {
       const players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      players.sort((a, b) => (a.lastName || "").localeCompare(b.lastName || ""));
+      // Alphabetisch sortieren (Nachname, dann Vorname)
+      players.sort((a, b) => {
+        const nameA = (a.lastName || "").toLowerCase();
+        const nameB = (b.lastName || "").toLowerCase();
+        if (nameA === nameB) return (a.firstName || "").localeCompare(b.firstName || "");
+        return nameA.localeCompare(nameB);
+      });
       setTeamPlayers(players);
 
-      // Initialen Anwesenheits-State setzen (Standard: "anwesend")
-      const initialAttendance = {};
-      players.forEach(p => initialAttendance[p.id] = "anwesend");
-      setAttendanceRecords(initialAttendance);
+      // Nur initialisieren, wenn wir NICHT gerade ein altes Training bearbeiten
+      if (!editingTrainingId) {
+        const initialAttendance = {};
+        players.forEach(p => initialAttendance[p.id] = "anwesend");
+        setAttendanceRecords(initialAttendance);
+      }
     });
 
     // Vergangene Trainings dieser Mannschaft laden
@@ -101,11 +111,32 @@ export default function CoachPortal({ clubId }) {
       unsubPlayers();
       unsubTrainings();
     };
-  }, [loggedInCoach, clubId]);
+  }, [loggedInCoach, clubId, editingTrainingId]);
 
-  // --- 3. TRAININGS-ANWESENHEIT SPEICHERN ---
+  // --- 3. TRAININGS-ANWESENHEIT SPEICHERN & BEARBEITEN ---
   const handleAttendanceChange = (playerId, status) => {
     setAttendanceRecords(prev => ({ ...prev, [playerId]: status }));
+  };
+
+  const startEditingTraining = (training) => {
+    setEditingTrainingId(training.id);
+    setTrainingDate(training.date);
+    
+    // Falls inzwischen neue Spieler dazukamen, setzen wir sie standardmäßig auf "anwesend"
+    const loadedAttendance = { ...training.attendance };
+    teamPlayers.forEach(p => {
+      if (!loadedAttendance[p.id]) loadedAttendance[p.id] = "anwesend";
+    });
+    setAttendanceRecords(loadedAttendance);
+    window.scrollTo(0, 0);
+  };
+
+  const cancelEditing = () => {
+    setEditingTrainingId(null);
+    setTrainingDate(new Date().toISOString().split("T")[0]);
+    const initialAttendance = {};
+    teamPlayers.forEach(p => initialAttendance[p.id] = "anwesend");
+    setAttendanceRecords(initialAttendance);
   };
 
   const saveTrainingSession = async () => {
@@ -115,7 +146,7 @@ export default function CoachPortal({ clubId }) {
     try {
       const presentCount = Object.values(attendanceRecords).filter(s => s === "anwesend").length;
       
-      await addDoc(collection(db, "youth_trainings"), {
+      const payload = {
         clubId,
         team: loggedInCoach.youthTeam,
         date: trainingDate,
@@ -124,10 +155,20 @@ export default function CoachPortal({ clubId }) {
         attendance: attendanceRecords,
         presentCount,
         totalPlayers: teamPlayers.length,
-        createdAt: serverTimestamp()
-      });
-      
-      alert("Training erfolgreich gespeichert!");
+      };
+
+      if (editingTrainingId) {
+        await updateDoc(doc(db, "youth_trainings", editingTrainingId), payload);
+        alert("Trainingseinheit erfolgreich aktualisiert!");
+        cancelEditing();
+      } else {
+        await addDoc(collection(db, "youth_trainings"), { ...payload, createdAt: serverTimestamp() });
+        alert("Neues Training erfolgreich gespeichert!");
+        // Reset nach dem Speichern
+        const initialAttendance = {};
+        teamPlayers.forEach(p => initialAttendance[p.id] = "anwesend");
+        setAttendanceRecords(initialAttendance);
+      }
     } catch (error) {
       console.error(error);
       alert("Fehler beim Speichern der Trainingseinheit.");
@@ -135,6 +176,30 @@ export default function CoachPortal({ clubId }) {
       setIsSavingTraining(false);
     }
   };
+
+  // --- 4. STATISTIK BERECHNEN ---
+  const getPlayerStats = () => {
+    const stats = teamPlayers.map(player => {
+      let anwesend = 0;
+      let entschuldigt = 0;
+      let unentschuldigt = 0;
+      let total = pastTrainings.length;
+
+      pastTrainings.forEach(t => {
+        const status = t.attendance[player.id];
+        if (status === "anwesend") anwesend++;
+        else if (status === "entschuldigt") entschuldigt++;
+        else if (status === "unentschuldigt") unentschuldigt++;
+      });
+
+      const rate = total > 0 ? Math.round((anwesend / total) * 100) : 0;
+      return { ...player, anwesend, entschuldigt, unentschuldigt, total, rate };
+    });
+
+    // Nach Trainingsbeteiligung absteigend sortieren
+    return stats.sort((a, b) => b.rate - a.rate);
+  };
+
 
   // --- RENDER: LOGIN BILDSCHIRM ---
   if (!loggedInCoach) {
@@ -186,10 +251,10 @@ export default function CoachPortal({ clubId }) {
   );
 
   return (
-    <div style={{ maxWidth: "800px", margin: "0 auto", padding: "15px", fontFamily: "sans-serif", color: "#333", boxSizing: "border-box" }}>
+    <div style={{ maxWidth: "900px", margin: "0 auto", padding: "15px", fontFamily: "sans-serif", color: "#333", boxSizing: "border-box" }}>
       
       {/* HEADERBAR */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
         <div>
           <h2 style={{ margin: 0, color: "#2146d0", fontSize: "18px" }}>👋 Hallo, {loggedInCoach.firstName}</h2>
           <div style={{ fontSize: "13px", color: "#555", fontWeight: "bold", marginTop: "4px" }}>Zuständig für: {loggedInCoach.youthTeam}</div>
@@ -200,12 +265,13 @@ export default function CoachPortal({ clubId }) {
       </div>
 
       {/* NAVIGATION */}
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
         <TabButton id="team" icon="👦" label="Mein Team" />
         <TabButton id="attendance" icon="📋" label="Trainingserfassung" />
+        <TabButton id="stats" icon="📊" label="Statistik" />
       </div>
 
-      {/* TAB: MEIN TEAM */}
+      {/* TAB: MEIN TEAM (Tabelle statt Kacheln) */}
       {activeTab === "team" && (
         <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
           <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Spielerliste ({teamPlayers.length})</h3>
@@ -213,23 +279,39 @@ export default function CoachPortal({ clubId }) {
           {teamPlayers.length === 0 ? (
             <p style={{ color: "#777", textAlign: "center" }}>Dir sind aktuell keine Spieler zugewiesen.</p>
           ) : (
-            <div style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))" }}>
-              {teamPlayers.map(p => (
-                <div key={p.id} style={{ background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "8px", padding: "12px" }}>
-                  <div style={{ fontWeight: "bold", fontSize: "15px", color: "#2c3e50" }}>{p.firstName} {p.lastName}</div>
-                  <div style={{ fontSize: "12px", color: "#7f8c8d", marginBottom: "8px" }}>Jg. {p.birthYear || "?"}</div>
-                  
-                  <div style={{ fontSize: "13px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                    {p.fatherName && <div>👨 {p.fatherName}: <a href={`tel:${p.fatherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.fatherPhone}</a></div>}
-                    {p.motherName && <div>👩 {p.motherName}: <a href={`tel:${p.motherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.motherPhone}</a></div>}
-                    {p.medicalComment && (
-                      <div style={{ background: "#fdfefe", borderLeft: "3px solid #e74c3c", padding: "6px", marginTop: "6px", fontSize: "12px", color: "#c0392b" }}>
-                        <strong>Hinweis:</strong> {p.medicalComment}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                <thead style={{ background: "#2146d0", color: "white" }}>
+                  <tr>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Name</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Jg.</th>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Kontakt Papa</th>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Kontakt Mama</th>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Wichtige Hinweise</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamPlayers.map((p, i) => (
+                    <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
+                      <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "14px" }}>{p.lastName}, {p.firstName}</td>
+                      <td style={{ padding: "10px", textAlign: "center", color: "#555", fontSize: "13px" }}>{p.birthYear || "?"}</td>
+                      <td style={{ padding: "10px", fontSize: "13px" }}>
+                        {p.fatherName ? (
+                          <div>{p.fatherName}<br/><a href={`tel:${p.fatherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.fatherPhone}</a></div>
+                        ) : "-"}
+                      </td>
+                      <td style={{ padding: "10px", fontSize: "13px" }}>
+                        {p.motherName ? (
+                          <div>{p.motherName}<br/><a href={`tel:${p.motherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.motherPhone}</a></div>
+                        ) : "-"}
+                      </td>
+                      <td style={{ padding: "10px", fontSize: "12px", color: "#c0392b", fontWeight: p.medicalComment ? "bold" : "normal" }}>
+                        {p.medicalComment || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -239,16 +321,23 @@ export default function CoachPortal({ clubId }) {
       {activeTab === "attendance" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           
-          {/* ERFASSUNG */}
-          <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          {/* ERFASSUNG / BEARBEITUNG */}
+          <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", border: editingTrainingId ? "2px solid #f39c12" : "none" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #eee", paddingBottom: "10px", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
-              <h3 style={{ margin: 0, color: "#27ae60", fontSize: "16px" }}>Neues Training erfassen</h3>
-              <input 
-                type="date" 
-                value={trainingDate} 
-                onChange={e => setTrainingDate(e.target.value)} 
-                style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontWeight: "bold", color: "#333" }}
-              />
+              <h3 style={{ margin: 0, color: editingTrainingId ? "#f39c12" : "#27ae60", fontSize: "16px" }}>
+                {editingTrainingId ? "✏️ Training bearbeiten" : "Neues Training erfassen"}
+              </h3>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <input 
+                  type="date" 
+                  value={trainingDate} 
+                  onChange={e => setTrainingDate(e.target.value)} 
+                  style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontWeight: "bold", color: "#333" }}
+                />
+                {editingTrainingId && (
+                  <button onClick={cancelEditing} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "8px", cursor: "pointer", fontWeight: "bold" }}>Abbrechen</button>
+                )}
+              </div>
             </div>
 
             {teamPlayers.length === 0 ? (
@@ -260,7 +349,7 @@ export default function CoachPortal({ clubId }) {
                     const status = attendanceRecords[p.id];
                     return (
                       <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "10px", borderRadius: "8px", border: "1px solid #eee", flexWrap: "wrap", gap: "10px" }}>
-                        <span style={{ fontWeight: "bold", color: "#333", fontSize: "14px" }}>{p.firstName} {p.lastName}</span>
+                        <span style={{ fontWeight: "bold", color: "#333", fontSize: "14px" }}>{p.lastName}, {p.firstName}</span>
                         <div style={{ display: "flex", gap: "5px" }}>
                           <button 
                             onClick={() => handleAttendanceChange(p.id, "anwesend")}
@@ -283,37 +372,138 @@ export default function CoachPortal({ clubId }) {
                 <button 
                   onClick={saveTrainingSession}
                   disabled={isSavingTraining}
-                  style={{ width: "100%", padding: "14px", background: "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: isSavingTraining ? "not-allowed" : "pointer" }}
+                  style={{ width: "100%", padding: "14px", background: editingTrainingId ? "#f39c12" : "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: isSavingTraining ? "not-allowed" : "pointer" }}
                 >
-                  {isSavingTraining ? "Wird gespeichert..." : "💾 Trainingseinheit speichern"}
+                  {isSavingTraining ? "Wird gespeichert..." : (editingTrainingId ? "💾 Änderungen speichern" : "💾 Trainingseinheit speichern")}
                 </button>
               </>
             )}
           </div>
 
-          {/* HISTORIE */}
+          {/* HISTORIE MIT DETAILS & BEARBEITEN */}
           <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Letzte Trainingseinheiten</h3>
             {pastTrainings.length === 0 ? (
               <p style={{ color: "#777", fontSize: "13px" }}>Noch keine Trainings erfasst.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {pastTrainings.map(t => (
-                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#eef2ff", padding: "12px", borderRadius: "8px", border: "1px solid #c7d2fe" }}>
-                    <div>
-                      <div style={{ fontWeight: "bold", color: "#2146d0" }}>📅 {new Date(t.date).toLocaleDateString("de-DE")}</div>
-                      <div style={{ fontSize: "12px", color: "#555" }}>Erfasst von: {t.coachName}</div>
+                {pastTrainings.map(t => {
+                  const isExpanded = expandedTrainingId === t.id;
+                  
+                  // Helper um Namen der Fehlenden/Entschuldigten zu ermitteln
+                  const missingPlayers = [];
+                  const excusedPlayers = [];
+                  
+                  Object.entries(t.attendance || {}).forEach(([playerId, status]) => {
+                    const player = teamPlayers.find(p => p.id === playerId);
+                    if (player) {
+                      if (status === "unentschuldigt") missingPlayers.push(player.firstName);
+                      if (status === "entschuldigt") excusedPlayers.push(player.firstName);
+                    }
+                  });
+
+                  return (
+                    <div key={t.id} style={{ background: "#eef2ff", borderRadius: "8px", border: "1px solid #c7d2fe", overflow: "hidden" }}>
+                      
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px" }}>
+                        <div>
+                          <div style={{ fontWeight: "bold", color: "#2146d0" }}>📅 {new Date(t.date).toLocaleDateString("de-DE")}</div>
+                          <div style={{ fontSize: "12px", color: "#555" }}>Erfasst von: {t.coachName}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                          <div style={{ textAlign: "right", marginRight: "10px" }}>
+                            <div style={{ fontWeight: "bold", color: "#27ae60", fontSize: "15px" }}>{t.presentCount} / {t.totalPlayers}</div>
+                            <div style={{ fontSize: "11px", color: "#777" }}>Anwesend</div>
+                          </div>
+                          <button 
+                            onClick={() => setExpandedTrainingId(isExpanded ? null : t.id)}
+                            style={{ background: "#34495e", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                          >
+                            {isExpanded ? "▲ Zu" : "▼ Details"}
+                          </button>
+                          <button 
+                            onClick={() => startEditingTraining(t)}
+                            style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* AUSGEKLAPPTE DETAILS: Wer hat gefehlt? */}
+                      {isExpanded && (
+                        <div style={{ background: "#fff", padding: "12px", borderTop: "1px solid #c7d2fe", fontSize: "13px" }}>
+                          {excusedPlayers.length === 0 && missingPlayers.length === 0 ? (
+                            <div style={{ color: "#27ae60", fontWeight: "bold" }}>Alle Spieler waren anwesend! 🌟</div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {excusedPlayers.length > 0 && (
+                                <div><strong style={{ color: "#f39c12" }}>Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>
+                              )}
+                              {missingPlayers.length > 0 && (
+                                <div><strong style={{ color: "#e74c3c" }}>Unentschuldigt:</strong> {missingPlayers.join(", ")}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: "bold", color: "#27ae60", fontSize: "15px" }}>{t.presentCount} / {t.totalPlayers}</div>
-                      <div style={{ fontSize: "11px", color: "#777" }}>Anwesend</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
+        </div>
+      )}
+
+      {/* TAB: STATISTIK */}
+      {activeTab === "stats" && (
+        <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #eee", paddingBottom: "10px", marginBottom: "15px" }}>
+            <h3 style={{ margin: 0, color: "#34495e", fontSize: "16px" }}>📊 Trainingsbeteiligung</h3>
+            <span style={{ fontSize: "13px", color: "#777", fontWeight: "bold" }}>{pastTrainings.length} Trainings erfasst</span>
+          </div>
+          
+          {teamPlayers.length === 0 || pastTrainings.length === 0 ? (
+            <p style={{ color: "#777", textAlign: "center" }}>Noch nicht genug Daten für eine Statistik vorhanden.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
+                <thead style={{ background: "#2146d0", color: "white" }}>
+                  <tr>
+                    <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Name</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Beteiligung</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>✅ Da</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>⚠️ Entsch.</th>
+                    <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>❌ Fehlt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getPlayerStats().map((p, i) => (
+                    <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
+                      <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "13px" }}>{p.lastName}, {p.firstName}</td>
+                      <td style={{ padding: "10px", textAlign: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                          <span style={{ fontWeight: "bold", color: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}>
+                            {p.rate}%
+                          </span>
+                          {/* Kleiner Balken für Visualisierung */}
+                          <div style={{ width: "60px", height: "8px", background: "#ecf0f1", borderRadius: "4px", overflow: "hidden" }}>
+                            <div style={{ width: `${p.rate}%`, height: "100%", background: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "10px", textAlign: "center", color: "#27ae60", fontWeight: "bold", fontSize: "13px" }}>{p.anwesend}</td>
+                      <td style={{ padding: "10px", textAlign: "center", color: "#f39c12", fontWeight: "bold", fontSize: "13px" }}>{p.entschuldigt}</td>
+                      <td style={{ padding: "10px", textAlign: "center", color: "#e74c3c", fontWeight: "bold", fontSize: "13px" }}>{p.unentschuldigt}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
