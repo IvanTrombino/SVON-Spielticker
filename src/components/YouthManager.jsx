@@ -232,7 +232,7 @@ export default function YouthManager({ clubId }) {
 
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
 
-  // Exakte manuelle Reihenfolge (Array-Index bestimmt die Position)
+  // STRIKTE WUNSCH-REIHENFOLGE (Index bestimmt die Position)
   const customSortOrder = [
     "1. Mannschaft",
     "2. Mannschaft",
@@ -247,7 +247,7 @@ export default function YouthManager({ clubId }) {
     "G-Jugend"
   ];
 
-  // Sortierfunktion, die sich starr an das obige Array hält
+  // Erzwingungs-Sortierfunktion
   const sortTeamsLogic = (a, b) => {
     const nameA = (a.name || "").trim();
     const nameB = (b.name || "").trim();
@@ -255,16 +255,16 @@ export default function YouthManager({ clubId }) {
     let indexA = customSortOrder.findIndex(item => item.toLowerCase() === nameA.toLowerCase());
     let indexB = customSortOrder.findIndex(item => item.toLowerCase() === nameB.toLowerCase());
 
-    if (indexA === -1) indexA = 999; // Unbekannte Teams ans Ende
+    if (indexA === -1) indexA = 999;
     if (indexB === -1) indexB = 999;
 
     return indexA - indexB;
   };
 
-  // 1. Teams laden
+  // 1. Teams laden und E-R-Z-W-I-N-G-E-N in Firebase zu sortieren
   useEffect(() => {
     if (!clubId) return;
-    const unsub = onSnapshot(doc(db, "youth_settings", clubId), (docSnap) => {
+    const unsub = onSnapshot(doc(db, "youth_settings", clubId), async (docSnap) => {
       let loadedTeams = [];
       if (docSnap.exists() && docSnap.data().teams) {
         loadedTeams = docSnap.data().teams;
@@ -283,8 +283,17 @@ export default function YouthManager({ clubId }) {
           { id: "10", name: "G-Jugend", years: "2018 u. jünger", count: 1 }
         ];
       }
+
+      // Sortieren erzwingen
       loadedTeams.sort(sortTeamsLogic);
       setTeamSettings(loadedTeams);
+
+      // Schreibt die sortierte Liste direkt in Firebase zurück, damit die Cloud sauber überschrieben wird!
+      try {
+        await setDoc(doc(db, "youth_settings", clubId), { teams: loadedTeams }, { merge: true });
+      } catch (err) {
+        console.error("Fehler beim automatischen Speichern der Sortierung:", err);
+      }
     });
     return () => unsub();
   }, [clubId]);
@@ -558,7 +567,10 @@ export default function YouthManager({ clubId }) {
     await deleteDoc(doc(db, "youth_coaches", coach.id));
   };
 
-  const saveTeamsToDb = async (newTeamsList) => await setDoc(doc(db, "youth_settings", clubId), { teams: newTeamsList });
+  const saveTeamsToDb = async (newTeamsList) => {
+    newTeamsList.sort(sortTeamsLogic);
+    await setDoc(doc(db, "youth_settings", clubId), { teams: newTeamsList });
+  };
   
   const handleAddTeam = async () => {
     if (!newTeamName.trim() || !newTeamYears.trim()) return alert("Bitte ausfüllen!");
@@ -580,6 +592,7 @@ export default function YouthManager({ clubId }) {
 
   const handleUpdateTeamCount = async (teamId, newCount) => {
     const updated = teamSettings.map(t => t.id === teamId ? { ...t, count: Math.max(0, Number(newCount) || 0) } : t);
+    updated.sort(sortTeamsLogic);
     setTeamSettings(updated);
     await saveTeamsToDb(updated);
   };
@@ -615,7 +628,7 @@ export default function YouthManager({ clubId }) {
         <TabButton id="dashboard" label="📊 Dashboard" />
         <TabButton id="add" label="➕ Neuer Spieler" />
         <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
-        <TabButton id="coaches" label={`🧑‍‍🏫 Trainer (${coaches.length})`} />
+        <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
         <TabButton id="teams" label="⚙️ Teams" />
         <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
       </div>
