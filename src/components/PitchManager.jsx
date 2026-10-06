@@ -5,18 +5,19 @@ import { db } from "../firebase";
 export default function PitchManager({ clubId, teams, currentUserName }) {
   // --- NAVIGATION & VIEW STATES ---
   const [activeTab, setActiveTab] = useState("schedule"); // "schedule", "book", "manage", "dashboard"
-  const [calendarView, setCalendarView] = useState("week"); // "week", "day"
+  const [calendarView, setCalendarView] = useState("week"); // "week", "3days", "day"
   const [viewDate, setViewDate] = useState(new Date());
   
   // --- FILTER STATES ---
   const [filterPitch, setFilterPitch] = useState("");
   const [filterTeam, setFilterTeam] = useState("");
   const [showMenu, setShowMenu] = useState(false);
+  const [showLegend, setShowLegend] = useState(false); // NEU: Legende anzeigen
 
   // --- CLOUD-STATE ---
   const [pitches, setPitches] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [coaches, setCoaches] = useState([]); // Für das Dashboard
+  const [teamCoaches, setTeamCoaches] = useState({}); // NEU: Trainer pro Team speichern
 
   // --- FORMULAR-STATE FÜR NEUEN PLATZ ---
   const [newPitchName, setNewPitchName] = useState("");
@@ -29,15 +30,18 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
   const [bookPitch, setBookPitch] = useState("");
   const [startTime, setStartTime] = useState("17:00");
   const [endTime, setEndTime] = useState("18:30");
-  const [bookShare, setBookShare] = useState("Ganz"); // Ganz, Halb, Viertel
-  const [repetition, setRepetition] = useState("Einmalig"); // Einmalig, Wöchentlich
-  const [bookDate, setBookDate] = useState(new Date().toISOString().split("T")[0]); // Für Einmalig
+  const [bookShare, setBookShare] = useState("Ganz"); 
+  const [repetition, setRepetition] = useState("Einmalig"); 
+  const [bookDate, setBookDate] = useState(new Date().toISOString().split("T")[0]); 
   
-  // Für Serien
   const [seriesStartDate, setSeriesStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [seriesEndDate, setSeriesEndDate] = useState("");
   const [bookDays, setBookDays] = useState([]); 
   const [bookNotes, setBookNotes] = useState("");
+
+  // --- DASHBOARD EDIT STATE ---
+  const [editingCoachForTeam, setEditingCoachForTeam] = useState(null);
+  const [tempCoachName, setTempCoachName] = useState("");
 
   // --- KONFLIKT-STATE ---
   const [conflictBooking, setConflictBooking] = useState(null);
@@ -59,13 +63,9 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
       else setBookings([]);
     });
 
-    // Trainer für das Dashboard laden
-    const unsubCoaches = onSnapshot(doc(db, "youth_settings", clubId), (snap) => {
-      if (snap.exists() && snap.data().teams) {
-          // Wir simulieren hier die Trainernamen, falls sie nicht explizit gespeichert sind
-          // In einer echten DB würdest du hier die 'youth_coaches' abfragen
-          setCoaches(snap.data().teams || []); 
-      }
+    const unsubCoaches = onSnapshot(doc(db, "ticker", `${clubId}_teamCoaches`), (snap) => {
+      if (snap.exists()) setTeamCoaches(snap.data() || {});
+      else setTeamCoaches({});
     });
 
     return () => {
@@ -92,19 +92,35 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     catch (error) { console.error("Fehler:", error); }
   };
 
-  const getWeekDates = (date) => {
-    const current = new Date(date);
-    const day = current.getDay();
-    const diff = current.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(current.setDate(diff));
-    
-    const week = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      week.push(d);
+  const syncCoaches = async (newCoaches) => {
+    try { await setDoc(doc(db, "ticker", `${clubId}_teamCoaches`), newCoaches); } 
+    catch (error) { console.error("Fehler:", error); }
+  };
+
+  // Kalender-Berechnungen (Je nach View)
+  const getDisplayDates = () => {
+    const dates = [];
+    const current = new Date(viewDate);
+
+    if (calendarView === "week") {
+      const day = current.getDay();
+      const diff = current.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(current.setDate(diff));
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(d);
+      }
+    } else if (calendarView === "3days") {
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(current);
+        d.setDate(current.getDate() + i);
+        dates.push(d);
+      }
+    } else {
+      dates.push(new Date(current)); // Day view
     }
-    return week;
+    return dates;
   };
 
   const getWeekNumber = (d) => {
@@ -115,28 +131,47 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     return Math.ceil((((date - yearStart) / 86400000) + 1)/7);
   };
 
-  const weekDatesCalc = getWeekDates(viewDate);
-  const kw = getWeekNumber(weekDatesCalc[0]);
-  const dateRangeStr = calendarView === "week" 
-    ? `${weekDatesCalc[0].getDate()}.${weekDatesCalc[0].getMonth()+1}. – ${weekDatesCalc[6].getDate()}.${weekDatesCalc[6].getMonth()+1}.${weekDatesCalc[6].getFullYear()}`
-    : `${viewDate.getDate()}.${viewDate.getMonth()+1}.${viewDate.getFullYear()}`;
+  const displayDates = getDisplayDates();
+  const kw = getWeekNumber(displayDates[0]);
+  const dateRangeStr = displayDates.length > 1 
+    ? `${displayDates[0].getDate()}.${displayDates[0].getMonth()+1}. – ${displayDates[displayDates.length-1].getDate()}.${displayDates[displayDates.length-1].getMonth()+1}.${displayDates[displayDates.length-1].getFullYear()}`
+    : `${displayDates[0].getDate()}.${displayDates[0].getMonth()+1}.${displayDates[0].getFullYear()}`;
 
   const changeDate = (offset) => {
     const newDate = new Date(viewDate);
-    if (calendarView === "week") {
-      newDate.setDate(viewDate.getDate() + (offset * 7));
-    } else {
-      newDate.setDate(viewDate.getDate() + offset);
-    }
+    if (calendarView === "week") newDate.setDate(viewDate.getDate() + (offset * 7));
+    else if (calendarView === "3days") newDate.setDate(viewDate.getDate() + (offset * 3));
+    else newDate.setDate(viewDate.getDate() + offset);
     setViewDate(newDate);
   };
 
-  const teamColors = ["#00838f", "#1976d2", "#388e3c", "#fbc02d", "#e64a19", "#d81b60", "#8e24aa", "#5d4037", "#455a64", "#2c3e50"];
+  // Feste Farben für die Teams
+  const teamColorMap = {
+    "1. Mannschaft": "#00838f", // Türkis/Dunkelblau
+    "2. Mannschaft": "#fbc02d", // Gelb
+    "3. Mannschaft": "#8e24aa", // Lila
+    "Damen": "#d81b60",         // Pink/Rot
+    "A-Jugend": "#455a64",      // Dunkelgrau
+    "B-Jugend": "#388e3c",      // Grün
+    "C-Jugend": "#5d4037",      // Braun
+    "D-Jugend": "#455a64",      // Graublau
+    "E-Jugend": "#e64a19",      // Rot
+    "F-Jugend": "#f57c00",      // Orange
+    "G-Jugend": "#fbc02d",      // Gelb
+    "Alte Herren": "#388e3c"    // Grün
+  };
+
   const getTeamColor = (teamName) => {
     if(!teamName) return "#666";
+    // Versuchen, eine vordefinierte Farbe zu finden (z.B. wenn der Name "1. Mannschaft Herren" lautet)
+    for (const [key, color] of Object.entries(teamColorMap)) {
+      if (teamName.includes(key)) return color;
+    }
+    // Fallback: Hash-basierte Farbe
     let hash = 0;
     for (let i = 0; i < teamName.length; i++) hash = teamName.charCodeAt(i) + ((hash << 5) - hash);
-    return teamColors[Math.abs(hash) % teamColors.length];
+    const fallbackColors = ["#1976d2", "#8e24aa", "#00796b"];
+    return fallbackColors[Math.abs(hash) % fallbackColors.length];
   };
 
   const toggleBookDay = (day) => {
@@ -166,9 +201,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
       let end = new Date(seriesEndDate);
       while (curr <= end) {
         const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][curr.getDay()];
-        if (bookDays.includes(dayNameFull)) {
-          datesToCheck.push(curr.toISOString().split("T")[0]);
-        }
+        if (bookDays.includes(dayNameFull)) datesToCheck.push(curr.toISOString().split("T")[0]);
         curr.setDate(curr.getDate() + 1);
       }
     }
@@ -179,7 +212,6 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     datesToCheck.forEach(dateStr => {
       const overlappingBookings = bookings.filter(b => {
         if (b.pitchId !== bookPitch) return false;
-        
         let occurs = false;
         if (b.repetition === "Einmalig") {
           occurs = (b.date === dateStr);
@@ -190,7 +222,6 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
             occurs = true;
           }
         }
-
         if (!occurs) return false;
         return (startTime < b.endTime && endTime > b.startTime);
       });
@@ -214,7 +245,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     }
 
     if (conflicts.length > 0 && repetition === "Wöchentlich") {
-      const confirmMsg = `⚠️ Achtung: An ${conflicts.length} Terminen ist der Platz bereits voll belegt und wird übersprungen (z.B. am ${conflicts[0].date} durch ${conflicts[0].team}).\n\nMöchtest du die Serie für die restlichen ${validDates.length} freien Termine trotzdem buchen?`;
+      const confirmMsg = `⚠️ Achtung: An ${conflicts.length} Terminen ist der Platz belegt und wird übersprungen.\nMöchtest du die Serie für die restlichen ${validDates.length} freien Termine trotzdem buchen?`;
       if (!window.confirm(confirmMsg)) return;
     }
 
@@ -249,7 +280,6 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
   const handleDeleteBooking = (b, cellDateString) => {
     if (b.repetition === "Wöchentlich") {
       const choice = window.prompt("Diese Buchung ist Teil einer Serie.\nTippe '1' = NUR diesen Termin stornieren.\nTippe '2' = Die KOMPLETTE Serie stornieren.");
-      
       if (choice === "1") {
         const updatedBookings = bookings.map(bk => {
           if (bk.id === b.id) return { ...bk, exceptions: [...(bk.exceptions || []), cellDateString] };
@@ -331,7 +361,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     let days = new Set();
     teamBookings.forEach(b => {
       if(b.repetition === "Wöchentlich" && b.days) {
-         b.days.forEach(d => days.add(d.substring(0,2))); // Mo, Di...
+         b.days.forEach(d => days.add(d.substring(0,2))); 
       } else if (b.date) {
          const d = new Date(b.date);
          days.add(["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][d.getDay()]);
@@ -367,7 +397,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         <button onClick={() => setActiveTab("schedule")} style={tabButtonStyle("schedule")}>📅 Kalender</button>
         <button onClick={() => setActiveTab("dashboard")} style={tabButtonStyle("dashboard")}>📋 Dashboard</button>
         <button onClick={() => setActiveTab("book")} style={tabButtonStyle("book")}>➕ Buchen</button>
-        <button onClick={() => setActiveTab("manage")} style={tabButtonStyle("manage")}>⚙️️ Plätze verwalten</button>
+        <button onClick={() => setActiveTab("manage")} style={tabButtonStyle("manage")}>⚙ Plätze verwalten</button>
       </div>
 
       {/* TAB 1: KALENDER GRID */}
@@ -381,11 +411,11 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
               {/* Header über allem */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "20px", background: "white", padding: "12px 20px", borderRadius: "10px", boxShadow: "0 2px 5px rgba(0,0,0,0.05)" }}>
                 
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                   <button onClick={() => setViewDate(new Date())} style={{ padding: "6px 12px", background: "white", border: "1px solid #27ae60", color: "#27ae60", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>📅 Heute</button>
                   <button onClick={() => changeDate(-1)} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", color: "#555" }}>&lt;</button>
                   <button onClick={() => changeDate(1)} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", color: "#555" }}>&gt;</button>
-                  <strong style={{ fontSize: "16px", marginLeft: "10px" }}>{calendarView === "week" ? `KW ${kw} · ` : ""}{dateRangeStr}</strong>
+                  <strong style={{ fontSize: "16px", marginLeft: "5px" }}>{calendarView === "week" ? `KW ${kw} · ` : ""}{dateRangeStr}</strong>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", position: "relative", flexWrap: "wrap" }}>
@@ -399,10 +429,11 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                     {teams && teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
 
-                  {/* Umschalter Tag / Woche */}
+                  {/* Umschalter Tag / 3 Tage / Woche */}
                   <div style={{ display: "flex", border: "1px solid #ccc", borderRadius: "6px", overflow: "hidden" }}>
-                     <button onClick={() => setCalendarView("day")} style={{ padding: "8px 12px", border: "none", background: calendarView === "day" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>TAG</button>
-                     <button onClick={() => setCalendarView("week")} style={{ padding: "8px 12px", border: "none", background: calendarView === "week" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>WOCHE</button>
+                     <button onClick={() => setCalendarView("day")} style={{ padding: "8px 10px", border: "none", background: calendarView === "day" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>TAG</button>
+                     <button onClick={() => setCalendarView("3days")} style={{ padding: "8px 10px", border: "none", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", background: calendarView === "3days" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>3 TAGE</button>
+                     <button onClick={() => setCalendarView("week")} style={{ padding: "8px 10px", border: "none", background: calendarView === "week" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>WOCHE</button>
                   </div>
 
                   <button onClick={() => setActiveTab("book")} style={{ background: "#27ae60", color: "white", padding: "8px 15px", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>➕ Buchen</button>
@@ -418,6 +449,23 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                 </div>
               </div>
 
+              {/* LEGENDE FÜR TEAM FARBEN */}
+              <div style={{ marginBottom: "15px", textAlign: "left" }}>
+                 <button onClick={() => setShowLegend(!showLegend)} style={{ background: "transparent", border: "none", color: "#2146d0", fontWeight: "bold", cursor: "pointer", fontSize: "12px" }}>
+                   {showLegend ? "▲ Team-Farben ausblenden" : "▼ Team-Farben anzeigen (Legende)"}
+                 </button>
+                 {showLegend && (
+                   <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "10px", background: "white", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                     {teams && teams.map(t => (
+                       <div key={t} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px" }}>
+                         <div style={{ width: "12px", height: "12px", background: getTeamColor(t), borderRadius: "3px" }}></div>
+                         {t}
+                       </div>
+                     ))}
+                   </div>
+                 )}
+              </div>
+
               {/* GRIDS PRO PLATZ */}
               {pitches.filter(p => filterPitch ? p.id === filterPitch : true).map((p, idx) => (
                 <div key={p.id} style={{ marginBottom: "20px", background: "white", borderRadius: "10px", border: "1px solid #ddd", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
@@ -428,10 +476,10 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                     <span style={{ fontSize: "12px", color: "#888" }}>{p.hasFloodlight ? "· Flutlicht" : ""} {p.hasCabin ? "· Kabine" : ""}</span>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: calendarView === "week" ? "repeat(7, 1fr)" : "1fr", background: "white", gap: "1px", borderTop: "1px solid #eee" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${displayDates.length}, 1fr)`, background: "white", gap: "1px", borderTop: "1px solid #eee" }}>
                     
                     {/* Spaltenköpfe */}
-                    {(calendarView === "week" ? weekDatesCalc : [viewDate]).map((dateObj, i) => {
+                    {displayDates.map((dateObj, i) => {
                       const isToday = dateObj.toDateString() === new Date().toDateString();
                       const dayShort = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][dateObj.getDay()];
                       const dateStr = `${dateObj.getDate()}.${dateObj.getMonth() + 1}.`;
@@ -444,7 +492,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                     })}
 
                     {/* Inhalts-Zellen */}
-                    {(calendarView === "week" ? weekDatesCalc : [viewDate]).map((dateObj, i) => {
+                    {displayDates.map((dateObj, i) => {
                       const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][dateObj.getDay()];
                       const cellDateString = dateObj.toISOString().split("T")[0];
 
@@ -469,7 +517,6 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
 
                               return (
                                 <div key={b.id} style={{ width: shareWidth, background: bColor, color: "white", padding: "8px", borderRadius: "6px", position: "relative", boxSizing: "border-box" }}>
-                                  {/* Text bricht um, damit es immer lesbar bleibt! */}
                                   <div style={{ fontSize: "12px", fontWeight: "bold", paddingRight: "14px", whiteSpace: "normal", wordWrap: "break-word", lineHeight: "1.2" }}>
                                     {b.type === "Training" ? "⚽" : "🏆"} {b.team}
                                   </div>
@@ -490,7 +537,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         </div>
       )}
 
-      {/* TAB: DASHBOARD (MANNSCHAFTEN WIE AUF BILD 8) */}
+      {/* TAB: DASHBOARD (MANNSCHAFTEN WIE AUF BILD 9) */}
       {activeTab === "dashboard" && (
         <div style={{ textAlign: "left" }}>
            <h3 style={{ fontSize: "1.4rem", margin: "0 0 20px 0", color: "#333" }}>Übersicht ({teams ? teams.length : 0} Mannschaften)</h3>
@@ -498,20 +545,53 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
               {teams && teams.map(t => {
                  const tColor = getTeamColor(t);
                  const trainingDays = getTrainingDaysForTeam(t);
+                 const coachName = teamCoaches[t] || "Noch nicht zugewiesen";
 
                  return (
                     <div key={t} style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", boxShadow: "0 2px 5px rgba(0,0,0,0.03)" }}>
-                       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "15px" }}>
-                          <div style={{ width: "14px", height: "14px", background: tColor, borderRadius: "4px" }}></div>
-                          <h4 style={{ margin: 0, fontSize: "18px", color: "#333" }}>{t}</h4>
+                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div style={{ width: "14px", height: "14px", background: tColor, borderRadius: "4px" }}></div>
+                            <h4 style={{ margin: 0, fontSize: "18px", color: "#333" }}>{t}</h4>
+                         </div>
+                         <button 
+                           onClick={() => { setEditingCoachForTeam(t); setTempCoachName(teamCoaches[t] || ""); }}
+                           style={{ background: "transparent", border: "none", color: "#666", cursor: "pointer", fontSize: "14px" }}
+                         >
+                           ✏️
+                         </button>
                        </div>
                        
                        <div style={{ fontSize: "13px", color: "#555", marginBottom: "8px", display: "flex", alignItems: "center", gap: "5px" }}>
-                          <span style={{ fontSize: "16px" }}>👤</span> Trainer: <strong>Noch nicht zugewiesen</strong> {/* Hier könnten später echte Trainerdaten stehen */}
+                          <span style={{ fontSize: "16px" }}>👤</span> Trainer: 
+                          
+                          {editingCoachForTeam === t ? (
+                            <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+                              <input 
+                                type="text" 
+                                value={tempCoachName} 
+                                onChange={(e) => setTempCoachName(e.target.value)} 
+                                style={{ padding: "4px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "12px", width: "120px" }}
+                                placeholder="Name..."
+                                autoFocus
+                              />
+                              <button onClick={() => { 
+                                const updated = { ...teamCoaches, [t]: tempCoachName };
+                                setTeamCoaches(updated);
+                                syncCoaches(updated);
+                                setEditingCoachForTeam(null);
+                              }} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", fontSize: "11px" }}>OK</button>
+                              <button onClick={() => setEditingCoachForTeam(null)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", fontSize: "11px" }}>X</button>
+                            </div>
+                          ) : (
+                            <strong style={{ color: coachName === "Noch nicht zugewiesen" ? "#999" : "#333", fontStyle: coachName === "Noch nicht zugewiesen" ? "italic" : "normal" }}>
+                              {coachName}
+                            </strong>
+                          )}
                        </div>
 
                        <div style={{ fontSize: "13px", color: "#555", display: "flex", alignItems: "center", gap: "5px" }}>
-                          <span style={{ fontSize: "16px" }}>📅</span> Trainingstage: <strong>{trainingDays}</strong>
+                          <span style={{ fontSize: "16px" }}>📅</span> Trainingstage: <strong style={{ color: trainingDays === "Keine Serie" ? "#999" : "#333" }}>{trainingDays}</strong>
                        </div>
                     </div>
                  )
@@ -520,7 +600,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         </div>
       )}
 
-      {/* TAB 2: BUCHEN FORMULAR */}
+      {/* TAB 3: BUCHEN FORMULAR */}
       {activeTab === "book" && (
         <div style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", maxWidth: "600px", margin: "0 auto", textAlign: "left" }}>
           
@@ -652,7 +732,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         </div>
       )}
 
-      {/* TAB 3: PLÄTZE VERWALTEN */}
+      {/* TAB 4: PLÄTZE VERWALTEN */}
       {activeTab === "manage" && (
         <div style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", maxWidth: "600px", margin: "0 auto", textAlign: "left" }}>
           
