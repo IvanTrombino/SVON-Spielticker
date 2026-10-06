@@ -90,7 +90,7 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
       <InputField label="Telefonnummer Mama" name="motherPhone" value={formData.motherPhone} onChange={handleChange} type="tel" />
     </div>
 
-    <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>⚠️ Wichtige Hinweise / Einschränkungen</h4>
+    <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>⚠️️ Wichtige Hinweise / Einschränkungen</h4>
     <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "20px" }}>
       <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Kommentar (z.B. Allergien, Medikamente, Sonstiges)</label>
       <textarea
@@ -109,68 +109,81 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
   </form>
 );
 
-// --- TRAINER FORMULAR (Mit NEUER MEHRFACHAUSWAHL & UID) ---
-const CoachForm = ({ formData, handleChange, handleTeamToggle, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList, isEditMode }) => (
-  <form onSubmit={onSubmit} style={{ background: "#e8f8f5", padding: "15px", borderRadius: "10px", border: "1px solid #a3e4d7", marginBottom: "20px", color: "#333" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #a3e4d7", paddingBottom: "10px", marginBottom: "15px" }}>
-      <h3 style={{ margin: 0, fontSize: "16px", color: "#117a65" }}>{title}</h3>
-      {onCancel && (
-        <button type="button" onClick={onCancel} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}>
-          ✕ Abbrechen
-        </button>
-      )}
-    </div>
-    
-    {!isEditMode && (
-      <div style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", border: "1px solid #f1c40f", marginBottom: "15px" }}>
-        <p style={{ fontSize: "12px", margin: "0 0 10px 0", color: "#7a6609" }}><strong>Wichtig:</strong> Der Trainer muss zuerst in Firebase (Authentication) angelegt werden. Trage hier seine UID ein, um Profil und Login zu verknüpfen!</p>
-        <InputField label="Firebase User-ID (UID) aus Authentication *" name="authUid" value={formData.authUid} onChange={handleChange} required={true} placeholder="z.B. X3clcMVo1lYWws..." />
+// --- TRAINER FORMULAR (Mit dynamischen Team-Checkboxen & UID) ---
+const CoachForm = ({ formData, handleChange, handleTeamToggle, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList, isEditMode }) => {
+  const fallbackTeams = [
+    { id: "1", name: "A-Jugend" },
+    { id: "2", name: "B-Jugend" },
+    { id: "3", name: "C-Jugend" },
+    { id: "4", name: "D-Jugend" },
+    { id: "5", name: "E-Jugend" },
+    { id: "6", name: "F-Jugend" },
+    { id: "7", name: "G-Jugend" }
+  ];
+  const activeTeamsList = teamsList && teamsList.length > 0 ? teamsList : fallbackTeams;
+
+  return (
+    <form onSubmit={onSubmit} style={{ background: "#e8f8f5", padding: "15px", borderRadius: "10px", border: "1px solid #a3e4d7", marginBottom: "20px", color: "#333" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #a3e4d7", paddingBottom: "10px", marginBottom: "15px" }}>
+        <h3 style={{ margin: 0, fontSize: "16px", color: "#117a65" }}>{title}</h3>
+        {onCancel && (
+          <button type="button" onClick={onCancel} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}>
+            ✕ Abbrechen
+          </button>
+        )}
       </div>
-    )}
-
-    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
-      <InputField label="Vorname *" name="firstName" value={formData.firstName} onChange={handleChange} required={true} />
-      <InputField label="Nachname *" name="lastName" value={formData.lastName} onChange={handleChange} required={true} />
-    </div>
-
-    {/* NEUE MEHRFACHAUSWAHL FÜR TEAMS */}
-    <div style={{ marginBottom: "15px" }}>
-      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "6px" }}>Zuständig für Jugend (Mehrfachauswahl möglich) *</label>
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", background: "#fff", padding: "12px", borderRadius: "6px", border: "1px solid #ccc" }}>
-        <div style={{ background: formData.assignedTeams?.includes("Jugendleitung") ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
-          <CheckboxField 
-            label="🌟 Jugendleitung (Vollzugriff)" 
-            name="Jugendleitung" 
-            checked={formData.assignedTeams?.includes("Jugendleitung")} 
-            onChange={() => handleTeamToggle("Jugendleitung")} 
-          />
+      
+      {!isEditMode && (
+        <div style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", border: "1px solid #f1c40f", marginBottom: "15px" }}>
+          <p style={{ fontSize: "12px", margin: "0 0 10px 0", color: "#7a6609" }}><strong>Wichtig:</strong> Der Trainer muss zuerst in Firebase (Authentication) angelegt werden. Trage hier seine UID ein, um Profil und Login zu verknüpfen!</p>
+          <InputField label="Firebase User-ID (UID) aus Authentication *" name="authUid" value={formData.authUid} onChange={handleChange} required={true} placeholder="z.B. X3clcMVo1lYWws..." />
         </div>
-        <div style={{ width: "100%", height: "1px", background: "#eee", margin: "4px 0" }}></div>
-        {teamsList.map(team => (
-          <div key={team.id} style={{ background: formData.assignedTeams?.includes(team.name) ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
+      )}
+
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
+        <InputField label="Vorname *" name="firstName" value={formData.firstName} onChange={handleChange} required={true} />
+        <InputField label="Nachname *" name="lastName" value={formData.lastName} onChange={handleChange} required={true} />
+      </div>
+
+      {/* MEHRFACHAUSWAHL FÜR TEAMS & JUGENDLEITUNG */}
+      <div style={{ marginBottom: "15px" }}>
+        <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "6px" }}>Zuständig für Jugend (Mehrfachauswahl möglich) *</label>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", background: "#fff", padding: "12px", borderRadius: "6px", border: "1px solid #ccc" }}>
+          <div style={{ background: formData.assignedTeams?.includes("Jugendleitung") ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
             <CheckboxField 
-              label={team.name} 
-              name={team.name} 
-              checked={formData.assignedTeams?.includes(team.name)} 
-              onChange={() => handleTeamToggle(team.name)} 
+              label="🌟 Jugendleitung (Vollzugriff)" 
+              name="Jugendleitung" 
+              checked={formData.assignedTeams?.includes("Jugendleitung")} 
+              onChange={() => handleTeamToggle("Jugendleitung")} 
             />
           </div>
-        ))}
+          <div style={{ width: "100%", height: "1px", background: "#eee", margin: "4px 0" }}></div>
+          {activeTeamsList.map(team => (
+            <div key={team.id || team.name} style={{ background: formData.assignedTeams?.includes(team.name) ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
+              <CheckboxField 
+                label={team.name} 
+                name={team.name} 
+                checked={formData.assignedTeams?.includes(team.name)} 
+                onChange={() => handleTeamToggle(team.name)} 
+              />
+            </div>
+          ))}
+        </div>
+        {formData.assignedTeams?.length === 0 && <p style={{ color: "#e74c3c", fontSize: "11px", margin: "4px 0 0 0" }}>Bitte mindestens eine Rolle/Mannschaft auswählen!</p>}
       </div>
-      {formData.assignedTeams?.length === 0 && <p style={{ color: "#e74c3c", fontSize: "11px", margin: "4px 0 0 0" }}>Bitte mindestens eine Rolle/Mannschaft auswählen!</p>}
-    </div>
 
-    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
-      <InputField label="Handynummer" name="phone" value={formData.phone} onChange={handleChange} type="tel" />
-      <InputField label="E-Mail Adresse (für Login)" name="email" value={formData.email} onChange={handleChange} type="email" required={true} />
-      <InputField label="Schlüssel-Nr." name="keyNumber" value={formData.keyNumber} onChange={handleChange} />
-    </div>
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
+        <InputField label="Handynummer" name="phone" value={formData.phone} onChange={handleChange} type="tel" />
+        <InputField label="E-Mail Adresse (für Login)" name="email" value={formData.email} onChange={handleChange} type="email" required={true} />
+        <InputField label="Schlüssel-Nr." name="keyNumber" value={formData.keyNumber} onChange={handleChange} />
+      </div>
 
-    <button type="submit" disabled={isSubmitting || formData.assignedTeams?.length === 0} style={{ width: "100%", padding: "14px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: (isSubmitting || formData.assignedTeams?.length === 0) ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
-      {isSubmitting ? "Wird gespeichert..." : buttonText}
-    </button>
-  </form>
-);
+      <button type="submit" disabled={isSubmitting || formData.assignedTeams?.length === 0} style={{ width: "100%", padding: "14px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: (isSubmitting || formData.assignedTeams?.length === 0) ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
+        {isSubmitting ? "Wird gespeichert..." : buttonText}
+      </button>
+    </form>
+  );
+};
 
 
 // --- HAUPTKOMPONENTE ---
@@ -210,7 +223,7 @@ export default function YouthManager({ clubId }) {
   const [playerFormData, setPlayerFormData] = useState(initialPlayerState);
   const [editPlayerFormData, setEditPlayerFormData] = useState(null);
 
-  // States Trainer (NEU: assignedTeams statt youthTeam & authUid hinzugefügt)
+  // States Trainer (assignedTeams statt youthTeam & authUid hinzugefügt)
   const initialCoachState = { authUid: "", firstName: "", lastName: "", assignedTeams: [], phone: "", email: "", keyNumber: "" };
   const [coachFormData, setCoachFormData] = useState(initialCoachState);
   const [editCoachFormData, setEditCoachFormData] = useState(null);
@@ -490,7 +503,7 @@ export default function YouthManager({ clubId }) {
     await updateDoc(doc(db, "youth_players", player.id), { status: "aktiv", deregistrationDetails: null });
   };
 
-  // --- HANDLER: TRAINER (NEU MIT CHECKBOXEN & UID) ---
+  // --- HANDLER: TRAINER (MIT CHECKBOXEN & UID) ---
   const handleCoachChange = (e, isEditMode = false) => {
     const { name, value } = e.target;
     if (isEditMode) setEditCoachFormData(prev => ({ ...prev, [name]: value }));
@@ -979,7 +992,7 @@ export default function YouthManager({ clubId }) {
                                 <div>📅 <strong>Erfolgt am:</strong> {details.date ? new Date(details.date).toLocaleDateString("de-DE") : "-"}</div>
                                 <div>📞 <strong>Art:</strong> {details.method || "-"}</div>
                                 <div>⏱ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
-                                <div>🏛️️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
+                                <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
                               </div>
                             </td>
                           </tr>
