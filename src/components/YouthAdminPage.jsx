@@ -10,27 +10,57 @@ export default function YouthAdminPage({ clubId }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Prüfen, ob der Nutzer schon eingeloggt ist
+  // STRIKTE LISTE: Nur diese beiden E-Mail-Adressen haben Zugriff auf den Admin-Bereich!
+  const allowedAdminEmails = [
+    "ivan.trombino@outlook.de",
+    "cordula.buhl@gmail.com" // <-- Hier kannst du Cordulas echte E-Mail-Adresse eintragen
+  ];
+
+  // Prüfen, ob der Nutzer eingeloggt ist und zur harten Admin-Liste gehört
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        if (currentUser.email && allowedAdminEmails.map(e => e.toLowerCase()).includes(currentUser.email.toLowerCase())) {
+          setUser(currentUser); 
+        } else {
+          // Falscher Account -> Sofort wieder ausloggen!
+          await signOut(auth);
+          setUser(null);
+          setError("Zugriff verweigert: Dieser Bereich ist ausschließlich für die Jugendleitung.");
+        }
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
-    return () => unsubscribe(); // Cleanup
+    return () => unsubscribe(); 
   }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
+
+    const enteredEmailLower = email.trim().toLowerCase();
+
+    // Vorab-Prüfung der E-Mail
+    if (!allowedAdminEmails.map(e => e.toLowerCase()).includes(enteredEmailLower)) {
+      setError("Zugriff verweigert: Diese E-Mail-Adresse hat keine Administrator-Rechte.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setUser(userCredential.user);
     } catch (err) {
       console.error(err);
       setError("Zugangsdaten falsch. Bitte überprüfe E-Mail und Passwort.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // --- NEU: PASSWORT ZURÜCKSETZEN ---
   const handleResetPassword = async () => {
     if (!email) {
       setError("Bitte trage zuerst deine E-Mail-Adresse oben ein.");
@@ -48,6 +78,7 @@ export default function YouthAdminPage({ clubId }) {
 
   const handleLogout = async () => {
     await signOut(auth);
+    setUser(null);
   };
 
   if (loading) {
@@ -59,15 +90,15 @@ export default function YouthAdminPage({ clubId }) {
     return (
       <div style={{ padding: "20px", maxWidth: "400px", margin: "50px auto", fontFamily: "sans-serif", color: "#333" }}>
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "10px", border: "1px solid #ccc", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
-          <h2 style={{ textAlign: "center", color: "#2146d0", marginBottom: "20px" }}>🔒 Geschützter Bereich</h2>
-          <p style={{ fontSize: "14px", color: "#555", textAlign: "center", marginBottom: "20px" }}>
-            Bitte logge dich ein, um die Jugend-Datenbank zu verwalten.
+          <h2 style={{ textAlign: "center", color: "#2146d0", marginBottom: "10px" }}>🔒 Jugend-Admin</h2>
+          <p style={{ fontSize: "13px", color: "#e74c3c", textAlign: "center", fontWeight: "bold", marginBottom: "20px" }}>
+            Nur für Cordula Buhl und Ivan Trombino.
           </p>
           
           <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
             <input
               type="email"
-              placeholder="E-Mail / Benutzername"
+              placeholder="E-Mail-Adresse"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -82,17 +113,17 @@ export default function YouthAdminPage({ clubId }) {
               style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "15px" }}
             />
             
-            {error && <p style={{ color: "#e74c3c", fontSize: "13px", margin: 0, fontWeight: "bold" }}>{error}</p>}
+            {error && <p style={{ color: "#e74c3c", fontSize: "13px", margin: 0, fontWeight: "bold", textAlign: "center" }}>{error}</p>}
             
             <button 
               type="submit" 
               style={{ padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "5px" }}
             >
-              Einloggen
+              Admin-Login
             </button>
           </form>
 
-          {/* NEU: Passwort-Vergessen Button */}
+          {/* Passwort-Vergessen Button */}
           <div style={{ textAlign: "center", marginTop: "15px" }}>
             <button 
               type="button" 
@@ -111,7 +142,7 @@ export default function YouthAdminPage({ clubId }) {
   return (
     <div>
       <div style={{ background: "#333", padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
-        <span style={{ fontSize: "14px" }}>Angemeldet als: <strong>{user.email}</strong></span>
+        <span style={{ fontSize: "14px" }}>Admin-Bereich | Angemeldet als: <strong>{user.email}</strong></span>
         <button 
           onClick={handleLogout}
           style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}
