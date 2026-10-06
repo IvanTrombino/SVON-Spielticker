@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from "../firebase";
 
@@ -29,7 +29,7 @@ export default function CoachPortal({ clubId }) {
 
   const auth = getAuth();
 
-  // --- 1. LOGIN LOGIK ---
+  // --- 1. LOGIN LOGIK (Mit exakter UID-Abfrage) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError("");
@@ -39,19 +39,15 @@ export default function CoachPortal({ clubId }) {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const uid = userCredential.user.uid;
       
-      const q = query(
-        collection(db, "youth_coaches"), 
-        where("clubId", "==", clubId),
-        where("email", "==", email.trim())
-      );
-      const querySnapshot = await getDocs(q);
+      // Direktes Laden des Trainer-Profils über die Auth-UID aus Firestore
+      const coachDocRef = doc(db, "youth_coaches", uid);
+      const coachSnap = await getDoc(coachDocRef);
 
-      if (!querySnapshot.empty) {
-        const coachDoc = querySnapshot.docs.find(d => d.id === uid) || querySnapshot.docs[0];
-        const coachData = coachDoc.data();
-        setLoggedInCoach({ id: coachDoc.id, ...coachData });
+      if (coachSnap.exists()) {
+        const coachData = coachSnap.data();
+        setLoggedInCoach({ id: coachSnap.id, ...coachData });
       } else {
-        setLoginError("Trainer-Profil in der Datenbank nicht gefunden.");
+        setLoginError("Trainer-Profil in der Datenbank nicht gefunden (UID stimmt nicht überein).");
         auth.signOut();
       }
     } catch (error) {
@@ -346,7 +342,7 @@ export default function CoachPortal({ clubId }) {
               >
                 {availableTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
               </select>
-            ) : (loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 1) ? (
+            ) : (loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) ? (
               <select 
                 value={selectedTeam} 
                 onChange={(e) => { setSelectedTeam(e.target.value); cancelEditing(); }}
@@ -356,7 +352,7 @@ export default function CoachPortal({ clubId }) {
               </select>
             ) : (
               <span style={{ fontSize: "13px", fontWeight: "bold", color: "#34495e" }}>
-                {loggedInCoach.assignedTeams?.[0] || "Kein Team zugewiesen"}
+                Kein Team zugewiesen
               </span>
             )}
           </div>
