@@ -92,7 +92,7 @@ export default function YouthAdminPage({ clubId }) {
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "10px", border: "1px solid #ccc", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
           <h2 style={{ textAlign: "center", color: "#2146d0", marginBottom: "10px" }}>🔒 Jugend-Admin</h2>
           <p style={{ fontSize: "13px", color: "#e74c3c", textAlign: "center", fontWeight: "bold", marginBottom: "20px" }}>
-            Nur für Cordula Buhl und Ivan Trombino.
+            Nur für Jugendleitung.
           </p>
           
           <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
