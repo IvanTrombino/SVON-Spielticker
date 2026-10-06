@@ -16,8 +16,8 @@ export default function CoachPortal({ clubId }) {
   const [teamPlayers, setTeamPlayers] = useState([]);
   
   // --- TEAMAUSWAHL STATES ---
-  const [availableTeams, setAvailableTeams] = useState([]); // Alle Teams (nur für Jugendleitung)
-  const [selectedTeam, setSelectedTeam] = useState(""); // Das aktuell ausgewählte Team für die Ansicht
+  const [availableTeams, setAvailableTeams] = useState([]); 
+  const [selectedTeam, setSelectedTeam] = useState(""); 
 
   // --- ATTENDANCE STATES ---
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split("T")[0]);
@@ -39,7 +39,6 @@ export default function CoachPortal({ clubId }) {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const uid = userCredential.user.uid;
       
-      // Direktes Laden des Trainer-Profils über die Auth-UID aus Firestore
       const coachDocRef = doc(db, "youth_coaches", uid);
       const coachSnap = await getDoc(coachDocRef);
 
@@ -86,17 +85,34 @@ export default function CoachPortal({ clubId }) {
     setSelectedTeam("");
   };
 
-  // --- HILFSVARIABLEN FÜR RECHTE ---
+  // --- HILFSVARIABLEN FÜR RECHTE & FALLBACK-TEAMS ---
   const isJugendleitung = loggedInCoach?.assignedTeams?.includes("Jugendleitung") || false;
-  const activeViewTeam = selectedTeam;
+  
+  const fallbackTeams = [
+    { id: "0", name: "Aktive" },
+    { id: "1", name: "A-Jugend" },
+    { id: "2", name: "B-Jugend" },
+    { id: "3", name: "C-Jugend" },
+    { id: "4", name: "D-Jugend" },
+    { id: "5", name: "E-Jugend" },
+    { id: "6", name: "F-Jugend" },
+    { id: "7", name: "G-Jugend" }
+  ];
 
-  // --- 2. TEAMS LADEN (FÜR JUGENDLEITUNG & TRAINER) ---
+  const currentTeamOptions = isJugendleitung 
+    ? (availableTeams.length > 0 ? availableTeams : fallbackTeams)
+    : (loggedInCoach?.assignedTeams?.filter(t => t !== "Jugendleitung").map(name => ({ id: name, name })) || []);
+
+  const activeViewTeam = selectedTeam || (currentTeamOptions[0]?.name ?? "");
+
+  // --- 2. TEAMS LADEN (MIT AUTOMATISCHEM FALLBACK) ---
   useEffect(() => {
     if (!clubId || !loggedInCoach) return;
     
     const unsub = onSnapshot(doc(db, "youth_settings", clubId), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().teams) {
-        let loadedTeams = docSnap.data().teams;
+      let loadedTeams = [];
+      if (docSnap.exists() && docSnap.data().teams && docSnap.data().teams.length > 0) {
+        loadedTeams = docSnap.data().teams;
         loadedTeams.sort((a, b) => {
           const nameA = a.name || "";
           const nameB = b.name || "";
@@ -104,19 +120,26 @@ export default function CoachPortal({ clubId }) {
           if (nameB.toLowerCase() === "aktive") return 1;
           return nameA.localeCompare(nameB);
         });
-        
-        setAvailableTeams(loadedTeams);
+      } else {
+        loadedTeams = fallbackTeams;
+      }
+      
+      setAvailableTeams(loadedTeams);
 
-        // Standard-Team direkt setzen, falls noch keines ausgewählt ist
-        if (!selectedTeam) {
-          if (isJugendleitung && loadedTeams.length > 0) {
-            setSelectedTeam(loadedTeams[0].name);
-          } else if (!isJugendleitung && loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) {
-            setSelectedTeam(loggedInCoach.assignedTeams[0]);
-          }
+      if (!selectedTeam) {
+        if (isJugendleitung && loadedTeams.length > 0) {
+          setSelectedTeam(loadedTeams[0].name);
+        } else if (!isJugendleitung && loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) {
+          const firstRealTeam = loggedInCoach.assignedTeams.find(t => t !== "Jugendleitung");
+          if (firstRealTeam) setSelectedTeam(firstRealTeam);
         }
       }
+    }, (error) => {
+      console.error("Fehler beim Laden der Teams:", error);
+      setAvailableTeams(fallbackTeams);
+      if (!selectedTeam) setSelectedTeam(fallbackTeams[0].name);
     });
+
     return () => unsub();
   }, [clubId, loggedInCoach, isJugendleitung, selectedTeam]);
 
@@ -192,7 +215,7 @@ export default function CoachPortal({ clubId }) {
   };
 
   const deleteTrainingSession = async (trainingId) => {
-    if (!window.confirm("Möchtest du diese Trainingseinheit wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")) return;
+    if (!window.confirm("Möchtest du diese Trainingseinheit wirklich löschen?")) return;
     
     try {
       await deleteDoc(doc(db, "youth_trainings", trainingId));
@@ -326,7 +349,7 @@ export default function CoachPortal({ clubId }) {
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "15px", fontFamily: "sans-serif", color: "#333", boxSizing: "border-box" }}>
       
-      {/* HEADERBAR MIT DYNAMISCHEM DROPDOWN FÜR TEAMS */}
+      {/* HEADERBAR MIT DROPDOWN */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
           <h2 style={{ margin: 0, color: "#2146d0", fontSize: "18px" }}>👋 Hallo, {loggedInCoach.firstName}</h2>
@@ -334,25 +357,17 @@ export default function CoachPortal({ clubId }) {
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
             <span style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>Ansicht:</span>
             
-            {isJugendleitung ? (
+            {currentTeamOptions.length > 0 ? (
               <select 
                 value={selectedTeam} 
                 onChange={(e) => { setSelectedTeam(e.target.value); cancelEditing(); }}
                 style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", fontWeight: "bold", color: "#34495e" }}
               >
-                {availableTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-              </select>
-            ) : (loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) ? (
-              <select 
-                value={selectedTeam} 
-                onChange={(e) => { setSelectedTeam(e.target.value); cancelEditing(); }}
-                style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", fontWeight: "bold", color: "#34495e" }}
-              >
-                {loggedInCoach.assignedTeams.map(teamName => <option key={teamName} value={teamName}>{teamName}</option>)}
+                {currentTeamOptions.map(t => <option key={t.id || t.name} value={t.name}>{t.name}</option>)}
               </select>
             ) : (
-              <span style={{ fontSize: "13px", fontWeight: "bold", color: "#34495e" }}>
-                Kein Team zugewiesen
+              <span style={{ fontSize: "13px", fontWeight: "bold", color: "#e74c3c" }}>
+                Kein Team verfügbar
               </span>
             )}
           </div>
@@ -490,7 +505,7 @@ export default function CoachPortal({ clubId }) {
                             {presentPlayers.length > 0 && <div><strong style={{ color: "#27ae60" }}>✅ Anwesend:</strong> {presentPlayers.join(", ")}</div>}
                             {excusedPlayers.length > 0 && <div><strong style={{ color: "#f39c12" }}>⚠️ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>}
                             {missingPlayers.length > 0 && <div><strong style={{ color: "#e74c3c" }}>❌ Fehlt:</strong> {missingPlayers.join(", ")}</div>}
-                            {presentPlayers.length === 0 && excusedPlayers.length === 0 && missingPlayers.length === 0 && <div style={{ color: "#7f8c8d", fontStyle: "italic" }}>Keine Spielerdaten für dieses Training gefunden (evtl. Mannschaft gewechselt).</div>}
+                            {presentPlayers.length === 0 && excusedPlayers.length === 0 && missingPlayers.length === 0 && <div style={{ color: "#7f8c8d", fontStyle: "italic" }}>Keine Spielerdaten für dieses Training gefunden.</div>}
                           </div>
                         </div>
                       )}
