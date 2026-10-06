@@ -39,9 +39,9 @@ export default function MatchView({ clubId, teams }) {
   const [tempEditorName, setTempEditorName] = useState(""); 
   const [activeEditor, setActiveEditor] = useState("");
 
-  // Darf ich bearbeiten? Nur wenn in der Cloud MEIN hier eingegebener Name steht.
-  const iAmEditor = activeEditor !== "" && activeEditor === editorName && editorName !== "";
-  const canEdit = iAmEditor;
+  // Darf ich bearbeiten? Nur wenn ich einen Namen gesetzt habe und kein anderer mich blockiert
+  const isLockedBySomeoneElse = activeEditor !== "" && activeEditor !== editorName;
+  const canEdit = editorName !== "" && !isLockedBySomeoneElse;
 
   // --- LOKALER-STATE: UI-Bedienung ---
   const [selectedPlayer, setSelectedPlayer] = useState("");
@@ -78,6 +78,7 @@ export default function MatchView({ clubId, teams }) {
     }
   };
 
+  // DATEN LADEN
   useEffect(() => {
     if (!clubId) return;
     const unsubScorers = onSnapshot(doc(db, "ticker", `${clubId}_scorers`), (snap) => {
@@ -156,7 +157,6 @@ export default function MatchView({ clubId, teams }) {
           setIsRunning(false);
         }
       } else {
-        // Fallback wenn noch kein Spiel existiert
         setIsSvonAway(false);
         setHomeTeam(selectedTeam);
         setAwayTeam("Gast");
@@ -182,12 +182,14 @@ export default function MatchView({ clubId, teams }) {
     }
     const newName = tempEditorName.trim();
     setEditorName(newName);
+    setActiveEditor(newName); // SOFORTIGES UI UPDATE (Verhindert das Rausfliegen!)
     syncLiveMatch({ activeEditor: newName });
   };
 
   const releaseLock = () => {
     setEditorName("");
     setTempEditorName("");
+    setActiveEditor(""); // SOFORTIGES UI UPDATE
     syncLiveMatch({ activeEditor: "" });
   };
 
@@ -408,7 +410,7 @@ export default function MatchView({ clubId, teams }) {
         homeGoals, 
         awayGoals, 
         history,
-        editor: activeEditor // HIER WIRD DER NAME DES TICKER-SCHREIBERS GESPEICHERT
+        editor: activeEditor // Hier wird der Bearbeiter gespeichert
       };
       
       const newSavedMatches = [newMatch, ...savedMatches];
@@ -431,7 +433,7 @@ export default function MatchView({ clubId, teams }) {
         awayTeam: isSvonAway ? selectedTeam : "Gast",
         matchDate: new Date().toISOString().split("T")[0], 
         kickoffTime: "", 
-        activeEditor: "" // Sperre aufheben
+        activeEditor: "" // Sperre in Firebase aufheben
       };
       
       setHomeGoals(0); 
@@ -444,8 +446,11 @@ export default function MatchView({ clubId, teams }) {
       setAwayTeam(resetData.awayTeam);
       setMatchDate(resetData.matchDate); 
       setKickoffTime("");
+      
+      // Lokale Sperre aufheben
       setEditorName("");
       setTempEditorName("");
+      setActiveEditor("");
 
       syncLiveMatch(resetData);
     }
@@ -587,9 +592,10 @@ export default function MatchView({ clubId, teams }) {
           value={selectedTeam} 
           onChange={(e) => {
             setSelectedTeam(e.target.value);
-            // Wechselt man das Team, muss man sich neu eintragen
+            // Wechselt man das Team, muss man sich für das neue Team eintragen
             setEditorName("");
             setTempEditorName("");
+            setActiveEditor("");
           }}
           style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "14px", background: "#f8f9fa", color: "#333", boxSizing: "border-box" }}
         >
@@ -609,8 +615,8 @@ export default function MatchView({ clubId, teams }) {
         <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
           {/* --- NEUES NAMENS-FELD & ÜBERNEHMEN BUTTON --- */}
-          <div style={{ background: iAmEditor ? "#d4edda" : (activeEditor !== "" ? "#f8d7da" : "#e8f4f8"), padding: "15px", borderRadius: "8px", marginBottom: "15px", border: "1px solid", borderColor: iAmEditor ? "#c3e6cb" : (activeEditor !== "" ? "#f5c6cb" : "#bce8f1"), textAlign: "left" }}>
-            {iAmEditor ? (
+          <div style={{ background: canEdit ? "#d4edda" : (activeEditor !== "" ? "#f8d7da" : "#e8f4f8"), padding: "15px", borderRadius: "8px", marginBottom: "15px", border: "1px solid", borderColor: canEdit ? "#c3e6cb" : (activeEditor !== "" ? "#f5c6cb" : "#bce8f1"), textAlign: "left" }}>
+            {canEdit ? (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "14px", fontWeight: "bold", color: "#155724" }}>
                   ✏️ Du ({editorName}) bedienst diesen Ticker.
@@ -625,7 +631,7 @@ export default function MatchView({ clubId, teams }) {
             ) : (
               <div>
                 <h4 style={{ margin: "0 0 10px 0", color: activeEditor !== "" ? "#721c24" : "#31708f" }}>
-                  {activeEditor !== "" ? `🔒 Gesperrt! Bedient von: ${activeEditor}` : "🔓 Ticker ist frei. Wer bedient den Ticker?"}
+                  {activeEditor !== "" ? `🔒 Gesperrt! Ticker wird bedient von: ${activeEditor}` : "🔓 Ticker ist frei. Wer bedient den Ticker?"}
                 </h4>
                 <div style={{ display: "flex", gap: "10px" }}>
                   <input 
@@ -637,7 +643,7 @@ export default function MatchView({ clubId, teams }) {
                   />
                   <button 
                     onClick={claimLock} 
-                    style={{ background: activeEditor !== "" ? "#ffc107" : "#28a745", color: activeEditor !== "" ? "#333" : "white", border: "none", borderRadius: "6px", padding: "8px 15px", fontWeight: "bold", cursor: "pointer" }}
+                    style={{ background: activeEditor !== "" ? "#ffc107" : "#28a745", color: activeEditor !== "" ? "#333" : "white", border: "none", borderRadius: "6px", padding: "8px 15px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" }}
                   >
                     {activeEditor !== "" ? "Übernehmen" : "Bedienen"}
                   </button>
@@ -961,8 +967,7 @@ export default function MatchView({ clubId, teams }) {
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#666", marginBottom: "4px" }}>
                   <span>
                     📅 {match.date}
-                    {/* HIER STEHT JETZT DER NAME IN DER HISTORIE */}
-                    {match.editor && <span style={{ color: "#2146d0", fontWeight: "bold" }}> | ✍️ Getickert von: {match.editor}</span>}
+                    {match.editor && <span style={{ color: "#2146d0", fontWeight: "bold" }}> | ✍️ {match.editor}</span>}
                   </span>
                   <span 
                     onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)} 
