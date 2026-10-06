@@ -34,14 +34,14 @@ export default function MatchView({ clubId, teams }) {
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // --- LOCKING LOGIK (SPERRE - OHNE TIMEOUT) ---
-  const [editorName, setEditorName] = useState(() => localStorage.getItem("tickerEditorName") || "");
-  const [tempEditorName, setTempEditorName] = useState("");
+  // --- LOCKING LOGIK (MANUELLE EINGABE OHNE LOCALSTORAGE) ---
+  const [editorName, setEditorName] = useState(""); 
+  const [tempEditorName, setTempEditorName] = useState(""); 
   const [activeEditor, setActiveEditor] = useState("");
 
-  // Darf die aktuelle Person bearbeiten? (Entweder gehört der Ticker mir, oder er ist frei)
-  const isLockedBySomeoneElse = activeEditor !== "" && activeEditor !== editorName;
-  const canEdit = editorName !== "" && !isLockedBySomeoneElse;
+  // Darf ich bearbeiten? Nur wenn in der Cloud MEIN hier eingegebener Name steht.
+  const iAmEditor = activeEditor !== "" && activeEditor === editorName && editorName !== "";
+  const canEdit = iAmEditor;
 
   // --- LOKALER-STATE: UI-Bedienung ---
   const [selectedPlayer, setSelectedPlayer] = useState("");
@@ -121,7 +121,7 @@ export default function MatchView({ clubId, teams }) {
     return () => unsubPlayers();
   }, [clubId, selectedTeam]);
 
-  // LIVE-TICKER & LOCKING LADEN (Überlebt jeden Browser-Refresh)
+  // LIVE-TICKER & LOCKING LADEN
   useEffect(() => {
     if (!clubId || !selectedTeam) return;
 
@@ -142,7 +142,7 @@ export default function MatchView({ clubId, teams }) {
         // Sperre lesen
         setActiveEditor(data.activeEditor || "");
 
-        // Stoppuhr-Logik (läuft auch weiter, wenn Browser geschlossen war!)
+        // Stoppuhr-Logik
         if (data.isRunning) {
           if (data.startTime) {
             const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
@@ -174,17 +174,20 @@ export default function MatchView({ clubId, teams }) {
     return () => unsubLive(); 
   }, [clubId, selectedTeam]);
 
-  // Sperre für mich beanspruchen
+  // --- SPERRE ÜBERNEHMEN / FREIGEBEN ---
   const claimLock = () => {
-    if (!editorName) {
+    if (tempEditorName.trim() === "") {
       alert("Bitte gib zuerst deinen Namen ein.");
       return;
     }
-    syncLiveMatch({ activeEditor: editorName });
+    const newName = tempEditorName.trim();
+    setEditorName(newName);
+    syncLiveMatch({ activeEditor: newName });
   };
 
-  // Sperre freiwillig aufheben
   const releaseLock = () => {
+    setEditorName("");
+    setTempEditorName("");
     syncLiveMatch({ activeEditor: "" });
   };
 
@@ -256,7 +259,6 @@ export default function MatchView({ clubId, teams }) {
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // Automatischer Stopp nach 130 Minuten
   useEffect(() => {
     if (isRunning && time >= 130 * 60) {
       setIsRunning(false);
@@ -405,7 +407,8 @@ export default function MatchView({ clubId, teams }) {
         awayTeam, 
         homeGoals, 
         awayGoals, 
-        history 
+        history,
+        editor: activeEditor // HIER WIRD DER NAME DES TICKER-SCHREIBERS GESPEICHERT
       };
       
       const newSavedMatches = [newMatch, ...savedMatches];
@@ -428,7 +431,7 @@ export default function MatchView({ clubId, teams }) {
         awayTeam: isSvonAway ? selectedTeam : "Gast",
         matchDate: new Date().toISOString().split("T")[0], 
         kickoffTime: "", 
-        activeEditor: "" // Sperre nach Beenden wieder aufheben
+        activeEditor: "" // Sperre aufheben
       };
       
       setHomeGoals(0); 
@@ -441,6 +444,8 @@ export default function MatchView({ clubId, teams }) {
       setAwayTeam(resetData.awayTeam);
       setMatchDate(resetData.matchDate); 
       setKickoffTime("");
+      setEditorName("");
+      setTempEditorName("");
 
       syncLiveMatch(resetData);
     }
@@ -580,7 +585,12 @@ export default function MatchView({ clubId, teams }) {
         </label>
         <select 
           value={selectedTeam} 
-          onChange={(e) => setSelectedTeam(e.target.value)}
+          onChange={(e) => {
+            setSelectedTeam(e.target.value);
+            // Wechselt man das Team, muss man sich neu eintragen
+            setEditorName("");
+            setTempEditorName("");
+          }}
           style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "14px", background: "#f8f9fa", color: "#333", boxSizing: "border-box" }}
         >
           {(!teams || teams.length === 0) && <option value="1. Mannschaft">1. Mannschaft</option>}
@@ -598,48 +608,43 @@ export default function MatchView({ clubId, teams }) {
       {activeTab === "ticker" && (
         <div style={{ background: "#f8f9fa", padding: "12px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           
-          {/* --- NAMENS-EINGABE & KLARE SPERR-ANZEIGE --- */}
-          {!editorName ? (
-            <div style={{ padding: "15px", background: "#e8f4f8", borderRadius: "8px", marginBottom: "15px", border: "1px solid #bce8f1" }}>
-              <h4 style={{ margin: "0 0 10px 0", color: "#31708f" }}>Wer bedient den Ticker?</h4>
-              <input 
-                type="text" 
-                placeholder="Dein Name (z.B. Ivan)" 
-                value={tempEditorName} 
-                onChange={(e) => setTempEditorName(e.target.value)} 
-                style={{...inputStyle, marginBottom: "10px", opacity: 1}}
-              />
-              <button 
-                onClick={() => {
-                  if(tempEditorName.trim() !== "") {
-                    localStorage.setItem("tickerEditorName", tempEditorName.trim());
-                    setEditorName(tempEditorName.trim());
-                  }
-                }} 
-                style={{ padding: "10px", width: "100%", background: "#2146d0", color: "white", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer" }}
-              >
-                Namen speichern & Loslegen
-              </button>
-            </div>
-          ) : (
-            <div style={{ padding: "12px 15px", borderRadius: "8px", marginBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid", background: activeEditor === "" ? "#e2e3e5" : (canEdit ? "#d4edda" : "#f8d7da"), borderColor: activeEditor === "" ? "#d6d8db" : (canEdit ? "#c3e6cb" : "#f5c6cb") }}>
-              <span style={{ fontSize: "14px", fontWeight: "bold", color: activeEditor === "" ? "#383d41" : (canEdit ? "#155724" : "#721c24") }}>
-                {activeEditor === "" 
-                  ? "🔓 Ticker ist aktuell frei." 
-                  : (canEdit ? `✏️ Du (${editorName}) bedienst diesen Ticker.` : `🔒 Ticker wird bedient von: ${activeEditor}`)}
-              </span>
-              
-              {activeEditor === "" ? (
-                <button onClick={claimLock} style={{ background: "#28a745", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>Bedienen</button>
-              ) : (
-                canEdit ? (
-                  <button onClick={releaseLock} style={{ background: "#dc3545", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>Freigeben</button>
-                ) : (
-                  <button onClick={claimLock} style={{ background: "#ffc107", color: "#333", border: "none", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>Übernehmen</button>
-                )
-              )}
-            </div>
-          )}
+          {/* --- NEUES NAMENS-FELD & ÜBERNEHMEN BUTTON --- */}
+          <div style={{ background: iAmEditor ? "#d4edda" : (activeEditor !== "" ? "#f8d7da" : "#e8f4f8"), padding: "15px", borderRadius: "8px", marginBottom: "15px", border: "1px solid", borderColor: iAmEditor ? "#c3e6cb" : (activeEditor !== "" ? "#f5c6cb" : "#bce8f1"), textAlign: "left" }}>
+            {iAmEditor ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "14px", fontWeight: "bold", color: "#155724" }}>
+                  ✏️ Du ({editorName}) bedienst diesen Ticker.
+                </span>
+                <button 
+                  onClick={releaseLock} 
+                  style={{ background: "#dc3545", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
+                >
+                  Freigeben
+                </button>
+              </div>
+            ) : (
+              <div>
+                <h4 style={{ margin: "0 0 10px 0", color: activeEditor !== "" ? "#721c24" : "#31708f" }}>
+                  {activeEditor !== "" ? `🔒 Gesperrt! Bedient von: ${activeEditor}` : "🔓 Ticker ist frei. Wer bedient den Ticker?"}
+                </h4>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <input 
+                    type="text" 
+                    placeholder="Dein Name (z.B. Ivan)" 
+                    value={tempEditorName} 
+                    onChange={(e) => setTempEditorName(e.target.value)} 
+                    style={{ flex: 1, padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px" }}
+                  />
+                  <button 
+                    onClick={claimLock} 
+                    style={{ background: activeEditor !== "" ? "#ffc107" : "#28a745", color: activeEditor !== "" ? "#333" : "white", border: "none", borderRadius: "6px", padding: "8px 15px", fontWeight: "bold", cursor: "pointer" }}
+                  >
+                    {activeEditor !== "" ? "Übernehmen" : "Bedienen"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
             <div style={{ flex: 1, textAlign: "left" }}>
@@ -861,7 +866,7 @@ export default function MatchView({ clubId, teams }) {
                 <select 
                   value={nextIsHome ? "heim" : "auswaerts"} 
                   onChange={(e) => setNextIsHome(e.target.value === "heim")} 
-                  style={{...inputStyle, padding: "8px", cursor: "pointer"}}
+                  style={{...inputStyle, padding: "8px", cursor: "pointer", opacity: 1}}
                 >
                   <option value="heim">🏠 Heimspiel</option>
                   <option value="auswaerts">🚌 Auswärtsspiel</option>
@@ -874,7 +879,7 @@ export default function MatchView({ clubId, teams }) {
                   value={nextOpponent} 
                   onChange={(e) => setNextOpponent(e.target.value)} 
                   placeholder="z.B. FC Radolfzell" 
-                  style={inputStyle} 
+                  style={{...inputStyle, opacity: 1}} 
                 />
               </div>
             </div>
@@ -885,7 +890,7 @@ export default function MatchView({ clubId, teams }) {
                   type="date" 
                   value={nextDate} 
                   onChange={(e) => setNextDate(e.target.value)} 
-                  style={inputStyle} 
+                  style={{...inputStyle, opacity: 1}} 
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -894,7 +899,7 @@ export default function MatchView({ clubId, teams }) {
                   type="time" 
                   value={nextTime} 
                   onChange={(e) => setNextTime(e.target.value)} 
-                  style={inputStyle} 
+                  style={{...inputStyle, opacity: 1}} 
                 />
               </div>
             </div>
@@ -905,7 +910,7 @@ export default function MatchView({ clubId, teams }) {
                 value={nextLocation} 
                 onChange={(e) => setNextLocation(e.target.value)} 
                 placeholder="z.B. Kunstrasenplatz Nenzingen" 
-                style={inputStyle} 
+                style={{...inputStyle, opacity: 1}} 
               />
             </div>
             <button 
@@ -954,7 +959,11 @@ export default function MatchView({ clubId, teams }) {
             filteredMatches.map((match) => (
               <div key={match.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: "8px", padding: "10px", marginBottom: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#666", marginBottom: "4px" }}>
-                  <span>📅 {match.date}</span>
+                  <span>
+                    📅 {match.date}
+                    {/* HIER STEHT JETZT DER NAME IN DER HISTORIE */}
+                    {match.editor && <span style={{ color: "#2146d0", fontWeight: "bold" }}> | ✍️ Getickert von: {match.editor}</span>}
+                  </span>
                   <span 
                     onClick={() => setExpandedMatchId(expandedMatchId === match.id ? null : match.id)} 
                     style={{ cursor: "pointer", color: "#2980b9", fontWeight: "bold", textDecoration: "underline" }}
