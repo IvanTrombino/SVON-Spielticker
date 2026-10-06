@@ -29,15 +29,21 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
   const [endTime, setEndTime] = useState("18:30");
   const [bookShare, setBookShare] = useState("Ganz"); // Ganz, Halb, Viertel
   const [repetition, setRepetition] = useState("Einmalig"); // Einmalig, Wöchentlich
-  const [bookDate, setBookDate] = useState(new Date().toISOString().split("T")[0]);
-  const [bookDays, setBookDays] = useState([]); // für wöchentliche Serie (z.B. ["Dienstag", "Donnerstag"])
+  const [bookDate, setBookDate] = useState(new Date().toISOString().split("T")[0]); // Für Einmalig
+  
+  // NEU: Für Serien
+  const [seriesStartDate, setSeriesStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [seriesEndDate, setSeriesEndDate] = useState("");
+  const [bookDays, setBookDays] = useState([]); 
   const [bookNotes, setBookNotes] = useState("");
 
-  // --- KONFLIKT-STATE ---
+  // --- KONFLIKT-STATE (Für einmalige Buchungen) ---
   const [conflictBooking, setConflictBooking] = useState(null);
 
   const daysOfWeek = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
   const bookingTypes = ["Training", "Ligaspiel", "Pokalspiel", "Freundschaftsspiel"];
+  
+  const [weekDates, setWeekDates] = useState([]);
 
   // --- DATEN AUS FIREBASE LADEN ---
   useEffect(() => {
@@ -76,7 +82,6 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     catch (error) { console.error("Fehler:", error); }
   };
 
-  // Kalender-Berechnungen
   const getWeekDates = (date) => {
     const current = new Date(date);
     const day = current.getDay();
@@ -100,9 +105,9 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     return Math.ceil((((date - yearStart) / 86400000) + 1)/7);
   };
 
-  const weekDates = getWeekDates(viewDate);
-  const kw = getWeekNumber(weekDates[0]);
-  const dateRangeStr = `${weekDates[0].getDate()}.${weekDates[0].getMonth()+1}. – ${weekDates[6].getDate()}.${weekDates[6].getMonth()+1}.${weekDates[6].getFullYear()}`;
+  const weekDatesCalc = getWeekDates(viewDate);
+  const kw = getWeekNumber(weekDatesCalc[0]);
+  const dateRangeStr = `${weekDatesCalc[0].getDate()}.${weekDatesCalc[0].getMonth()+1}. – ${weekDatesCalc[6].getDate()}.${weekDatesCalc[6].getMonth()+1}.${weekDatesCalc[6].getFullYear()}`;
 
   const changeWeek = (offset) => {
     const newDate = new Date(viewDate);
@@ -122,69 +127,88 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     else setBookDays([...bookDays, day]);
   };
 
-  // --- BUCHUNG VERWALTEN ---
+  // --- BUCHUNG VERWALTEN (Inkl. Serien & smarter Konfliktlösung) ---
   const handleAddBooking = (e) => {
     e.preventDefault();
     setConflictBooking(null);
 
-    if (repetition === "Wöchentlich" && bookDays.length === 0) {
-      alert("Bitte wähle mindestens einen Wochentag für die Serie aus.");
-      return;
+    if (repetition === "Wöchentlich") {
+      if (bookDays.length === 0) return alert("Bitte wähle mindestens einen Wochentag für die Serie aus.");
+      if (!seriesEndDate) return alert("Bitte wähle ein Enddatum für die Serie aus.");
+      if (seriesStartDate > seriesEndDate) return alert("Das Startdatum darf nicht nach dem Enddatum liegen.");
     }
 
     const shareValues = { "Ganz": 1, "Halb": 0.5, "Viertel": 0.25 };
     const requestedShareVal = shareValues[bookShare];
 
-    // Zu prüfende Tage ermitteln (bei Einmalig den Wochentag aus dem Datum holen)
-    let checkDays = [];
-    let exactDate = null;
+    // Zu prüfende reale Tage ermitteln
+    let datesToCheck = [];
     if (repetition === "Einmalig") {
-      const d = new Date(bookDate);
-      const dayShort = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][d.getDay()];
-      checkDays = [dayShort];
-      exactDate = bookDate;
+      datesToCheck.push(bookDate);
     } else {
-      checkDays = bookDays;
+      let curr = new Date(seriesStartDate);
+      let end = new Date(seriesEndDate);
+      while (curr <= end) {
+        const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][curr.getDay()];
+        if (bookDays.includes(dayNameFull)) {
+          datesToCheck.push(curr.toISOString().split("T")[0]);
+        }
+        curr.setDate(curr.getDate() + 1);
+      }
     }
 
-    // Konfliktprüfung über alle ausgewählten Tage
-    let foundConflict = null;
+    let conflicts = [];
+    let validDates = [];
 
-    for (let targetDay of checkDays) {
+    // Jeden einzelnen Tag der Buchung auf Konflikte prüfen
+    datesToCheck.forEach(dateStr => {
       const overlappingBookings = bookings.filter(b => {
         if (b.pitchId !== bookPitch) return false;
         
-        // Tritt die Buchung an diesem Tag auf?
-        let onThisDay = false;
+        // Prüfen ob die andere Buchung an "dateStr" stattfindet
+        let occurs = false;
         if (b.repetition === "Einmalig") {
-          if (repetition === "Einmalig") {
-            onThisDay = (b.date === exactDate);
-          } else {
-            // Wenn wir eine Serie anlegen, überschneidet sie sich mit einmaligen Terminen an diesem Wochentag
-            const d = new Date(b.date);
-            const dayName = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][d.getDay()];
-            onThisDay = (dayName === targetDay);
-          }
+          occurs = (b.date === dateStr);
         } else {
-          onThisDay = b.days && b.days.includes(targetDay);
+          const d = new Date(dateStr);
+          const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][d.getDay()];
+          if (dateStr >= b.startDate && dateStr <= b.endDate && b.days.includes(dayNameFull) && !(b.exceptions || []).includes(dateStr)) {
+            occurs = true;
+          }
         }
 
-        if (!onThisDay) return false;
+        if (!occurs) return false;
+        // Zeit-Überschneidung prüfen
         return (startTime < b.endTime && endTime > b.startTime);
       });
 
       const currentTotalShare = overlappingBookings.reduce((sum, b) => sum + shareValues[b.share || "Ganz"], 0);
 
       if (currentTotalShare + requestedShareVal > 1) {
-        foundConflict = overlappingBookings[0];
-        break;
+        conflicts.push({ date: dateStr, team: overlappingBookings[0].team });
+      } else {
+        validDates.push(dateStr);
       }
+    });
+
+    if (validDates.length === 0) {
+      if (repetition === "Einmalig") {
+         // Bei einmaligen Terminen sofort rotes Warn-Menü zeigen
+         setConflictBooking({ team: conflicts[0].team, type: "einem Termin", share: "Platz" });
+      } else {
+         alert("Fehler: Alle Termine in diesem Zeitraum sind zu dieser Uhrzeit bereits belegt!");
+      }
+      return;
     }
 
-    if (foundConflict) {
-      setConflictBooking(foundConflict); 
-      return; 
+    // Wenn es bei Serien zu einigen Konflikten kam -> Fragen ob wir diese überspringen sollen
+    if (conflicts.length > 0 && repetition === "Wöchentlich") {
+      const confirmMsg = `⚠️ Achtung: An ${conflicts.length} Terminen ist der Platz bereits voll belegt und wird übersprungen (z.B. am ${conflicts[0].date} durch ${conflicts[0].team}).\n\nMöchtest du die Serie für die restlichen ${validDates.length} freien Termine trotzdem buchen?`;
+      if (!window.confirm(confirmMsg)) return;
     }
+
+    // Konflikte werden automatisch zu "exceptions" (Ausnahmen) für diese Serie
+    const autoExceptions = conflicts.map(c => c.date);
 
     const newBooking = {
       id: Date.now().toString(),
@@ -192,7 +216,10 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
       type: bookType,
       repetition,
       date: repetition === "Einmalig" ? bookDate : null,
+      startDate: repetition === "Wöchentlich" ? seriesStartDate : null,
+      endDate: repetition === "Wöchentlich" ? seriesEndDate : null,
       days: repetition === "Wöchentlich" ? bookDays : [],
+      exceptions: autoExceptions, // Hier speichern wir alle stornierten/übersprungenen Einzeltage
       pitchId: bookPitch,
       startTime,
       endTime,
@@ -207,16 +234,34 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     alert("✅ Platz erfolgreich gebucht!");
     setActiveTab("schedule");
     
-    // Reset Form
     setBookNotes("");
-    setBookDays([]);
   };
 
-  const handleDeleteBooking = (id) => {
-    if (window.confirm("Diese Platzbelegung wirklich löschen?")) {
-      const updatedBookings = bookings.filter(b => b.id !== id);
-      setBookings(updatedBookings);
-      syncBookings(updatedBookings);
+  // --- EINZELNEN TAG ODER SERIE LÖSCHEN ---
+  const handleDeleteBooking = (b, cellDateString) => {
+    if (b.repetition === "Wöchentlich") {
+      const choice = window.prompt("Diese Buchung ist Teil einer Serie.\nTippe '1' = NUR diesen Termin (Heute) stornieren.\nTippe '2' = Die KOMPLETTE Serie stornieren.");
+      
+      if (choice === "1") {
+        const updatedBookings = bookings.map(bk => {
+          if (bk.id === b.id) {
+            return { ...bk, exceptions: [...(bk.exceptions || []), cellDateString] };
+          }
+          return bk;
+        });
+        setBookings(updatedBookings);
+        syncBookings(updatedBookings);
+      } else if (choice === "2") {
+        const updatedBookings = bookings.filter(bk => bk.id !== b.id);
+        setBookings(updatedBookings);
+        syncBookings(updatedBookings);
+      }
+    } else {
+      if (window.confirm("Diese einmalige Platzbelegung wirklich löschen?")) {
+        const updatedBookings = bookings.filter(bk => bk.id !== b.id);
+        setBookings(updatedBookings);
+        syncBookings(updatedBookings);
+      }
     }
   };
 
@@ -242,17 +287,12 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     syncBookings(updated);
   };
 
-  // --- KONFLIKTLÖSUNG (NTFY & TEILEN) ---
+  // --- KONFLIKTLÖSUNG (NTFY & TEILEN) FÜR EINMALIGE BUCHUNGEN ---
   const sendConflictToJugendleitung = async () => {
     try {
       const pitchName = pitches.find(p => p.id === bookPitch)?.name || "Unbekannter Platz";
-      const message = `${currentUserName || bookTeam} benötigt den ${pitchName} (${startTime}-${endTime}). Platz ist aktuell belegt durch ${conflictBooking.team}. Bitte klären!`;
-      
-      await fetch(`https://ntfy.sh/${clubId}jugendleitung`, {
-        method: "POST",
-        body: `🏟️ Platzkonflikt: ${message}`,
-        headers: { "Priority": "high" }
-      });
+      const message = `${currentUserName || bookTeam} benötigt den ${pitchName} (${startTime}-${endTime}). Platz ist belegt durch ${conflictBooking.team}. Bitte klären!`;
+      await fetch(`https://ntfy.sh/${clubId}jugendleitung`, { method: "POST", body: `🏟️ Platzkonflikt: ${message}`, headers: { "Priority": "high" } });
       alert("Jugendleitung wurde benachrichtigt!");
       setConflictBooking(null);
     } catch (error) { alert("Fehler beim Senden."); }
@@ -261,7 +301,6 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
   const shareConflictViaWhatsApp = () => {
     const pitchName = pitches.find(p => p.id === bookPitch)?.name || "Unbekannter Platz";
     const text = `Hallo! Ich (${currentUserName || bookTeam}) bräuchte von ${startTime} bis ${endTime} den ${pitchName} für ein ${bookType}. Aktuell steht dort ${conflictBooking.team} im Plan. Können wir uns einigen?`;
-    
     if (navigator.share) navigator.share({ title: "Platzanfrage", text: text }).catch(() => {});
     else { navigator.clipboard.writeText(text); alert("Nachricht kopiert."); }
   };
@@ -272,16 +311,14 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     if (!newPitchName.trim()) return;
     const newPitch = { id: Date.now().toString(), name: newPitchName.trim(), hasFloodlight, hasCabin };
     const updated = [...pitches, newPitch];
-    setPitches(updated);
-    syncPitches(updated);
+    setPitches(updated); syncPitches(updated);
     setNewPitchName(""); setHasFloodlight(false); setHasCabin(false);
   };
 
   const handleDeletePitch = (id) => {
     if (window.confirm("Diesen Platz wirklich löschen?")) {
       const updated = pitches.filter(p => p.id !== id);
-      setPitches(updated);
-      syncPitches(updated);
+      setPitches(updated); syncPitches(updated);
     }
   };
 
@@ -361,7 +398,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", background: "#e2e8f0", gap: "1px" }}>
                     
                     {/* Spaltenköpfe */}
-                    {weekDates.map((dateObj, i) => {
+                    {weekDatesCalc.map((dateObj, i) => {
                       const isToday = dateObj.toDateString() === new Date().toDateString();
                       const dayShort = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][dateObj.getDay()];
                       const dateStr = `${dateObj.getDate()}.${dateObj.getMonth() + 1}.`;
@@ -374,17 +411,22 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                     })}
 
                     {/* Inhalts-Zellen */}
-                    {weekDates.map((dateObj, i) => {
+                    {weekDatesCalc.map((dateObj, i) => {
                       const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][dateObj.getDay()];
                       const cellDateString = dateObj.toISOString().split("T")[0];
 
-                      // Buchungen für diese Zelle filtern
+                      // Buchungen für diese Zelle filtern (Stornierte Tage aka "exceptions" ausblenden!)
                       const cellBookings = bookings.filter(b => {
                         if (b.pitchId !== p.id) return false;
                         if (filterTeam && b.team !== filterTeam) return false;
                         
                         if (b.repetition === "Einmalig") return b.date === cellDateString;
-                        return b.days && b.days.includes(dayNameFull);
+                        
+                        if (cellDateString >= b.startDate && cellDateString <= b.endDate && b.days && b.days.includes(dayNameFull)) {
+                          if (b.exceptions && b.exceptions.includes(cellDateString)) return false; // Stornierte Einzeltage ausblenden
+                          return true;
+                        }
+                        return false;
                       }).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
                       return (
@@ -400,7 +442,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                                     {b.type === "Training" ? "⚽" : "🏆"} {b.team}
                                   </div>
                                   <div style={{ fontSize: "10px", opacity: 0.9, marginTop: "2px" }}>{b.startTime}–{b.endTime}</div>
-                                  <button onClick={() => handleDeleteBooking(b.id)} style={{ position: "absolute", top: "2px", right: "2px", background: "none", border: "none", color: "white", cursor: "pointer", fontSize: "10px", padding: 0 }}>✖</button>
+                                  <button onClick={() => handleDeleteBooking(b, cellDateString)} style={{ position: "absolute", top: "2px", right: "2px", background: "none", border: "none", color: "white", cursor: "pointer", fontSize: "10px", padding: 0 }}>✖</button>
                                 </div>
                               );
                             })}
@@ -416,7 +458,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         </div>
       )}
 
-      {/* TAB 2: BUCHEN FORMULAR (Wie auf deinem Screenshot) */}
+      {/* TAB 2: BUCHEN FORMULAR (Exakt wie auf deinem Bild) */}
       {activeTab === "book" && (
         <div style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", maxWidth: "600px", margin: "0 auto", textAlign: "left" }}>
           
@@ -479,7 +521,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
             ) : (
               <div>
                 <label style={{ fontSize: "12px", color: "#666", marginBottom: "6px", display: "block" }}>Wochentage * (Mehrfachauswahl)</label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "15px" }}>
                   {daysOfWeek.map(day => {
                     const isSelected = bookDays.includes(day);
                     return (
@@ -492,6 +534,17 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                       </div>
                     );
                   })}
+                </div>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", display: "block" }}>Serie beginnt am *</label>
+                    <input type="date" value={seriesStartDate} onChange={e => setSeriesStartDate(e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "12px", color: "#666", marginBottom: "4px", display: "block" }}>Serie endet am *</label>
+                    <input type="date" value={seriesEndDate} onChange={e => setSeriesEndDate(e.target.value)} style={inputStyle} required />
+                  </div>
                 </div>
               </div>
             )}
@@ -563,6 +616,8 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
             </button>
           </form>
 
+          <hr style={{ borderColor: "#ddd", margin: "20px 0" }} />
+          
           <h4 style={{ margin: "0 0 10px 0", color: "#666" }}>Angelegte Plätze ({pitches.length})</h4>
           {pitches.length === 0 ? <p style={{ fontSize: "13px", color: "#999" }}>Noch keine Plätze vorhanden.</p> : (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
