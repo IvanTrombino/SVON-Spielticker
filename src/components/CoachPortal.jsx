@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
-// NEU: Firebase Auth Importe hinzugefügt
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from "../firebase";
 
@@ -16,9 +15,9 @@ export default function CoachPortal({ clubId }) {
   const [activeTab, setActiveTab] = useState("team");
   const [teamPlayers, setTeamPlayers] = useState([]);
   
-  // --- ZUSATZ-STATES FÜR JUGENDLEITUNG ---
-  const [availableTeams, setAvailableTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState("");
+  // --- TEAMAUSWAHL STATES ---
+  const [availableTeams, setAvailableTeams] = useState([]); // Alle Teams (nur für Jugendleitung)
+  const [selectedTeam, setSelectedTeam] = useState(""); // Das aktuell ausgewählte Team für die Ansicht
 
   // --- ATTENDANCE STATES ---
   const [trainingDate, setTrainingDate] = useState(new Date().toISOString().split("T")[0]);
@@ -28,21 +27,19 @@ export default function CoachPortal({ clubId }) {
   const [editingTrainingId, setEditingTrainingId] = useState(null);
   const [expandedTrainingId, setExpandedTrainingId] = useState(null);
 
-  // Auth-Instanz holen
   const auth = getAuth();
 
-  // --- 1. SICHERE LOGIN LOGIK (Firebase Auth) ---
+  // --- 1. LOGIN LOGIK ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError("");
     setIsLoggingIn(true);
 
     try {
-      // 1. Sicheren Login über Firebase Auth durchführen
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const uid = userCredential.user.uid;
       
-      // 2. NACH erfolgreichem Login: Zusatzinfos (Team, Name) aus Firestore laden
-      // (Darf jetzt gelesen werden, da request.auth != null ist)
+      // Trainer-Daten über die UID aus Firestore laden
       const q = query(
         collection(db, "youth_coaches"), 
         where("clubId", "==", clubId),
@@ -51,17 +48,16 @@ export default function CoachPortal({ clubId }) {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        const coachDoc = querySnapshot.docs[0];
+        // Falls das Dokument über die UID gefunden wird (sicherste Variante)
+        const coachDoc = querySnapshot.docs.find(d => d.id === uid) || querySnapshot.docs[0];
         const coachData = coachDoc.data();
         setLoggedInCoach({ id: coachDoc.id, ...coachData });
       } else {
-        // Fallback, falls der Trainer in Auth, aber nicht in der Datenbank existiert
         setLoginError("Trainer-Profil in der Datenbank nicht gefunden.");
-        auth.signOut(); // Wieder ausloggen
+        auth.signOut();
       }
     } catch (error) {
       console.error("Login Fehler:", error);
-      // Fehlermeldungen von Firebase Auth abfangen
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
          setLoginError("E-Mail oder Passwort ist falsch.");
       } else {
@@ -72,7 +68,6 @@ export default function CoachPortal({ clubId }) {
     }
   };
 
-  // --- NEU: PASSWORT ZURÜCKSETZEN ---
   const handleResetPassword = async () => {
     if (!email) {
       setLoginError("Bitte trage zuerst deine E-Mail-Adresse oben ein.");
@@ -81,7 +76,7 @@ export default function CoachPortal({ clubId }) {
     try {
       await sendPasswordResetEmail(auth, email.trim());
       alert("Eine E-Mail zum Zurücksetzen des Passworts wurde an " + email + " gesendet. Bitte prüfe auch deinen Spam-Ordner.");
-      setLoginError(""); // Evtl. vorherige Fehler löschen
+      setLoginError("");
     } catch (error) {
       console.error("Fehler beim Passwort-Reset:", error);
       setLoginError("Fehler beim Senden der Reset-E-Mail.");
@@ -89,7 +84,7 @@ export default function CoachPortal({ clubId }) {
   };
 
   const handleLogout = () => {
-    auth.signOut(); // Auch bei Firebase Auth abmelden
+    auth.signOut();
     setLoggedInCoach(null);
     setEmail("");
     setPassword("");
@@ -97,11 +92,22 @@ export default function CoachPortal({ clubId }) {
     setSelectedTeam("");
   };
 
-  // --- HILFSVARIABLEN FÜR DIE JUGENDLEITUNG ---
-  const isJugendleitung = loggedInCoach?.youthTeam === "Jugendleitung";
-  const activeViewTeam = isJugendleitung ? selectedTeam : loggedInCoach?.youthTeam;
+  // --- HILFSVARIABLEN FÜR RECHTE ---
+  // Prüft, ob "Jugendleitung" im neuen assignedTeams Array vorhanden ist
+  const isJugendleitung = loggedInCoach?.assignedTeams?.includes("Jugendleitung") || false;
+  const activeViewTeam = selectedTeam;
 
-  // --- 2. TEAMS LADEN (NUR FÜR JUGENDLEITUNG) ---
+  // --- Initiale Teamauswahl nach Login setzen ---
+  useEffect(() => {
+    if (loggedInCoach && !selectedTeam) {
+      if (!isJugendleitung && loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) {
+        // Wenn normaler Trainer: Erstes zugewiesenes Team als Standard auswählen
+        setSelectedTeam(loggedInCoach.assignedTeams[0]);
+      }
+    }
+  }, [loggedInCoach, isJugendleitung, selectedTeam]);
+
+  // --- 2. ALLE TEAMS LADEN (NUR FÜR JUGENDLEITUNG) ---
   useEffect(() => {
     if (!clubId || !isJugendleitung) return;
     
@@ -306,7 +312,6 @@ export default function CoachPortal({ clubId }) {
             </button>
           </form>
 
-          {/* NEU: Passwort-Vergessen Button */}
           <button 
             type="button" 
             onClick={handleResetPassword}
@@ -332,30 +337,36 @@ export default function CoachPortal({ clubId }) {
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "15px", fontFamily: "sans-serif", color: "#333", boxSizing: "border-box" }}>
       
-      {/* HEADERBAR */}
+      {/* HEADERBAR MIT DYNAMISCHEM DROPDOWN FÜR TEAMS */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
           <h2 style={{ margin: 0, color: "#2146d0", fontSize: "18px" }}>👋 Hallo, {loggedInCoach.firstName}</h2>
           
-          {isJugendleitung ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-              <span style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>Ansicht:</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+            <span style={{ fontSize: "13px", color: "#555", fontWeight: "bold" }}>Ansicht:</span>
+            
+            {isJugendleitung ? (
               <select 
                 value={selectedTeam} 
-                onChange={(e) => {
-                  setSelectedTeam(e.target.value);
-                  cancelEditing(); 
-                }}
+                onChange={(e) => { setSelectedTeam(e.target.value); cancelEditing(); }}
                 style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", fontWeight: "bold", color: "#34495e" }}
               >
-                {availableTeams.map(t => (
-                  <option key={t.id} value={t.name}>{t.name}</option>
-                ))}
+                {availableTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
               </select>
-            </div>
-          ) : (
-            <div style={{ fontSize: "13px", color: "#555", fontWeight: "bold", marginTop: "4px" }}>Zuständig für: {loggedInCoach.youthTeam}</div>
-          )}
+            ) : (loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 1) ? (
+              <select 
+                value={selectedTeam} 
+                onChange={(e) => { setSelectedTeam(e.target.value); cancelEditing(); }}
+                style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", fontWeight: "bold", color: "#34495e" }}
+              >
+                {loggedInCoach.assignedTeams.map(teamName => <option key={teamName} value={teamName}>{teamName}</option>)}
+              </select>
+            ) : (
+              <span style={{ fontSize: "13px", fontWeight: "bold", color: "#34495e" }}>
+                {loggedInCoach.assignedTeams?.[0] || "Kein Team zugewiesen"}
+              </span>
+            )}
+          </div>
         </div>
         <button onClick={handleLogout} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
           Abmelden
@@ -375,7 +386,7 @@ export default function CoachPortal({ clubId }) {
           <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Spielerliste ({teamPlayers.length})</h3>
           
           {teamPlayers.length === 0 ? (
-            <p style={{ color: "#777", textAlign: "center" }}>Dir sind aktuell keine Spieler zugewiesen.</p>
+            <p style={{ color: "#777", textAlign: "center" }}>Dieser Mannschaft sind aktuell keine Spieler zugewiesen.</p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
@@ -394,14 +405,10 @@ export default function CoachPortal({ clubId }) {
                       <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "14px" }}>{p.lastName}, {p.firstName}</td>
                       <td style={{ padding: "10px", textAlign: "center", color: "#555", fontSize: "13px" }}>{p.birthYear || "?"}</td>
                       <td style={{ padding: "10px", fontSize: "13px" }}>
-                        {p.fatherName ? (
-                          <div>{p.fatherName}<br/><a href={`tel:${p.fatherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.fatherPhone}</a></div>
-                        ) : "-"}
+                        {p.fatherName ? <div>{p.fatherName}<br/><a href={`tel:${p.fatherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.fatherPhone}</a></div> : "-"}
                       </td>
                       <td style={{ padding: "10px", fontSize: "13px" }}>
-                        {p.motherName ? (
-                          <div>{p.motherName}<br/><a href={`tel:${p.motherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.motherPhone}</a></div>
-                        ) : "-"}
+                        {p.motherName ? <div>{p.motherName}<br/><a href={`tel:${p.motherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.motherPhone}</a></div> : "-"}
                       </td>
                       <td style={{ padding: "10px", fontSize: "12px", color: "#c0392b", fontWeight: p.medicalComment ? "bold" : "normal" }}>
                         {p.medicalComment || "-"}
@@ -418,29 +425,18 @@ export default function CoachPortal({ clubId }) {
       {/* TAB: TRAININGSERFASSUNG */}
       {activeTab === "attendance" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          
-          {/* ERFASSUNG / BEARBEITUNG */}
           <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", border: editingTrainingId ? "2px solid #f39c12" : "none" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #eee", paddingBottom: "10px", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
               <h3 style={{ margin: 0, color: editingTrainingId ? "#f39c12" : "#27ae60", fontSize: "16px" }}>
                 {editingTrainingId ? "✏️ Training bearbeiten" : "Neues Training erfassen"}
               </h3>
               <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <input 
-                  type="date" 
-                  value={trainingDate} 
-                  onChange={e => setTrainingDate(e.target.value)} 
-                  style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontWeight: "bold", color: "#333" }}
-                />
-                {editingTrainingId && (
-                  <button onClick={cancelEditing} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "8px", cursor: "pointer", fontWeight: "bold" }}>Abbrechen</button>
-                )}
+                <input type="date" value={trainingDate} onChange={e => setTrainingDate(e.target.value)} style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontWeight: "bold", color: "#333" }} />
+                {editingTrainingId && <button onClick={cancelEditing} style={{ background: "#95a5a6", color: "white", border: "none", borderRadius: "6px", padding: "8px", cursor: "pointer", fontWeight: "bold" }}>Abbrechen</button>}
               </div>
             </div>
 
-            {teamPlayers.length === 0 ? (
-              <p style={{ color: "#777" }}>Keine Spieler für die Erfassung vorhanden.</p>
-            ) : (
+            {teamPlayers.length === 0 ? <p style={{ color: "#777" }}>Keine Spieler für die Erfassung vorhanden.</p> : (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
                   {teamPlayers.map(p => {
@@ -449,48 +445,28 @@ export default function CoachPortal({ clubId }) {
                       <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "10px", borderRadius: "8px", border: "1px solid #eee", flexWrap: "wrap", gap: "10px" }}>
                         <span style={{ fontWeight: "bold", color: "#333", fontSize: "14px" }}>{p.lastName}, {p.firstName}</span>
                         <div style={{ display: "flex", gap: "5px" }}>
-                          <button 
-                            onClick={() => handleAttendanceChange(p.id, "anwesend")}
-                            style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "anwesend" ? "#27ae60" : "#ecf0f1", color: status === "anwesend" ? "white" : "#7f8c8d" }}
-                          >✅ Da</button>
-                          <button 
-                            onClick={() => handleAttendanceChange(p.id, "entschuldigt")}
-                            style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "entsuldigt" ? "#f39c12" : "#ecf0f1", color: status === "entschuldigt" ? "white" : "#7f8c8d" }}
-                          >⚠️ Entsch.</button>
-                          <button 
-                            onClick={() => handleAttendanceChange(p.id, "unentschuldigt")}
-                            style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "unentschuldigt" ? "#e74c3c" : "#ecf0f1", color: status === "unentschuldigt" ? "white" : "#7f8c8d" }}
-                          >❌ Fehlt</button>
+                          <button onClick={() => handleAttendanceChange(p.id, "anwesend")} style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "anwesend" ? "#27ae60" : "#ecf0f1", color: status === "anwesend" ? "white" : "#7f8c8d" }}>✅ Da</button>
+                          <button onClick={() => handleAttendanceChange(p.id, "entschuldigt")} style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "entschuldigt" ? "#f39c12" : "#ecf0f1", color: status === "entschuldigt" ? "white" : "#7f8c8d" }}>⚠️ Entsch.</button>
+                          <button onClick={() => handleAttendanceChange(p.id, "unentschuldigt")} style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "unentschuldigt" ? "#e74c3c" : "#ecf0f1", color: status === "unentschuldigt" ? "white" : "#7f8c8d" }}>❌ Fehlt</button>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                
-                <button 
-                  onClick={saveTrainingSession}
-                  disabled={isSavingTraining}
-                  style={{ width: "100%", padding: "14px", background: editingTrainingId ? "#f39c12" : "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: isSavingTraining ? "not-allowed" : "pointer" }}
-                >
+                <button onClick={saveTrainingSession} disabled={isSavingTraining} style={{ width: "100%", padding: "14px", background: editingTrainingId ? "#f39c12" : "#27ae60", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: isSavingTraining ? "not-allowed" : "pointer" }}>
                   {isSavingTraining ? "Wird gespeichert..." : (editingTrainingId ? "💾 Änderungen speichern" : "💾 Trainingseinheit speichern")}
                 </button>
               </>
             )}
           </div>
 
-          {/* HISTORIE MIT DETAILS, BEARBEITEN & LÖSCHEN */}
           <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Letzte Trainingseinheiten</h3>
-            {pastTrainings.length === 0 ? (
-              <p style={{ color: "#777", fontSize: "13px" }}>Noch keine Trainings erfasst.</p>
-            ) : (
+            {pastTrainings.length === 0 ? <p style={{ color: "#777", fontSize: "13px" }}>Noch keine Trainings erfasst.</p> : (
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {pastTrainings.map(t => {
                   const isExpanded = expandedTrainingId === t.id;
-                  
-                  const presentPlayers = [];
-                  const excusedPlayers = [];
-                  const missingPlayers = [];
+                  const presentPlayers = [], excusedPlayers = [], missingPlayers = [];
                   
                   Object.entries(t.attendance || {}).forEach(([playerId, status]) => {
                     const player = teamPlayers.find(p => p.id === playerId);
@@ -503,7 +479,6 @@ export default function CoachPortal({ clubId }) {
 
                   return (
                     <div key={t.id} style={{ background: "#eef2ff", borderRadius: "8px", border: "1px solid #c7d2fe", overflow: "hidden" }}>
-                      
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px" }}>
                         <div>
                           <div style={{ fontWeight: "bold", color: "#2146d0" }}>📅 {new Date(t.date).toLocaleDateString("de-DE")}</div>
@@ -514,59 +489,28 @@ export default function CoachPortal({ clubId }) {
                             <div style={{ fontWeight: "bold", color: "#27ae60", fontSize: "15px" }}>{t.presentCount} / {t.totalPlayers}</div>
                             <div style={{ fontSize: "11px", color: "#777" }}>Anwesend</div>
                           </div>
-                          
-                          <button 
-                            onClick={() => setExpandedTrainingId(isExpanded ? null : t.id)}
-                            style={{ background: "#34495e", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
-                          >
-                            {isExpanded ? "▲ Zu" : "▼ Details"}
-                          </button>
-                          
-                          <button 
-                            onClick={() => startEditingTraining(t)}
-                            style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
-                            title="Bearbeiten"
-                          >
-                            ✏️
-                          </button>
-
-                          <button 
-                            onClick={() => deleteTrainingSession(t.id)}
-                            style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
-                            title="Löschen"
-                          >
-                            🗑
-                          </button>
+                          <button onClick={() => setExpandedTrainingId(isExpanded ? null : t.id)} style={{ background: "#34495e", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>{isExpanded ? "▲ Zu" : "▼ Details"}</button>
+                          <button onClick={() => startEditingTraining(t)} style={{ background: "#f39c12", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }} title="Bearbeiten">✏️</button>
+                          <button onClick={() => deleteTrainingSession(t.id)} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }} title="Löschen">🗑</button>
                         </div>
                       </div>
 
-                      {/* AUSGEKLAPPTE DETAILS */}
                       {isExpanded && (
                         <div style={{ background: "#fff", padding: "12px", borderTop: "1px solid #c7d2fe", fontSize: "13px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            {presentPlayers.length > 0 && (
-                              <div><strong style={{ color: "#27ae60" }}>✅ Anwesend:</strong> {presentPlayers.join(", ")}</div>
-                            )}
-                            {excusedPlayers.length > 0 && (
-                              <div><strong style={{ color: "#f39c12" }}>⚠ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>
-                            )}
-                            {missingPlayers.length > 0 && (
-                              <div><strong style={{ color: "#e74c3c" }}>❌ Fehlt:</strong> {missingPlayers.join(", ")}</div>
-                            )}
-                            {presentPlayers.length === 0 && excusedPlayers.length === 0 && missingPlayers.length === 0 && (
-                              <div style={{ color: "#7f8c8d", fontStyle: "italic" }}>Keine Spielerdaten für dieses Training gefunden (evtl. Mannschaft gewechselt).</div>
-                            )}
+                            {presentPlayers.length > 0 && <div><strong style={{ color: "#27ae60" }}>✅ Anwesend:</strong> {presentPlayers.join(", ")}</div>}
+                            {excusedPlayers.length > 0 && <div><strong style={{ color: "#f39c12" }}>⚠ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>}
+                            {missingPlayers.length > 0 && <div><strong style={{ color: "#e74c3c" }}>❌ Fehlt:</strong> {missingPlayers.join(", ")}</div>}
+                            {presentPlayers.length === 0 && excusedPlayers.length === 0 && missingPlayers.length === 0 && <div style={{ color: "#7f8c8d", fontStyle: "italic" }}>Keine Spielerdaten für dieses Training gefunden (evtl. Mannschaft gewechselt).</div>}
                           </div>
                         </div>
                       )}
-
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
-
         </div>
       )}
 
@@ -578,9 +522,7 @@ export default function CoachPortal({ clubId }) {
             <span style={{ fontSize: "13px", color: "#777", fontWeight: "bold" }}>{pastTrainings.length} Trainings erfasst</span>
           </div>
           
-          {teamPlayers.length === 0 || pastTrainings.length === 0 ? (
-            <p style={{ color: "#777", textAlign: "center" }}>Noch nicht genug Daten für eine Statistik vorhanden.</p>
-          ) : (
+          {teamPlayers.length === 0 || pastTrainings.length === 0 ? <p style={{ color: "#777", textAlign: "center" }}>Noch nicht genug Daten für eine Statistik vorhanden.</p> : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
                 <thead style={{ background: "#2146d0", color: "white" }}>
@@ -598,13 +540,8 @@ export default function CoachPortal({ clubId }) {
                       <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "13px" }}>{p.lastName}, {p.firstName}</td>
                       <td style={{ padding: "10px", textAlign: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
-                          <span style={{ fontWeight: "bold", color: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}>
-                            {p.rate}%
-                          </span>
-                          {/* Kleiner Balken für Visualisierung */}
-                          <div style={{ width: "60px", height: "8px", background: "#ecf0f1", borderRadius: "4px", overflow: "hidden" }}>
-                            <div style={{ width: `${p.rate}%`, height: "100%", background: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}></div>
-                          </div>
+                          <span style={{ fontWeight: "bold", color: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}>{p.rate}%</span>
+                          <div style={{ width: "60px", height: "8px", background: "#ecf0f1", borderRadius: "4px", overflow: "hidden" }}><div style={{ width: `${p.rate}%`, height: "100%", background: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}></div></div>
                         </div>
                       </td>
                       <td style={{ padding: "10px", textAlign: "center", color: "#27ae60", fontWeight: "bold", fontSize: "13px" }}>{p.anwesend}</td>
@@ -618,7 +555,6 @@ export default function CoachPortal({ clubId }) {
           )}
         </div>
       )}
-
     </div>
   );
 }

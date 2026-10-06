@@ -109,8 +109,8 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
   </form>
 );
 
-// --- TRAINER FORMULAR ---
-const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList }) => (
+// --- TRAINER FORMULAR (Mit NEUER MEHRFACHAUSWAHL & UID) ---
+const CoachForm = ({ formData, handleChange, handleTeamToggle, onSubmit, isSubmitting, title, buttonText, onCancel, teamsList, isEditMode }) => (
   <form onSubmit={onSubmit} style={{ background: "#e8f8f5", padding: "15px", borderRadius: "10px", border: "1px solid #a3e4d7", marginBottom: "20px", color: "#333" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #a3e4d7", paddingBottom: "10px", marginBottom: "15px" }}>
       <h3 style={{ margin: 0, fontSize: "16px", color: "#117a65" }}>{title}</h3>
@@ -121,27 +121,52 @@ const CoachForm = ({ formData, handleChange, onSubmit, isSubmitting, title, butt
       )}
     </div>
     
+    {!isEditMode && (
+      <div style={{ background: "#fef9e7", padding: "10px", borderRadius: "6px", border: "1px solid #f1c40f", marginBottom: "15px" }}>
+        <p style={{ fontSize: "12px", margin: "0 0 10px 0", color: "#7a6609" }}><strong>Wichtig:</strong> Der Trainer muss zuerst in Firebase (Authentication) angelegt werden. Trage hier seine UID ein, um Profil und Login zu verknüpfen!</p>
+        <InputField label="Firebase User-ID (UID) aus Authentication *" name="authUid" value={formData.authUid} onChange={handleChange} required={true} placeholder="z.B. X3clcMVo1lYWws..." />
+      </div>
+    )}
+
     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Vorname *" name="firstName" value={formData.firstName} onChange={handleChange} required={true} />
       <InputField label="Nachname *" name="lastName" value={formData.lastName} onChange={handleChange} required={true} />
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: "1 1 200px" }}>
-        <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Zuständig für Jugend *</label>
-        <select name="youthTeam" value={formData.youthTeam} onChange={handleChange} required style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "14px", width: "100%", boxSizing: "border-box" }}>
-          <option value="">-- Bitte wählen --</option>
-          <option value="Jugendleitung">Jugendleitung (Übergreifend)</option>
-          {teamsList.map(team => (
-            <option key={team.id} value={team.name}>{team.name}</option>
-          ))}
-        </select>
-      </div>
     </div>
+
+    {/* NEUE MEHRFACHAUSWAHL FÜR TEAMS */}
+    <div style={{ marginBottom: "15px" }}>
+      <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "6px" }}>Zuständig für Jugend (Mehrfachauswahl möglich) *</label>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", background: "#fff", padding: "12px", borderRadius: "6px", border: "1px solid #ccc" }}>
+        <div style={{ background: formData.assignedTeams?.includes("Jugendleitung") ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
+          <CheckboxField 
+            label="🌟 Jugendleitung (Vollzugriff)" 
+            name="Jugendleitung" 
+            checked={formData.assignedTeams?.includes("Jugendleitung")} 
+            onChange={() => handleTeamToggle("Jugendleitung")} 
+          />
+        </div>
+        <div style={{ width: "100%", height: "1px", background: "#eee", margin: "4px 0" }}></div>
+        {teamsList.map(team => (
+          <div key={team.id} style={{ background: formData.assignedTeams?.includes(team.name) ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
+            <CheckboxField 
+              label={team.name} 
+              name={team.name} 
+              checked={formData.assignedTeams?.includes(team.name)} 
+              onChange={() => handleTeamToggle(team.name)} 
+            />
+          </div>
+        ))}
+      </div>
+      {formData.assignedTeams?.length === 0 && <p style={{ color: "#e74c3c", fontSize: "11px", margin: "4px 0 0 0" }}>Bitte mindestens eine Rolle/Mannschaft auswählen!</p>}
+    </div>
+
     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "15px" }}>
       <InputField label="Handynummer" name="phone" value={formData.phone} onChange={handleChange} type="tel" />
       <InputField label="E-Mail Adresse (für Login)" name="email" value={formData.email} onChange={handleChange} type="email" required={true} />
       <InputField label="Schlüssel-Nr." name="keyNumber" value={formData.keyNumber} onChange={handleChange} />
     </div>
 
-    <button type="submit" disabled={isSubmitting} style={{ width: "100%", padding: "14px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
+    <button type="submit" disabled={isSubmitting || formData.assignedTeams?.length === 0} style={{ width: "100%", padding: "14px", background: "#1abc9c", color: "white", border: "none", borderRadius: "8px", cursor: (isSubmitting || formData.assignedTeams?.length === 0) ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "16px" }}>
       {isSubmitting ? "Wird gespeichert..." : buttonText}
     </button>
   </form>
@@ -185,8 +210,8 @@ export default function YouthManager({ clubId }) {
   const [playerFormData, setPlayerFormData] = useState(initialPlayerState);
   const [editPlayerFormData, setEditPlayerFormData] = useState(null);
 
-  // States Trainer (Bereinigt: Kein Passwort-Feld mehr)
-  const initialCoachState = { firstName: "", lastName: "", youthTeam: "", phone: "", email: "", keyNumber: "" };
+  // States Trainer (NEU: assignedTeams statt youthTeam & authUid hinzugefügt)
+  const initialCoachState = { authUid: "", firstName: "", lastName: "", assignedTeams: [], phone: "", email: "", keyNumber: "" };
   const [coachFormData, setCoachFormData] = useState(initialCoachState);
   const [editCoachFormData, setEditCoachFormData] = useState(null);
   const [showCoachForm, setShowCoachForm] = useState(false);
@@ -465,24 +490,37 @@ export default function YouthManager({ clubId }) {
     await updateDoc(doc(db, "youth_players", player.id), { status: "aktiv", deregistrationDetails: null });
   };
 
-  // --- HANDLER: TRAINER ---
+  // --- HANDLER: TRAINER (NEU MIT CHECKBOXEN & UID) ---
   const handleCoachChange = (e, isEditMode = false) => {
     const { name, value } = e.target;
     if (isEditMode) setEditCoachFormData(prev => ({ ...prev, [name]: value }));
     else setCoachFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleCoachTeamToggle = (teamName, isEditMode = false) => {
+    const updater = (prev) => {
+      const currentTeams = prev.assignedTeams || [];
+      const newTeams = currentTeams.includes(teamName) ? currentTeams.filter(t => t !== teamName) : [...currentTeams, teamName];
+      return { ...prev, assignedTeams: newTeams };
+    };
+    if (isEditMode) setEditCoachFormData(updater); else setCoachFormData(updater);
+  };
+
   const handleAddCoach = async (e) => {
     e.preventDefault();
+    if (coachFormData.assignedTeams.length === 0) return alert("Bitte mindestens ein Team wählen.");
+    if (!coachFormData.authUid.trim()) return alert("Firebase UID fehlt!");
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "youth_coaches"), { ...coachFormData, clubId });
-      setCoachFormData(initialCoachState); setShowCoachForm(false); alert("Trainer angelegt!");
+      const { authUid, ...restData } = coachFormData;
+      await setDoc(doc(db, "youth_coaches", authUid.trim()), { ...restData, clubId });
+      setCoachFormData(initialCoachState); setShowCoachForm(false); alert("Trainer erfolgreich verknüpft und angelegt!");
     } catch (error) { console.error(error); alert("Fehler!"); } finally { setIsSubmitting(false); }
   };
 
   const handleUpdateCoach = async (e) => {
     e.preventDefault();
+    if (editCoachFormData.assignedTeams.length === 0) return alert("Bitte mindestens ein Team wählen.");
     setIsSubmitting(true);
     try {
       const { id, ...updateData } = editCoachFormData;
@@ -754,8 +792,8 @@ export default function YouthManager({ clubId }) {
             </button>
           )}
 
-          {showCoachForm && <CoachForm formData={coachFormData} handleChange={(e) => handleCoachChange(e, false)} onSubmit={handleAddCoach} isSubmitting={isSubmitting} title="Neuen Trainer anlegen" buttonText="💾 Trainer speichern" onCancel={() => setShowCoachForm(false)} teamsList={sortedTeamsList} />}
-          {editCoachFormData && <CoachForm formData={editCoachFormData} handleChange={(e) => handleCoachChange(e, true)} onSubmit={handleUpdateCoach} isSubmitting={isSubmitting} title={`✏️ Bearbeiten: ${editCoachFormData.firstName} ${editCoachFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setEditCoachFormData(null)} teamsList={sortedTeamsList} />}
+          {showCoachForm && <CoachForm formData={coachFormData} handleChange={(e) => handleCoachChange(e, false)} handleTeamToggle={(team) => handleCoachTeamToggle(team, false)} onSubmit={handleAddCoach} isSubmitting={isSubmitting} title="Neuen Trainer anlegen" buttonText="💾 Trainer speichern" onCancel={() => setShowCoachForm(false)} teamsList={sortedTeamsList} isEditMode={false} />}
+          {editCoachFormData && <CoachForm formData={editCoachFormData} handleChange={(e) => handleCoachChange(e, true)} handleTeamToggle={(team) => handleCoachTeamToggle(team, true)} onSubmit={handleUpdateCoach} isSubmitting={isSubmitting} title={`✏️ Bearbeiten: ${editCoachFormData.firstName} ${editCoachFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setEditCoachFormData(null)} teamsList={sortedTeamsList} isEditMode={true} />}
 
           {!showCoachForm && !editCoachFormData && (
             coaches.length === 0 ? <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Keine Trainer erfasst.</p> : (
@@ -773,7 +811,13 @@ export default function YouthManager({ clubId }) {
                     {coaches.map((c, i) => (
                       <tr key={c.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f4fdfb" }}>
                         <td onClick={() => setEditCoachFormData(c)} style={{ padding: "10px", fontWeight: "bold", color: "#16a085", cursor: "pointer", textDecoration: "underline", fontSize: "13px" }}>{c.lastName}, {c.firstName} ✏️</td>
-                        <td style={{ padding: "10px", color: "#555", fontWeight: "bold", fontSize: "13px" }}>{c.youthTeam}</td>
+                        <td style={{ padding: "10px", color: "#555", fontWeight: "bold", fontSize: "12px" }}>
+                          {c.assignedTeams && c.assignedTeams.length > 0 ? (
+                             <div style={{display: "flex", gap: "4px", flexWrap: "wrap"}}>
+                               {c.assignedTeams.map(t => <span key={t} style={{background: t === "Jugendleitung" ? "#f1c40f" : "#dbeafe", padding: "3px 6px", borderRadius: "4px", color: t === "Jugendleitung" ? "#000" : "#1e40af"}}>{t}</span>)}
+                             </div>
+                          ) : "-"}
+                        </td>
                         <td style={{ padding: "10px", fontSize: "12px", color: "#333" }}>
                           <div>📞 {c.phone || "-"}</div>
                           <div>✉️ {c.email || "-"}</div>
@@ -935,7 +979,7 @@ export default function YouthManager({ clubId }) {
                                 <div>📅 <strong>Erfolgt am:</strong> {details.date ? new Date(details.date).toLocaleDateString("de-DE") : "-"}</div>
                                 <div>📞 <strong>Art:</strong> {details.method || "-"}</div>
                                 <div>⏱ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
-                                <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
+                                <div>🏛️️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
                               </div>
                             </td>
                           </tr>
