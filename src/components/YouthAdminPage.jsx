@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../firebase"; 
 import YouthManager from "./YouthManager"; 
 
@@ -27,6 +27,22 @@ export default function YouthAdminPage({ clubId }) {
     } catch (err) {
       console.error(err);
       setError("Zugangsdaten falsch. Bitte überprüfe E-Mail und Passwort.");
+    }
+  };
+
+  // --- NEU: PASSWORT ZURÜCKSETZEN ---
+  const handleResetPassword = async () => {
+    if (!email) {
+      setError("Bitte trage zuerst deine E-Mail-Adresse oben ein.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      alert("Eine E-Mail zum Zurücksetzen des Passworts wurde an " + email + " gesendet. Bitte prüfe auch deinen Spam-Ordner.");
+      setError("");
+    } catch (err) {
+      console.error("Fehler beim Passwort-Reset:", err);
+      setError("Fehler beim Senden der Reset-E-Mail.");
     }
   };
 
@@ -70,11 +86,22 @@ export default function YouthAdminPage({ clubId }) {
             
             <button 
               type="submit" 
-              style={{ padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px" }}
+              style={{ padding: "12px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "5px" }}
             >
               Einloggen
             </button>
           </form>
+
+          {/* NEU: Passwort-Vergessen Button */}
+          <div style={{ textAlign: "center", marginTop: "15px" }}>
+            <button 
+              type="button" 
+              onClick={handleResetPassword}
+              style={{ background: "transparent", color: "#2980b9", border: "none", fontSize: "13px", cursor: "pointer", textDecoration: "underline" }}
+            >
+              Passwort vergessen?
+            </button>
+          </div>
         </div>
       </div>
     );
