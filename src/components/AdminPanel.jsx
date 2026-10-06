@@ -3,7 +3,6 @@ import TeamManager from "./TeamManager";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 import YouthAdminPage from "./YouthAdminPage";
-import PitchManager from "./PitchManager"; // <-- 1. NEU: Import für die Platzbelegung
 
 export default function AdminPanel({ clubId, teams, setTeams, userRole }) {
   // Start-Reiter: Für Trainer "players", für Admins "teams"
@@ -18,8 +17,7 @@ export default function AdminPanel({ clubId, teams, setTeams, userRole }) {
 
   // Dynamische Button-Styles je nach Anzahl der sichtbaren Tabs
   const getButtonStyle = (currentTab) => {
-    // <-- 2. NEU: Die Anzahl der Buttons um 1 erhöht, damit das Design nicht zerschossen wird
-    const totalButtons = userRole === "admin" ? 5 : 3; 
+    const totalButtons = userRole === "admin" ? 4 : 2; // Admin sieht 4, Trainer 2 Tabs
     return {
       flex: `1 1 calc(${100 / totalButtons}% - 8px)`,
       padding: "12px 5px",
@@ -71,11 +69,6 @@ export default function AdminPanel({ clubId, teams, setTeams, userRole }) {
         <button onClick={() => setTab("stats")} style={getButtonStyle("stats")}>
           🏆 Statistik
         </button>
-
-        {/* <-- 3. NEU: PLATZBELEGUNG BUTTON FÜR ALLE TRAINER & ADMINS */}
-        <button onClick={() => setTab("pitches")} style={getButtonStyle("pitches")}>
-          🏟 Plätze
-        </button>
       </div>
 
       {/* --- INHALTSBEREICH --- */}
@@ -94,11 +87,6 @@ export default function AdminPanel({ clubId, teams, setTeams, userRole }) {
 
         {tab === "stats" && (
           <Statistics clubId={clubId} teams={teams} />
-        )}
-
-        {/* <-- 4. NEU: PLATZBELEGUNG MODUL RENDERN */}
-        {tab === "pitches" && (
-          <PitchManager clubId={clubId} teams={teams} />
         )}
       </div>
     </div>
