@@ -39,7 +39,6 @@ export default function CoachPortal({ clubId }) {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const uid = userCredential.user.uid;
       
-      // Trainer-Daten über die UID aus Firestore laden
       const q = query(
         collection(db, "youth_coaches"), 
         where("clubId", "==", clubId),
@@ -48,7 +47,6 @@ export default function CoachPortal({ clubId }) {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // Falls das Dokument über die UID gefunden wird (sicherste Variante)
         const coachDoc = querySnapshot.docs.find(d => d.id === uid) || querySnapshot.docs[0];
         const coachData = coachDoc.data();
         setLoggedInCoach({ id: coachDoc.id, ...coachData });
@@ -93,23 +91,12 @@ export default function CoachPortal({ clubId }) {
   };
 
   // --- HILFSVARIABLEN FÜR RECHTE ---
-  // Prüft, ob "Jugendleitung" im neuen assignedTeams Array vorhanden ist
   const isJugendleitung = loggedInCoach?.assignedTeams?.includes("Jugendleitung") || false;
   const activeViewTeam = selectedTeam;
 
-  // --- Initiale Teamauswahl nach Login setzen ---
+  // --- 2. TEAMS LADEN (FÜR JUGENDLEITUNG & TRAINER) ---
   useEffect(() => {
-    if (loggedInCoach && !selectedTeam) {
-      if (!isJugendleitung && loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) {
-        // Wenn normaler Trainer: Erstes zugewiesenes Team als Standard auswählen
-        setSelectedTeam(loggedInCoach.assignedTeams[0]);
-      }
-    }
-  }, [loggedInCoach, isJugendleitung, selectedTeam]);
-
-  // --- 2. ALLE TEAMS LADEN (NUR FÜR JUGENDLEITUNG) ---
-  useEffect(() => {
-    if (!clubId || !isJugendleitung) return;
+    if (!clubId || !loggedInCoach) return;
     
     const unsub = onSnapshot(doc(db, "youth_settings", clubId), (docSnap) => {
       if (docSnap.exists() && docSnap.data().teams) {
@@ -123,13 +110,19 @@ export default function CoachPortal({ clubId }) {
         });
         
         setAvailableTeams(loadedTeams);
-        if (loadedTeams.length > 0 && !selectedTeam) {
-          setSelectedTeam(loadedTeams[0].name);
+
+        // Standard-Team direkt setzen, falls noch keines ausgewählt ist
+        if (!selectedTeam) {
+          if (isJugendleitung && loadedTeams.length > 0) {
+            setSelectedTeam(loadedTeams[0].name);
+          } else if (!isJugendleitung && loggedInCoach.assignedTeams && loggedInCoach.assignedTeams.length > 0) {
+            setSelectedTeam(loggedInCoach.assignedTeams[0]);
+          }
         }
       }
     });
     return () => unsub();
-  }, [clubId, isJugendleitung, selectedTeam]);
+  }, [clubId, loggedInCoach, isJugendleitung, selectedTeam]);
 
   // --- 3. SPIELER & TRAININGS LADEN BASIEREND AUF "activeViewTeam" ---
   useEffect(() => {
@@ -499,7 +492,7 @@ export default function CoachPortal({ clubId }) {
                         <div style={{ background: "#fff", padding: "12px", borderTop: "1px solid #c7d2fe", fontSize: "13px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                             {presentPlayers.length > 0 && <div><strong style={{ color: "#27ae60" }}>✅ Anwesend:</strong> {presentPlayers.join(", ")}</div>}
-                            {excusedPlayers.length > 0 && <div><strong style={{ color: "#f39c12" }}>⚠ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>}
+                            {excusedPlayers.length > 0 && <div><strong style={{ color: "#f39c12" }}>⚠️ Entschuldigt:</strong> {excusedPlayers.join(", ")}</div>}
                             {missingPlayers.length > 0 && <div><strong style={{ color: "#e74c3c" }}>❌ Fehlt:</strong> {missingPlayers.join(", ")}</div>}
                             {presentPlayers.length === 0 && excusedPlayers.length === 0 && missingPlayers.length === 0 && <div style={{ color: "#7f8c8d", fontStyle: "italic" }}>Keine Spielerdaten für dieses Training gefunden (evtl. Mannschaft gewechselt).</div>}
                           </div>
