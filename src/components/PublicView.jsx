@@ -16,6 +16,9 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   const [time, setTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState([]);
+  
+  // NEU: Name des aktuellen Ticker-Schreibers
+  const [activeEditor, setActiveEditor] = useState("");
 
   const [matchDate, setMatchDate] = useState("");
   const [kickoffTime, setKickoffTime] = useState("");
@@ -119,6 +122,9 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
         setMatchDate(data.matchDate || "");
         setKickoffTime(data.kickoffTime || "");
         
+        // Den Namen des aktuellen Ticker-Schreibers auslesen
+        setActiveEditor(data.activeEditor || "");
+        
         const newHistory = data.history || [];
         setHistory(newHistory);
 
@@ -153,6 +159,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
         setIsRunning(false);
         setMatchDate("");
         setKickoffTime("");
+        setActiveEditor("");
         historyLengthRef.current = 0;
       }
     });
@@ -309,7 +316,6 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             <h3 style={{ fontSize: "1.1rem", color: "#c53030", margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "8px" }}>
               🔴 Aktive Live-Spiele
             </h3>
-            {/* HIER DIE ÄNDERUNG: isRunning || time > 0 bedeutet, das Spiel ist aktiv oder in der Pause */}
             {Object.entries(allTeamsLiveStatus).filter(([_, status]) => status.isRunning || status.time > 0).length === 0 ? (
               <p style={{ color: "#718096", fontSize: "13px", margin: "0" }}>Aktuell findet kein Live-Spiel statt.</p>
             ) : (
@@ -427,6 +433,13 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
           {activeTab === "ticker" && (
             <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", marginBottom: "20px" }}>
               
+              {/* ANZEIGE: WER BEDIENt DEN TICKER? */}
+              {activeEditor && (
+                <div style={{ fontSize: "12px", color: "#155724", backgroundColor: "#d4edda", padding: "8px 12px", borderRadius: "6px", marginBottom: "15px", border: "1px solid #c3e6cb", display: "inline-block" }}>
+                  ✏️ Ticker wird live bedient von: <strong>{activeEditor}</strong>
+                </div>
+              )}
+
               {(displayDate || kickoffTime) && (
                 <div style={{ fontSize: "12px", color: "#666", marginBottom: "15px", background: "#eee", padding: "6px", borderRadius: "6px", display: "inline-block" }}>
                   📅 {displayDate} {kickoffTime && `| ⏱ ${kickoffTime} Uhr`}
