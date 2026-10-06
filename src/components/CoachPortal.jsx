@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
+// NEU: Firebase Auth Importe hinzugefügt
+import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from "../firebase";
 
 export default function CoachPortal({ clubId }) {
@@ -26,13 +28,21 @@ export default function CoachPortal({ clubId }) {
   const [editingTrainingId, setEditingTrainingId] = useState(null);
   const [expandedTrainingId, setExpandedTrainingId] = useState(null);
 
-  // --- 1. LOGIN LOGIK ---
+  // Auth-Instanz holen
+  const auth = getAuth();
+
+  // --- 1. SICHERE LOGIN LOGIK (Firebase Auth) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError("");
     setIsLoggingIn(true);
 
     try {
+      // 1. Sicheren Login über Firebase Auth durchführen
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      
+      // 2. NACH erfolgreichem Login: Zusatzinfos (Team, Name) aus Firestore laden
+      // (Darf jetzt gelesen werden, da request.auth != null ist)
       const q = query(
         collection(db, "youth_coaches"), 
         where("clubId", "==", clubId),
@@ -40,27 +50,46 @@ export default function CoachPortal({ clubId }) {
       );
       const querySnapshot = await getDocs(q);
 
-      if (querySnapshot.empty) {
-        setLoginError("E-Mail nicht gefunden.");
-      } else {
+      if (!querySnapshot.empty) {
         const coachDoc = querySnapshot.docs[0];
         const coachData = coachDoc.data();
-
-        if (coachData.password === password) {
-          setLoggedInCoach({ id: coachDoc.id, ...coachData });
-        } else {
-          setLoginError("Falsches Passwort.");
-        }
+        setLoggedInCoach({ id: coachDoc.id, ...coachData });
+      } else {
+        // Fallback, falls der Trainer in Auth, aber nicht in der Datenbank existiert
+        setLoginError("Trainer-Profil in der Datenbank nicht gefunden.");
+        auth.signOut(); // Wieder ausloggen
       }
     } catch (error) {
       console.error("Login Fehler:", error);
-      setLoginError("Fehler beim Login. Bitte später versuchen.");
+      // Fehlermeldungen von Firebase Auth abfangen
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+         setLoginError("E-Mail oder Passwort ist falsch.");
+      } else {
+         setLoginError("Fehler beim Login. Bitte später versuchen.");
+      }
     } finally {
       setIsLoggingIn(false);
     }
   };
 
+  // --- NEU: PASSWORT ZURÜCKSETZEN ---
+  const handleResetPassword = async () => {
+    if (!email) {
+      setLoginError("Bitte trage zuerst deine E-Mail-Adresse oben ein.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      alert("Eine E-Mail zum Zurücksetzen des Passworts wurde an " + email + " gesendet. Bitte prüfe auch deinen Spam-Ordner.");
+      setLoginError(""); // Evtl. vorherige Fehler löschen
+    } catch (error) {
+      console.error("Fehler beim Passwort-Reset:", error);
+      setLoginError("Fehler beim Senden der Reset-E-Mail.");
+    }
+  };
+
   const handleLogout = () => {
+    auth.signOut(); // Auch bei Firebase Auth abmelden
     setLoggedInCoach(null);
     setEmail("");
     setPassword("");
@@ -95,7 +124,6 @@ export default function CoachPortal({ clubId }) {
     });
     return () => unsub();
   }, [clubId, isJugendleitung, selectedTeam]);
-
 
   // --- 3. SPIELER & TRAININGS LADEN BASIEREND AUF "activeViewTeam" ---
   useEffect(() => {
@@ -168,14 +196,13 @@ export default function CoachPortal({ clubId }) {
     setAttendanceRecords(initialAttendance);
   };
 
-  // NEU: Lösch-Funktion für ein Training
   const deleteTrainingSession = async (trainingId) => {
     if (!window.confirm("Möchtest du diese Trainingseinheit wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")) return;
     
     try {
       await deleteDoc(doc(db, "youth_trainings", trainingId));
       if (editingTrainingId === trainingId) {
-        cancelEditing(); // Falls das gelöschte Training gerade bearbeitet wurde, brechen wir die Bearbeitung ab
+        cancelEditing();
       }
       alert("Training erfolgreich gelöscht!");
     } catch (error) {
@@ -243,7 +270,6 @@ export default function CoachPortal({ clubId }) {
     return stats.sort((a, b) => b.rate - a.rate);
   };
 
-
   // --- RENDER: LOGIN BILDSCHIRM ---
   if (!loggedInCoach) {
     return (
@@ -270,6 +296,7 @@ export default function CoachPortal({ clubId }) {
               style={{ padding: "12px", borderRadius: "8px", border: "1px solid #ccc", fontSize: "15px", width: "100%", boxSizing: "border-box" }}
             />
             {loginError && <div style={{ color: "#e74c3c", fontSize: "13px", fontWeight: "bold" }}>{loginError}</div>}
+            
             <button 
               type="submit" 
               disabled={isLoggingIn}
@@ -278,6 +305,15 @@ export default function CoachPortal({ clubId }) {
               {isLoggingIn ? "Prüfe..." : "Einloggen"}
             </button>
           </form>
+
+          {/* NEU: Passwort-Vergessen Button */}
+          <button 
+            type="button" 
+            onClick={handleResetPassword}
+            style={{ marginTop: "15px", background: "transparent", color: "#2980b9", border: "none", fontSize: "13px", cursor: "pointer", textDecoration: "underline" }}
+          >
+            Passwort vergessen?
+          </button>
         </div>
       </div>
     );
@@ -419,7 +455,7 @@ export default function CoachPortal({ clubId }) {
                           >✅ Da</button>
                           <button 
                             onClick={() => handleAttendanceChange(p.id, "entschuldigt")}
-                            style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "entschuldigt" ? "#f39c12" : "#ecf0f1", color: status === "entschuldigt" ? "white" : "#7f8c8d" }}
+                            style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "entsuldigt" ? "#f39c12" : "#ecf0f1", color: status === "entschuldigt" ? "white" : "#7f8c8d" }}
                           >⚠️ Entsch.</button>
                           <button 
                             onClick={() => handleAttendanceChange(p.id, "unentschuldigt")}
@@ -494,13 +530,12 @@ export default function CoachPortal({ clubId }) {
                             ✏️
                           </button>
 
-                          {/* NEUER LÖSCHEN-KNOPF */}
                           <button 
                             onClick={() => deleteTrainingSession(t.id)}
                             style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "4px", padding: "6px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
                             title="Löschen"
                           >
-                            🗑️️
+                            🗑
                           </button>
                         </div>
                       </div>
