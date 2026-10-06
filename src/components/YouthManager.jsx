@@ -232,7 +232,7 @@ export default function YouthManager({ clubId }) {
 
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
 
-  // NEU: Feste Reihenfolge der Mannschaften definiert
+  // Feste Reihenfolge der Mannschaften
   const customSortOrder = [
     "1. Mannschaft",
     "2. Mannschaft",
@@ -247,13 +247,16 @@ export default function YouthManager({ clubId }) {
     "G-Jugend"
   ];
 
-  // Sortierfunktion für Mannschaften anhand der festen Liste
+  // Präzise Sortierfunktion für Mannschaften
   const sortTeamsLogic = (a, b) => {
-    const nameA = a.name || "";
-    const nameB = b.name || "";
+    const nameA = (a.name || "").trim();
+    const nameB = (b.name || "").trim();
     
-    const indexA = customSortOrder.findIndex(item => nameA.toLowerCase().includes(item.toLowerCase()));
-    const indexB = customSortOrder.findIndex(item => nameB.toLowerCase().includes(item.toLowerCase()));
+    let indexA = customSortOrder.findIndex(item => item.toLowerCase() === nameA.toLowerCase());
+    let indexB = customSortOrder.findIndex(item => item.toLowerCase() === nameB.toLowerCase());
+
+    if (indexA === -1) indexA = customSortOrder.findIndex(item => nameA.toLowerCase().includes(item.toLowerCase()));
+    if (indexB === -1) indexB = customSortOrder.findIndex(item => nameB.toLowerCase().includes(item.toLowerCase()));
 
     if (indexA !== -1 && indexB !== -1) return indexA - indexB;
     if (indexA !== -1) return -1;
@@ -643,7 +646,7 @@ export default function YouthManager({ clubId }) {
             <h3 style={{ marginTop: 0, borderBottom: "1px solid rgba(255,255,255,0.3)", paddingBottom: "8px", fontSize: "15px" }}>🏆 Gemeldete Teams im Spielbetrieb ({totalRegisteredTeams} gesamt)</h3>
             
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center", marginTop: "12px" }}>
-              {teamSettings.map(t => (
+              {sortedTeamsList.map(t => (
                 <div key={t.id} style={{ background: "rgba(255,255,255,0.15)", padding: "8px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "bold" }}>
                   {t.name}: <span style={{ color: "#f1c40f", fontSize: "15px" }}>{t.count || 0}</span>
                 </div>
