@@ -232,7 +232,7 @@ export default function YouthManager({ clubId }) {
 
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
 
-  // Feste Reihenfolge der Mannschaften
+  // Exakte manuelle Reihenfolge (Array-Index bestimmt die Position)
   const customSortOrder = [
     "1. Mannschaft",
     "2. Mannschaft",
@@ -247,7 +247,7 @@ export default function YouthManager({ clubId }) {
     "G-Jugend"
   ];
 
-  // Präzise Sortierfunktion für Mannschaften
+  // Sortierfunktion, die sich starr an das obige Array hält
   const sortTeamsLogic = (a, b) => {
     const nameA = (a.name || "").trim();
     const nameB = (b.name || "").trim();
@@ -255,13 +255,10 @@ export default function YouthManager({ clubId }) {
     let indexA = customSortOrder.findIndex(item => item.toLowerCase() === nameA.toLowerCase());
     let indexB = customSortOrder.findIndex(item => item.toLowerCase() === nameB.toLowerCase());
 
-    if (indexA === -1) indexA = customSortOrder.findIndex(item => nameA.toLowerCase().includes(item.toLowerCase()));
-    if (indexB === -1) indexB = customSortOrder.findIndex(item => nameB.toLowerCase().includes(item.toLowerCase()));
+    if (indexA === -1) indexA = 999; // Unbekannte Teams ans Ende
+    if (indexB === -1) indexB = 999;
 
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA !== -1) return -1;
-    if (indexB !== -1) return 1;
-    return nameA.localeCompare(nameB);
+    return indexA - indexB;
   };
 
   // 1. Teams laden
@@ -362,12 +359,11 @@ export default function YouthManager({ clubId }) {
   }, {});
   
   const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => {
-    const indexA = customSortOrder.findIndex(item => a.toLowerCase().includes(item.toLowerCase()));
-    const indexB = customSortOrder.findIndex(item => b.toLowerCase().includes(item.toLowerCase()));
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA !== -1) return -1;
-    if (indexB !== -1) return 1;
-    return a.localeCompare(b);
+    let indexA = customSortOrder.findIndex(item => item.toLowerCase() === a.toLowerCase());
+    let indexB = customSortOrder.findIndex(item => item.toLowerCase() === b.toLowerCase());
+    if (indexA === -1) indexA = 999;
+    if (indexB === -1) indexB = 999;
+    return indexA - indexB;
   });
 
   const exportCSV = (type) => {
@@ -619,7 +615,7 @@ export default function YouthManager({ clubId }) {
         <TabButton id="dashboard" label="📊 Dashboard" />
         <TabButton id="add" label="➕ Neuer Spieler" />
         <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
-        <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
+        <TabButton id="coaches" label={`🧑‍‍🏫 Trainer (${coaches.length})`} />
         <TabButton id="teams" label="⚙️ Teams" />
         <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
       </div>
