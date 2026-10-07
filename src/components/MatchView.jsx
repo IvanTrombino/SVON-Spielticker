@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase"; 
+import { displayNameFor } from "../nameConsent";
+
+// Signatur unter geteilten Spielberichten
+const CLUB_SIGNATURES = {
+  svon: "SV Orsingen-Nenzingen - Eine Gemeinde. Ein Verein. Eine Familie."
+};
 
 export default function MatchView({ clubId, teams }) {
   // --- NAVIGATION & TEAM-AUSWAHL ---
@@ -10,6 +16,15 @@ export default function MatchView({ clubId, teams }) {
 
   // --- CLOUD-STATE: Metadaten ---
   const [players, setPlayers] = useState([]); 
+  // Spieler ohne Einwilligung zur Namensnennung -> Initialen (gepflegt in der Jugenddatenbank)
+  const [nameDisplayMap, setNameDisplayMap] = useState({});
+
+  useEffect(() => {
+    if (!clubId) return;
+    return onSnapshot(doc(db, "ticker", `${clubId}_nameDisplay`), (snap) => {
+      setNameDisplayMap(snap.exists() ? snap.data().map || {} : {});
+    }, () => setNameDisplayMap({}));
+  }, [clubId]);
   const [scorers, setScorers] = useState({});
   const [savedMatches, setSavedMatches] = useState([]);
   const [lineups, setLineups] = useState({});
@@ -300,7 +315,8 @@ export default function MatchView({ clubId, teams }) {
 
     const isHomeEvent = team === "home";
     const isOurEvent = isSvonAway ? !isHomeEvent : isHomeEvent;
-    const playerName = (isOurEvent && selectedPlayer) ? selectedPlayer : (isOurEvent ? "Unbekannt" : "Gegner");
+    // Öffentlich (Live-Spiel, Push, Bericht) nur Initialen, wenn keine Einwilligung vorliegt
+    const playerName = (isOurEvent && selectedPlayer) ? displayNameFor(nameDisplayMap, selectedPlayer) : (isOurEvent ? "Unbekannt" : "Gegner");
     const minute = Math.floor(time / 60) + 1;
     const newEvent = { id: Date.now(), team, type, player: playerName, minute };
     
@@ -371,10 +387,14 @@ export default function MatchView({ clubId, teams }) {
 
       if (isOurEvent && lastEvent.player !== "Unbekannt" && lastEvent.player !== "Gegner") {
         const teamScorers = scorers[selectedTeam] || {};
-        const pGoals = teamScorers[lastEvent.player] || 0;
+        // Im Ereignis steht ggf. nur das Initial – passenden vollen Namen in der Torschützenliste suchen
+        const scorerKey = teamScorers[lastEvent.player] !== undefined
+          ? lastEvent.player
+          : Object.keys(teamScorers).find(name => teamScorers[name] > 0 && displayNameFor(nameDisplayMap, name) === lastEvent.player) || lastEvent.player;
+        const pGoals = teamScorers[scorerKey] || 0;
         const newScorers = { 
           ...scorers, 
-          [selectedTeam]: { ...teamScorers, [lastEvent.player]: Math.max(0, pGoals - 1) } 
+          [selectedTeam]: { ...teamScorers, [scorerKey]: Math.max(0, pGoals - 1) } 
         };
         setScorers(newScorers);
         setDoc(doc(db, "ticker", `${clubId}_scorers`), newScorers); 
@@ -468,11 +488,13 @@ export default function MatchView({ clubId, teams }) {
         else if (event.type === "yellowred") icon = "🟨🟥";
         else if (event.type === "red") icon = "🟥";
         
-        text += `${event.minute}' ${icon} ${event.player}\n`;
+        text += `${event.minute}' ${icon} ${displayNameFor(nameDisplayMap, event.player)}\n`;
       });
     } else {
       text += `Keine Ereignisse aufgezeichnet.\n`;
     }
+
+    if (CLUB_SIGNATURES[clubId]) text += `\n${CLUB_SIGNATURES[clubId]}`;
 
     if (navigator.share) {
       navigator.share({ title: "Spielbericht", text: text }).catch(() => {});

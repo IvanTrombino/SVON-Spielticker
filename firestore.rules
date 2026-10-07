@@ -70,15 +70,15 @@ service cloud.firestore {
 
     // Spieldaten, die eine Ticker-Person mit Tagescode lesen bzw. schreiben darf
     function isMatchReadDoc(docId) {
-      return docId.matches('[a-z0-9]+_(matches|next_matches|lineups|scorers|players|live_match_.*)');
+      return docId.matches('[a-z0-9]+_(matches|next_matches|lineups|scorers|players|nameDisplay|live_match_.*)');
     }
     function isMatchWriteDoc(docId) {
       return docId.matches('[a-z0-9]+_(matches|next_matches|lineups|scorers|live_match_.*)');
     }
 
-    // Vereins-Einstellungen: nur Admins
+    // Vereins-Einstellungen und Initialen-Liste (aus der Jugenddatenbank): nur Admins
     function isAdminOnlyDoc(docId) {
-      return docId.matches('[a-z0-9]+_(teams|pitches|teamCoaches|fussballde|closures)');
+      return docId.matches('[a-z0-9]+_(teams|pitches|teamCoaches|fussballde|closures|nameDisplay)');
     }
 
     // --- REGELN ---

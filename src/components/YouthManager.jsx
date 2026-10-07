@@ -1,7 +1,11 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, where, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { compareTeamNames } from "../teamOrder";
+import { buildNameDisplayMap } from "../nameConsent";
+
+// ISO-Datum -> deutsches Datum; Freitext wie "Nicht angegeben" bleibt unverändert
+const formatDateDE = (value) => /^\d{4}-\d{2}-\d{2}/.test(value || "") ? new Date(value).toLocaleDateString("de-DE") : (value || "-");
 
 // --- HILFS-KOMPONENTEN ---
 
@@ -76,6 +80,7 @@ const PlayerForm = ({ formData, handleChange, onSubmit, isSubmitting, title, but
       <CheckboxField label="Angemeldet bei SVON" name="registeredSVON" checked={formData.registeredSVON} onChange={handleChange} />
       <CheckboxField label="Angemeldet beim DFB" name="registeredDFB" checked={formData.registeredDFB} onChange={handleChange} />
       <CheckboxField label="Bilder-Veröffentlichung erlaubt" name="photoConsent" checked={formData.photoConsent} onChange={handleChange} />
+      <CheckboxField label="Namensnennung im Live-Ticker erlaubt (sonst nur Initialen)" name="nameConsent" checked={formData.nameConsent} onChange={handleChange} />
     </div>
 
     <h4 style={{ color: "#4f46e5", marginBottom: "8px", fontSize: "13px" }}>🏠 Anschrift & Kontakt</h4>
@@ -218,7 +223,7 @@ export default function YouthManager({ clubId }) {
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [editTeamData, setEditTeamData] = useState({ name: "", years: "", count: 1 });
 
-  const initialPlayerState = { youthTeam: "", firstName: "", lastName: "", birthDate: "", age: "", birthYear: "", registeredSVON: false, registeredDFB: false, passNumber: "", photoConsent: false, address: "", postalCode: "", city: "", fatherName: "", fatherPhone: "", motherName: "", motherPhone: "", medicalComment: "" };
+  const initialPlayerState = { youthTeam: "", firstName: "", lastName: "", birthDate: "", age: "", birthYear: "", registeredSVON: false, registeredDFB: false, passNumber: "", photoConsent: false, nameConsent: false, address: "", postalCode: "", city: "", fatherName: "", fatherPhone: "", motherName: "", motherPhone: "", medicalComment: "" };
   const [playerFormData, setPlayerFormData] = useState(initialPlayerState);
   const [editPlayerFormData, setEditPlayerFormData] = useState(null);
 
@@ -228,6 +233,8 @@ export default function YouthManager({ clubId }) {
   const [showCoachForm, setShowCoachForm] = useState(false);
 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [bulkTeam, setBulkTeam] = useState("none");
   const [isBulking, setIsBulking] = useState(false);
 
@@ -354,10 +361,10 @@ export default function YouthManager({ clubId }) {
     let rows = [];
 
     if (type === "active") {
-      headers = ["Nachname", "Vorname", "Jugend", "Geburtsdatum", "Alter", "Jahrgang", "Passnummer", "SVON", "DFB", "Bilderrechte", "Strasse", "PLZ", "Wohnort", "Vater", "Tel. Vater", "Mutter", "Tel. Mutter", "Medizinische Hinweise / Allergien"];
+      headers = ["Nachname", "Vorname", "Jugend", "Geburtsdatum", "Alter", "Jahrgang", "Passnummer", "SVON", "DFB", "Bilderrechte", "Namensnennung Ticker", "Strasse", "PLZ", "Wohnort", "Vater", "Tel. Vater", "Mutter", "Tel. Mutter", "Medizinische Hinweise / Allergien"];
       rows = activePlayers.map(p => [
         `"${p.lastName || ""}"`, `"${p.firstName || ""}"`, `"${p.youthTeam || ""}"`, `"${p.birthDate || ""}"`, `"${p.age || ""}"`, `"${p.birthYear || ""}"`, `"${p.passNumber || ""}"`,
-        `"${p.registeredSVON ? "Ja" : "Nein"}"`, `"${p.registeredDFB ? "Ja" : "Nein"}"`, `"${p.photoConsent ? "Ja" : "Nein"}"`,
+        `"${p.registeredSVON ? "Ja" : "Nein"}"`, `"${p.registeredDFB ? "Ja" : "Nein"}"`, `"${p.photoConsent ? "Ja" : "Nein"}"`, `"${p.nameConsent ? "Ja" : "Nein"}"`,
         `"${p.address || ""}"`, `"${p.postalCode || ""}"`, `"${p.city || ""}"`, `"${p.fatherName || ""}"`, `"${p.fatherPhone || ""}"`, `"${p.motherName || ""}"`, `"${p.motherPhone || ""}"`, `"${(p.medicalComment || "").replace(/\n/g, " ")}"`
       ]);
     } else {
@@ -386,10 +393,10 @@ export default function YouthManager({ clubId }) {
       `Hallo Vorstand / Jugendleitung,\n\nhiermit wird folgende Abmeldung dokumentiert:\n\n` +
       `Spieler: ${p.firstName} ${p.lastName}\n` +
       `Mannschaft: ${p.youthTeam || "Keine Zuweisung"}\n` +
-      `Abmeldung erfolgt am: ${details.date || "-"}\n` +
+      `Abmeldung erfolgt am: ${formatDateDE(details.date)}\n` +
       `Art der Abmeldung: ${details.method || "-"}\n` +
-      `Bestätigt auf: ${details.confirmedDate || "-"}\n` +
-      `An SVON gemeldet: ${details.reportedToSVON ? `Ja (am ${details.svonReportDate || "-"})` : "Nein"}\n\n` +
+      `Bestätigt auf: ${formatDateDE(details.confirmedDate)}\n` +
+      `An SVON gemeldet: ${details.reportedToSVON ? `Ja (am ${formatDateDE(details.svonReportDate)})` : "Nein"}\n\n` +
       `Mit sportlichen Grüßen\nJugendleitung SVON`
     );
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
@@ -404,6 +411,52 @@ export default function YouthManager({ clubId }) {
       setSelectedPlayerIds([]);
     } else {
       setSelectedPlayerIds(filteredActivePlayers.map(p => p.id));
+    }
+  };
+
+  // Liste "Name -> Initialen" für den Live-Ticker aktuell halten (Spieler ohne Einwilligung zur Namensnennung)
+  const lastNameDisplayJson = useRef(null);
+  useEffect(() => {
+    if (!clubId || allPlayers.length === 0) return;
+    const map = buildNameDisplayMap(allPlayers);
+    const json = JSON.stringify(map);
+    if (json === lastNameDisplayJson.current) return;
+    lastNameDisplayJson.current = json;
+    setDoc(doc(db, "ticker", `${clubId}_nameDisplay`), { map }).catch(error => console.error("Fehler beim Speichern der Initialen-Liste:", error));
+  }, [allPlayers, clubId]);
+
+  const handleBulkNameConsent = async (allowed) => {
+    if (!window.confirm(`Namensnennung im Live-Ticker für ${selectedPlayerIds.length} Spieler ${allowed ? "ERLAUBEN" : "ENTZIEHEN"}?`)) return;
+    setIsBulking(true);
+    try {
+      await Promise.all(selectedPlayerIds.map(id => updateDoc(doc(db, "youth_players", id), { nameConsent: allowed })));
+      setSelectedPlayerIds([]);
+    } catch (error) {
+      console.error(error);
+      alert("Fehler beim Speichern!");
+    } finally {
+      setIsBulking(false);
+    }
+  };
+
+  // Historie: endgültig löschen (einzeln oder mehrere)
+  const toggleHistorySelection = (id) => {
+    setSelectedHistoryIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const deletePlayersPermanently = async (players) => {
+    if (players.length === 0) return;
+    const names = players.slice(0, 5).map(p => `${p.firstName} ${p.lastName}`).join(", ") + (players.length > 5 ? ` … und ${players.length - 5} weitere` : "");
+    if (!window.confirm(`⚠️ ${players.length} Spieler ENDGÜLTIG löschen?\n${names}\n\nAlle Daten inkl. Abmeldedokumentation werden unwiderruflich entfernt.`)) return;
+    setIsDeleting(true);
+    try {
+      await Promise.all(players.map(p => deleteDoc(doc(db, "youth_players", p.id))));
+      setSelectedHistoryIds(prev => prev.filter(id => !players.some(p => p.id === id)));
+    } catch (error) {
+      console.error("Fehler beim Löschen:", error);
+      alert("Fehler beim Löschen!");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -687,6 +740,11 @@ export default function YouthManager({ clubId }) {
               >
                 {isBulking ? "Wird zugewiesen..." : "Ausgewählte zuweisen"}
               </button>
+              <div style={{ flexBasis: "100%", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", fontSize: "12px", color: "#3730a3" }}>
+                <span>Namensnennung im Live-Ticker:</span>
+                <button onClick={() => handleBulkNameConsent(true)} disabled={isBulking} style={{ padding: "6px 10px", background: "#27ae60", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>✅ erlauben</button>
+                <button onClick={() => handleBulkNameConsent(false)} disabled={isBulking} style={{ padding: "6px 10px", background: "#7f8c8d", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>🔒 nur Initialen</button>
+              </div>
             </div>
           )}
 
@@ -760,7 +818,7 @@ export default function YouthManager({ clubId }) {
                             style={{ width: "16px", height: "16px", cursor: "pointer" }} 
                           />
                         </td>
-                        <td onClick={() => { setEditPlayerFormData({ ...initialPlayerState, ...p }); setActiveTab("edit"); }} style={{ padding: "10px", fontWeight: "bold", color: "#2980b9", cursor: "pointer", textDecoration: "underline", fontSize: "13px" }}>{p.lastName}, {p.firstName} ✏️</td>
+                        <td onClick={() => { setEditPlayerFormData({ ...initialPlayerState, ...p }); setActiveTab("edit"); }} style={{ padding: "10px", fontWeight: "bold", color: "#2980b9", cursor: "pointer", textDecoration: "underline", fontSize: "13px" }}>{p.lastName}, {p.firstName} ✏️{!p.nameConsent && <span title="Keine Einwilligung zur Namensnennung – im Live-Ticker nur Initialen" style={{ marginLeft: "6px", fontSize: "11px", color: "#7f8c8d", textDecoration: "none", display: "inline-block" }}>🔒</span>}</td>
                         <td style={{ padding: "10px", textAlign: "center", color: "#555", fontWeight: "bold", fontSize: "13px" }}>{p.youthTeam || "-"}</td>
                         <td style={{ padding: "10px", textAlign: "center", color: "#333", fontSize: "13px" }}>{p.birthYear || "?"}</td>
                         <td style={{ padding: "10px", color: "#555", fontSize: "13px" }}>{p.city || "-"}</td>
@@ -915,6 +973,15 @@ export default function YouthManager({ clubId }) {
           
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
             <h3 style={{ margin: 0, color: "#7f8c8d", fontSize: "15px" }}>Abgemeldete Spieler</h3>
+            {selectedHistoryIds.length > 0 && (
+              <button
+                onClick={() => deletePlayersPermanently(inactivePlayers.filter(p => selectedHistoryIds.includes(p.id)))}
+                disabled={isDeleting}
+                style={{ padding: "6px 12px", background: "#c0392b", color: "white", border: "none", borderRadius: "6px", cursor: isDeleting ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "12px" }}
+              >
+                {isDeleting ? "Wird gelöscht..." : `🗑️ ${selectedHistoryIds.length} ausgewählte endgültig löschen`}
+              </button>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Sortieren:</label>
               <select value={historySortBy} onChange={(e) => setHistorySortBy(e.target.value)} style={{ padding: "5px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "12px", background: "#fff", color: "#333" }}>
@@ -929,6 +996,14 @@ export default function YouthManager({ clubId }) {
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "650px" }}>
                 <thead style={{ background: "#95a5a6", color: "white" }}>
                   <tr>
+                    <th style={{ padding: "10px", width: "40px", textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={sortedHistoryPlayers.length > 0 && selectedHistoryIds.length === sortedHistoryPlayers.length}
+                        onChange={() => setSelectedHistoryIds(selectedHistoryIds.length === sortedHistoryPlayers.length ? [] : sortedHistoryPlayers.map(p => p.id))}
+                        style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                      />
+                    </th>
                     <th style={{ padding: "10px", textAlign: "left", fontSize: "13px" }}>Name, Vorname</th>
                     <th style={{ padding: "10px", textAlign: "center", fontSize: "13px" }}>Abgemeldet am</th>
                     <th style={{ padding: "10px", textAlign: "right", fontSize: "13px" }}>Aktionen</th>
@@ -941,7 +1016,10 @@ export default function YouthManager({ clubId }) {
 
                     return (
                       <Fragment key={p.id}>
-                        <tr style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
+                        <tr style={{ borderBottom: "1px solid #eee", background: selectedHistoryIds.includes(p.id) ? "#fdecea" : i % 2 === 0 ? "white" : "#f8f9fa" }}>
+                          <td style={{ padding: "10px", textAlign: "center" }}>
+                            <input type="checkbox" checked={selectedHistoryIds.includes(p.id)} onChange={() => toggleHistorySelection(p.id)} style={{ width: "16px", height: "16px", cursor: "pointer" }} />
+                          </td>
                           <td style={{ padding: "10px", fontWeight: "bold", color: "#7f8c8d", fontSize: "13px" }}>{p.lastName}, {p.firstName}</td>
                           <td style={{ padding: "10px", textAlign: "center", color: "#7f8c8d", fontSize: "13px" }}>{details.date ? new Date(details.date).toLocaleDateString("de-DE") : "Unbekannt"}</td>
                           <td style={{ padding: "10px", textAlign: "right", display: "flex", gap: "4px", justifyContent: "flex-end", flexWrap: "wrap" }}>
@@ -955,18 +1033,19 @@ export default function YouthManager({ clubId }) {
                               📤 Teilen
                             </button>
                             <button onClick={() => handleReactivatePlayer(p)} style={{ background: "#27ae60", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>Aktiv</button>
+                            <button onClick={() => deletePlayersPermanently([p])} disabled={isDeleting} style={{ background: "#c0392b", color: "white", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }} title="Endgültig löschen">🗑️</button>
                           </td>
                         </tr>
 
                         {isExpanded && (
                           <tr style={{ background: "#f1f2f6" }}>
-                            <td colSpan="3" style={{ padding: "12px", fontSize: "12px", color: "#333", borderBottom: "2px solid #ddd" }}>
+                            <td colSpan="4" style={{ padding: "12px", fontSize: "12px", color: "#333", borderBottom: "2px solid #ddd" }}>
                               <div style={{ fontWeight: "bold", marginBottom: "6px", color: "#2c3e50" }}>📋 Abmeldedokumentation für {p.firstName} {p.lastName}:</div>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "4px" }}>
                                 <div>📅 <strong>Erfolgt am:</strong> {details.date ? new Date(details.date).toLocaleDateString("de-DE") : "-"}</div>
                                 <div>📞 <strong>Art:</strong> {details.method || "-"}</div>
-                                <div>⏱ <strong>Bestätigt auf:</strong> {details.confirmedDate ? new Date(details.confirmedDate).toLocaleDateString("de-DE") : "-"}</div>
-                                <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${details.svonReportDate ? new Date(details.svonReportDate).toLocaleDateString("de-DE") : "-"})` : "❌ Nein"}</div>
+                                <div>⏱ <strong>Bestätigt auf:</strong> {formatDateDE(details.confirmedDate)}</div>
+                                <div>🏛️ <strong>An SVON gemeldet:</strong> {details.reportedToSVON ? `✅ Ja (am ${formatDateDE(details.svonReportDate)})` : "❌ Nein"}</div>
                               </div>
                             </td>
                           </tr>

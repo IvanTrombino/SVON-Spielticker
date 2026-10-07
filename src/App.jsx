@@ -4,6 +4,7 @@ import PublicView from "./components/PublicView";
 import YouthAdminPage from "./components/YouthAdminPage"; 
 import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trainer-Portal
 import TickerAdmin from "./components/TickerAdmin";
+import LegalPage, { LegalFooter } from "./components/LegalPage";
 import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
@@ -30,6 +31,7 @@ export default function App() {
 
   const [clubInput, setClubInput] = useState("");
   const [tickerCodeInput, setTickerCodeInput] = useState("");
+  const [legalPage, setLegalPage] = useState(null); // "impressum" | "datenschutz" | null
   const [isRedeemingCode, setIsRedeemingCode] = useState(false);
   const [teams, setTeams] = useState([]);
 
@@ -201,6 +203,13 @@ export default function App() {
     </div>
   );
 
+  const legal = (
+    <>
+      <LegalFooter onOpen={setLegalPage} />
+      <LegalPage page={legalPage} onChange={setLegalPage} onClose={() => setLegalPage(null)} />
+    </>
+  );
+
   if (authLoading) {
     return <div style={{ textAlign: "center", marginTop: "50px", fontFamily: "sans-serif" }}>Lade...</div>;
   }
@@ -237,6 +246,7 @@ export default function App() {
             </button>
           </div>
         </div>
+        {legal}
       </div>
     );
   }
@@ -254,6 +264,7 @@ export default function App() {
           </button>
         </div>
         <PublicView clubId={clubId} teams={teams} onBackToAdmin={handleBackToHome} />
+        {legal}
       </div>
     );
   }
@@ -365,6 +376,7 @@ export default function App() {
           </button>
 
         </div>
+        {legal}
       </div>
     );
   }
