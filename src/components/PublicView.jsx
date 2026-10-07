@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
-import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom } from "../fussballde";
+import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom, showsTable, fetchTeamTable } from "../fussballde";
 
 // "2026-10-10" -> "Sa, 10.10.2026"; andere Schreibweisen bleiben unverändert
 const formatMatchDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
@@ -57,6 +57,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   // 1a. Nächste Spiele automatisch von fussball.de (für verknüpfte Mannschaften)
   const [fussballLinks, setFussballLinks] = useState({});
   const [autoNextMatches, setAutoNextMatches] = useState({});
+  const [autoTables, setAutoTables] = useState({}); // { Mannschaft: { league, rows, own } }
 
   useEffect(() => {
     if (!clubId) return;
@@ -69,6 +70,19 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
     if (!teams || teams.length === 0 || Object.keys(fussballLinks).length === 0) return;
     let cancelled = false;
     const load = async () => {
+      // Tabellen (nur D-Jugend bis 1. Mannschaft)
+      Promise.all(teams.filter(showsTable).map(async (teamName) => {
+        const teamId = findLinkedTeamId(fussballLinks, teamName);
+        if (!teamId) return null;
+        try {
+          const table = await fetchTeamTable(teamId);
+          return table ? [teamName, table] : null;
+        } catch (error) {
+          console.error(`fussball.de Tabelle (${teamName}):`, error);
+          return null;
+        }
+      })).then(entries => { if (!cancelled) setAutoTables(Object.fromEntries(entries.filter(Boolean))); });
+
       const entries = await Promise.all(teams.map(async (teamName) => {
         const teamId = findLinkedTeamId(fussballLinks, teamName);
         if (!teamId) return null;
@@ -410,6 +424,11 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
                     <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
                       <div style={{ flex: 1, paddingRight: "10px" }}>
                         <strong style={{ fontSize: "14px", color: "#2146d0", display: "block", marginBottom: "4px" }}>{teamName}</strong>
+                        {autoTables[teamName]?.own && (
+                          <div style={{ fontSize: "11px", color: "#7a6609", background: "#fef9e7", border: "1px solid #f7dc6f", borderRadius: "4px", padding: "2px 6px", display: "inline-block", marginBottom: "4px" }}>
+                            🏆 {autoTables[teamName].own.rank}. Platz · {autoTables[teamName].own.points} Pkt.{autoTables[teamName].league ? ` · ${autoTables[teamName].league}` : ""}
+                          </div>
+                        )}
                         
                         <div style={{ fontSize: "13px", color: "#333", fontWeight: "bold", marginBottom: "4px" }}>
                           {nextMatch?.opponent ? (
@@ -468,7 +487,46 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             <button onClick={() => setActiveTab("history")} style={tabButtonStyle("history")}>
               📅 Letzte Spiele
             </button>
+            {autoTables[selectedTeam] && (
+              <button onClick={() => setActiveTab("table")} style={tabButtonStyle("table")}>
+                📊 Tabelle
+              </button>
+            )}
           </div>
+
+          {/* TAB 4: TABELLE (von fussball.de) */}
+          {activeTab === "table" && autoTables[selectedTeam] && (
+            <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
+              <h3 style={{ fontSize: "1.1rem", margin: "0 0 4px 0", textAlign: "center", color: "#2146d0" }}>📊 {autoTables[selectedTeam].league || "Tabelle"}</h3>
+              <p style={{ fontSize: "11px", color: "#888", textAlign: "center", margin: "0 0 12px 0" }}>Quelle: fussball.de</p>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ color: "#666", fontSize: "11px", textAlign: "center" }}>
+                      <th style={{ padding: "6px 4px" }}>Pl.</th>
+                      <th style={{ padding: "6px 4px", textAlign: "left" }}>Mannschaft</th>
+                      <th style={{ padding: "6px 4px" }}>Sp.</th>
+                      <th style={{ padding: "6px 4px" }}>Tore</th>
+                      <th style={{ padding: "6px 4px" }}>Diff.</th>
+                      <th style={{ padding: "6px 4px" }}>Pkt.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {autoTables[selectedTeam].rows.map((row, i) => (
+                      <tr key={`${row.rank}-${row.team}`} style={{ background: row.own ? "#dbeafe" : i % 2 === 0 ? "white" : "#f4f6f8", fontWeight: row.own ? "bold" : "normal", textAlign: "center" }}>
+                        <td style={{ padding: "6px 4px" }}>{row.rank}.</td>
+                        <td style={{ padding: "6px 4px", textAlign: "left" }}>{row.team}</td>
+                        <td style={{ padding: "6px 4px" }}>{row.played}</td>
+                        <td style={{ padding: "6px 4px", whiteSpace: "nowrap" }}>{row.goals}</td>
+                        <td style={{ padding: "6px 4px" }}>{row.diff > 0 ? `+${row.diff}` : row.diff}</td>
+                        <td style={{ padding: "6px 4px" }}>{row.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* TAB 1: LIVE-TICKER */}
           {activeTab === "ticker" && (

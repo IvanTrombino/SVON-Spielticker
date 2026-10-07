@@ -42,3 +42,13 @@ export const nextMatchFrom = (matches, now = new Date()) => {
     source: "fussball.de"
   };
 };
+
+// Tabellenplatz nur von D-Jugend bis 1. Mannschaft – G-, F- und E-Jugend (inkl. Funino) spielen ohne Tabelle
+export const showsTable = (teamName) => !/^[efg]-jugend/i.test((teamName || "").trim());
+
+export const fetchTeamTable = async (teamId) => {
+  const response = await fetch(`/api/fussballde?teamId=${teamId}&type=table`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || response.status);
+  return data.rows && data.rows.length > 0 ? data : null;
+};
