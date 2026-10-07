@@ -3,9 +3,14 @@ import { doc, onSnapshot, setDoc, runTransaction } from "firebase/firestore";
 import { db } from "../firebase";
 import { findOverlappingBookings } from "../pitchConflicts";
 
-// Heimspiel belegt den Platz 1 Stunde vor bis 2 Stunden nach Anpfiff
-const MINUTES_BEFORE = 60;
-const MINUTES_AFTER = 120;
+// Belegung pro Mannschaft: Vorlauf vor Anpfiff, Spieldauer inkl. Halbzeit, Nachlauf nach Spielende (Minuten).
+// Standard = 1 Stunde vor bis 2 Stunden nach Anpfiff.
+const DEFAULT_TIMING = { before: 60, duration: 105, after: 15 };
+const TIMING_FIELDS = [
+  { key: "before", label: "Vorlauf" },
+  { key: "duration", label: "Spieldauer" },
+  { key: "after", label: "Nachlauf" }
+];
 
 const toMinutes = (time) => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
 const toTime = (minutes) => {
@@ -38,6 +43,8 @@ const guessPitch = (venue, pitches, fallback) => {
 export default function FussballImport({ clubId, teams, pitches, bookings }) {
   const [links, setLinks] = useState({});
   const [linkInputs, setLinkInputs] = useState({});
+  const [timings, setTimings] = useState({});
+  const [timingInputs, setTimingInputs] = useState({});
   const [candidates, setCandidates] = useState([]);
   const [selected, setSelected] = useState({});
   const [pitchFor, setPitchFor] = useState({});
@@ -51,13 +58,14 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
     if (!clubId) return;
     return onSnapshot(doc(db, "ticker", `${clubId}_fussballde`), (snap) => {
       setLinks(snap.exists() ? snap.data().links || {} : {});
+      setTimings(snap.exists() ? snap.data().timings || {} : {});
     });
   }, [clubId]);
 
   const saveLink = async (team) => {
     const teamId = extractTeamId(linkInputs[team] || "");
     if (!teamId) return alert("Bitte den Link zur Mannschaftsseite auf fussball.de einfügen (enthält \"team-id/...\").");
-    await setDoc(linksRef, { links: { ...links, [team]: teamId } });
+    await setDoc(linksRef, { links: { ...links, [team]: teamId }, timings });
     setLinkInputs({ ...linkInputs, [team]: "" });
   };
 
@@ -65,7 +73,29 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
     if (!window.confirm(`Verknüpfung für ${team} entfernen?`)) return;
     const updated = { ...links };
     delete updated[team];
-    await setDoc(linksRef, { links: updated });
+    await setDoc(linksRef, { links: updated, timings });
+  };
+
+  const timingOf = (team) => ({ ...DEFAULT_TIMING, ...(timings[team] || {}) });
+  const inputValue = (team, key) => timingInputs[team]?.[key] ?? String(timingOf(team)[key]);
+
+  // Zeiten einer Mannschaft speichern (beim Verlassen eines Feldes)
+  const saveTiming = async (team) => {
+    const current = timingOf(team);
+    const updated = Object.fromEntries(TIMING_FIELDS.map(({ key }) => {
+      const value = parseInt(inputValue(team, key), 10);
+      return [key, Number.isFinite(value) && value >= 0 && value <= 300 ? value : current[key]];
+    }));
+    setTimingInputs({ ...timingInputs, [team]: undefined });
+    if (TIMING_FIELDS.every(({ key }) => updated[key] === current[key])) return;
+    await setDoc(linksRef, { links, timings: { ...timings, [team]: updated } });
+  };
+
+  // Beispiel für die Anzeige: Anpfiff 16:00 -> belegt 15:00–18:00
+  const exampleRange = (team) => {
+    const t = timingOf(team);
+    const kickoff = 16 * 60;
+    return `Anpfiff 16:00 → belegt ${toTime(kickoff - t.before)}–${toTime(kickoff + t.duration + t.after)}`;
   };
 
   // Status eines Spiels im Vergleich zum aktuellen Kalender
@@ -100,12 +130,13 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
           .filter(m => m.isHome && m.time && m.matchId && m.date >= today)
           .forEach(m => {
             const kickoff = toMinutes(m.time);
+            const timing = timingOf(team);
             found.push({
               ...m,
               team,
               kickoff: m.time,
-              startTime: toTime(kickoff - MINUTES_BEFORE),
-              endTime: toTime(kickoff + MINUTES_AFTER),
+              startTime: toTime(kickoff - timing.before),
+              endTime: toTime(kickoff + timing.duration + timing.after),
               type: bookingTypeFor(m.competition)
             });
           });
@@ -186,7 +217,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
     <div style={{ background: "white", padding: "15px", borderRadius: "10px", border: "1px solid #ddd", textAlign: "left" }}>
       <h3 style={{ marginTop: 0, fontSize: "16px", color: "#2146d0" }}>📥 Heimspiele von fussball.de</h3>
       <p style={{ fontSize: "12px", color: "#666", marginTop: 0 }}>
-        Heimspiele werden als Belegung eingetragen: 1 Stunde vor bis 2 Stunden nach Anpfiff. Bereits importierte Spiele werden erkannt, geänderte Termine aktualisiert.
+        Heimspiele werden als Belegung eingetragen – Vorlauf, Spieldauer und Nachlauf legst du pro Mannschaft fest. Bereits importierte Spiele werden erkannt, geänderte Termine aktualisiert.
       </p>
 
       {/* 1. Verknüpfungen */}
@@ -200,6 +231,25 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
               <>
                 <span style={{ color: "#27ae60", flex: 1 }}>✔ verknüpft</span>
                 <button onClick={() => removeLink(team)} style={{ background: "transparent", border: "1px solid #ccc", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", fontSize: "11px" }}>Entfernen</button>
+                <div style={{ flexBasis: "100%", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", fontSize: "12px", color: "#555", padding: "2px 0 8px 0", borderBottom: "1px dashed #eee" }}>
+                  <span>⏱</span>
+                  {TIMING_FIELDS.map(({ key, label }) => (
+                    <label key={key} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      {label}
+                      <input
+                        type="number"
+                        min="0"
+                        max="300"
+                        value={inputValue(team, key)}
+                        onChange={(e) => setTimingInputs({ ...timingInputs, [team]: { ...(timingInputs[team] || {}), [key]: e.target.value } })}
+                        onBlur={() => saveTiming(team)}
+                        style={{ width: "55px", padding: "4px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "12px", textAlign: "center", background: "#fff", color: "#333" }}
+                      />
+                      Min
+                    </label>
+                  ))}
+                  <span style={{ color: "#888", fontSize: "11px" }}>{exampleRange(team)}</span>
+                </div>
               </>
             ) : (
               <>
