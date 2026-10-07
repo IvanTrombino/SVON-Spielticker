@@ -155,7 +155,7 @@ const CoachForm = ({ formData, handleChange, handleTeamToggle, onSubmit, isSubmi
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", background: "#fff", padding: "12px", borderRadius: "6px", border: "1px solid #ccc" }}>
           <div style={{ background: formData.assignedTeams?.includes("Jugendleitung") ? "#dbeafe" : "transparent", borderRadius: "4px", paddingRight: "10px" }}>
             <CheckboxField 
-              label="🌟 Jugendleitung (Vollzugriff)" 
+              label="🌟 Admin (Vollzugriff)" 
               name="Jugendleitung" 
               checked={formData.assignedTeams?.includes("Jugendleitung")} 
               onChange={() => handleTeamToggle("Jugendleitung")} 
@@ -807,7 +807,7 @@ export default function YouthManager({ clubId }) {
                         <td style={{ padding: "10px", color: "#555", fontWeight: "bold", fontSize: "12px" }}>
                           {c.assignedTeams && c.assignedTeams.length > 0 ? (
                              <div style={{display: "flex", gap: "4px", flexWrap: "wrap"}}>
-                               {c.assignedTeams.map(t => <span key={t} style={{background: t === "Jugendleitung" ? "#f1c40f" : "#dbeafe", padding: "3px 6px", borderRadius: "4px", color: t === "Jugendleitung" ? "#000" : "#1e40af"}}>{t}</span>)}
+                               {c.assignedTeams.map(t => <span key={t} style={{background: t === "Jugendleitung" ? "#f1c40f" : "#dbeafe", padding: "3px 6px", borderRadius: "4px", color: t === "Jugendleitung" ? "#000" : "#1e40af"}}>{t === "Jugendleitung" ? "Admin" : t}</span>)}
                              </div>
                           ) : "-"}
                         </td>
