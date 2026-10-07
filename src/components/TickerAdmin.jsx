@@ -2,15 +2,16 @@ import { useState } from "react";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 import TeamManager from "./TeamManager";
+import PitchConflicts from "./PitchConflicts";
 
-// Live-Ticker-Verwaltung: Spieler & Spielstatistik, Mannschaften nur für Admins
+// Live-Ticker-Verwaltung: Spieler & Spielstatistik; Mannschaften und Platzkonflikte nur für Admins
 export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
   const [tab, setTab] = useState("players");
 
   const tabs = [
     { id: "players", label: "👤 Spieler" },
     { id: "stats", label: "🏆 Spielstatistik" },
-    ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }] : [])
+    ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }, { id: "conflicts", label: "🏟️ Platzkonflikte" }] : [])
   ];
 
   return (
@@ -24,8 +25,9 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
       </div>
 
       {tab === "teams" && canManageTeams && <TeamManager clubId={clubId} />}
+      {tab === "conflicts" && canManageTeams && <PitchConflicts clubId={clubId} canDecide />}
 
-      {tab !== "teams" && (teams.length === 0 ? (
+      {(tab === "players" || tab === "stats") && (teams.length === 0 ? (
         <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Für deine Mannschaften gibt es noch kein Team im Live-Ticker.</p>
       ) : (
         <>

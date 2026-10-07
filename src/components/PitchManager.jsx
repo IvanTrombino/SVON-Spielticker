@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { findOverlappingBookings, createConflictRequest } from "../pitchConflicts";
+import PitchConflicts from "./PitchConflicts";
 
 export default function PitchManager({ clubId, teams, currentUserName }) {
   // --- NAVIGATION & VIEW STATES ---
-  const [activeTab, setActiveTab] = useState("schedule"); // "schedule", "book", "manage", "dashboard"
+  const [activeTab, setActiveTab] = useState("schedule"); // "schedule", "book", "manage", "dashboard", "conflicts"
   const [calendarView, setCalendarView] = useState("week"); // "week", "3days", "day"
   const [viewDate, setViewDate] = useState(new Date());
   
@@ -45,6 +47,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
 
   // --- KONFLIKT-STATE ---
   const [conflictBooking, setConflictBooking] = useState(null);
+  const [isSendingConflict, setIsSendingConflict] = useState(false);
 
   const daysOfWeek = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
   const bookingTypes = ["Training", "Ligaspiel", "Pokalspiel", "Freundschaftsspiel"];
@@ -210,21 +213,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     let validDates = [];
 
     datesToCheck.forEach(dateStr => {
-      const overlappingBookings = bookings.filter(b => {
-        if (b.pitchId !== bookPitch) return false;
-        let occurs = false;
-        if (b.repetition === "Einmalig") {
-          occurs = (b.date === dateStr);
-        } else {
-          const d = new Date(dateStr);
-          const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][d.getDay()];
-          if (dateStr >= b.startDate && dateStr <= b.endDate && b.days.includes(dayNameFull) && !(b.exceptions || []).includes(dateStr)) {
-            occurs = true;
-          }
-        }
-        if (!occurs) return false;
-        return (startTime < b.endTime && endTime > b.startTime);
-      });
+      const overlappingBookings = findOverlappingBookings(bookings, { pitchId: bookPitch, date: dateStr, startTime, endTime });
 
       const currentTotalShare = overlappingBookings.reduce((sum, b) => sum + shareValues[b.share || "Ganz"], 0);
 
@@ -322,14 +311,48 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
     syncBookings(updated);
   };
 
+  // Konflikt als Anfrage speichern (Admin entscheidet im Admin Portal) und per Push melden
   const sendConflictToJugendleitung = async () => {
+    setIsSendingConflict(true);
     try {
       const pitchName = pitches.find(p => p.id === bookPitch)?.name || "Unbekannter Platz";
-      const message = `${currentUserName || bookTeam} benötigt den ${pitchName} (${startTime}-${endTime}). Platz ist belegt durch ${conflictBooking.team}. Bitte klären!`;
-      await fetch(`https://ntfy.sh/${clubId}jugendleitung`, { method: "POST", body: `🏟️ Platzkonflikt: ${message}`, headers: { "Priority": "high" } });
-      alert("Vorstand und Jugendleitung wurden benachrichtigt!");
+      const requestedBy = currentUserName || bookTeam;
+      const conflictTeams = [...new Set(findOverlappingBookings(bookings, { pitchId: bookPitch, date: bookDate, startTime, endTime }).map(b => b.team))];
+
+      await createConflictRequest(clubId, {
+        requestedBy,
+        conflictTeams,
+        booking: {
+          team: bookTeam,
+          type: bookType,
+          repetition: "Einmalig",
+          date: bookDate,
+          startDate: null,
+          endDate: null,
+          days: [],
+          exceptions: [],
+          pitchId: bookPitch,
+          startTime,
+          endTime,
+          share: bookShare,
+          notes: bookNotes,
+          bookedBy: requestedBy
+        }
+      });
+
+      const message = `${requestedBy} (${bookTeam}) benötigt den ${pitchName} am ${new Date(bookDate).toLocaleDateString("de-DE")} (${startTime}-${endTime}). Platz ist belegt durch ${conflictTeams.join(", ")}. Bitte im Admin Portal entscheiden!`;
+      // Push ist nur ein Zusatz – die Anfrage ist bereits gespeichert
+      fetch(`https://ntfy.sh/${clubId}jugendleitung`, { method: "POST", body: `🏟️ Platzkonflikt: ${message}`, headers: { "Priority": "high" } }).catch(() => {});
+
+      alert("Vorstand und Jugendleitung wurden benachrichtigt! Die Entscheidung siehst du unter \"⚠️ Konflikte\".");
       setConflictBooking(null);
-    } catch (error) { alert("Fehler beim Senden."); }
+      setActiveTab("conflicts");
+    } catch (error) {
+      console.error("Fehler beim Melden des Konflikts:", error);
+      alert("Fehler beim Senden.");
+    } finally {
+      setIsSendingConflict(false);
+    }
   };
 
   const shareConflictViaWhatsApp = () => {
@@ -398,6 +421,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         <button onClick={() => setActiveTab("dashboard")} style={tabButtonStyle("dashboard")}>📋 Dashboard</button>
         <button onClick={() => setActiveTab("book")} style={tabButtonStyle("book")}>➕ Buchen</button>
         <button onClick={() => setActiveTab("manage")} style={tabButtonStyle("manage")}>⚙ Plätze verwalten</button>
+        <button onClick={() => setActiveTab("conflicts")} style={tabButtonStyle("conflicts")}>⚠️ Konflikte</button>
       </div>
 
       {/* TAB 1: KALENDER GRID */}
@@ -616,7 +640,8 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
             <div style={{ background: "#f8d7da", border: "1px solid #f5c6cb", padding: "15px", borderRadius: "8px", marginBottom: "15px" }}>
               <h4 style={{ color: "#721c24", margin: "0 0 5px 0" }}>⚠️ Platz überbucht!</h4>
               <p style={{ fontSize: "13px", color: "#721c24", marginBottom: "10px" }}>Der Platz ist zur gewünschten Zeit bereits durch <strong>{conflictBooking.team}</strong> belegt.</p>
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button onClick={sendConflictToJugendleitung} disabled={isSendingConflict} style={{ background: "#c0392b", color: "white", padding: "8px", border: "none", borderRadius: "6px", cursor: isSendingConflict ? "not-allowed" : "pointer", flex: "1 1 100%", fontSize: "12px", fontWeight: "bold" }}>{isSendingConflict ? "Wird gesendet..." : "📢 Vorstand & Jugendleitung informieren"}</button>
                 <button onClick={shareConflictViaWhatsApp} style={{ background: "#25D366", color: "white", padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer", flex: 1, fontSize: "12px", fontWeight: "bold" }}>💬 Trainer fragen</button>
                 <button onClick={() => setConflictBooking(null)} style={{ background: "white", border: "1px solid #ccc", padding: "8px", borderRadius: "6px", cursor: "pointer", flex: 1, fontSize: "12px" }}>Abbrechen</button>
               </div>
@@ -733,6 +758,8 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
       )}
 
       {/* TAB 4: PLÄTZE VERWALTEN */}
+      {activeTab === "conflicts" && <PitchConflicts clubId={clubId} />}
+
       {activeTab === "manage" && (
         <div style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", maxWidth: "600px", margin: "0 auto", textAlign: "left" }}>
           

@@ -563,7 +563,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
 
       {/* NEU: PLATZBELEGUNG INHALT RENDERN */}
       {activeTab === "pitches" && (
-        <PitchManager clubId={clubId} teams={currentTeamOptions.map(t => t.name)} />
+        <PitchManager clubId={clubId} teams={currentTeamOptions.map(t => t.name)} currentUserName={`${loggedInCoach.firstName} ${loggedInCoach.lastName || ""}`.trim()} />
       )}
 
       {/* LIVE-TICKER VERWALTUNG (Mannschaften verwaltet der Admin im Admin Portal) */}
