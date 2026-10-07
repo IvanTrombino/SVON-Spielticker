@@ -14,7 +14,8 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider == 'password'
         && request.auth.token.email.lower() in [
           'ivan.trombino@outlook.de',
-          'cordula.buhl@gmail.com'
+          'cordula.buhl@gmail.com',
+          'info@coffeemore.de' // Frank Veit
         ];
     }
 

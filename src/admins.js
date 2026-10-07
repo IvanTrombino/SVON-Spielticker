@@ -2,7 +2,8 @@
 // WICHTIG: Muss mit der Liste in firestore.rules (Funktion isAdmin) übereinstimmen!
 export const ADMIN_EMAILS = [
   "ivan.trombino@outlook.de",
-  "cordula.buhl@gmail.com"
+  "cordula.buhl@gmail.com",
+  "info@coffeemore.de" // Frank Veit
 ];
 
 export const isAdminUser = (user) =>
