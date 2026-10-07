@@ -28,29 +28,64 @@ export const findMoveConflicts = (bookings, booking, toPitchId, toDate) => {
   return used + SHARE_VALUES[booking.share || "Ganz"] > 1 ? overlapping : [];
 };
 
-// Einen Termin auf anderen Platz/Tag verschieben. Einmalige Buchung wird geändert,
-// bei einer Serie wird nur dieser Termin herausgenommen und als Einzeltermin neu angelegt.
-export const moveBookingInList = (bookings, booking, fromDate, toPitchId, toDate, movedFrom) => {
+// Buchung bearbeiten. scope "occurrence" = nur dieser Termin, "series" = ganze Serie.
+// Bei einer Serie und "nur dieser Termin" wird der Termin aus der Serie herausgenommen
+// und als Einzeltermin mit den Änderungen neu angelegt.
+export const applyBookingEdit = (bookings, booking, occurrenceDate, changes, scope = "occurrence") => {
   if (booking.repetition === "Einmalig") {
-    return bookings.map(b => b.id === booking.id ? { ...b, pitchId: toPitchId, date: toDate, movedFrom } : b);
+    return bookings.map(b => b.id === booking.id ? { ...b, ...changes } : b);
+  }
+  if (scope === "series") {
+    // eslint-disable-next-line no-unused-vars
+    const { date, ...seriesChanges } = changes;
+    return bookings.map(b => b.id === booking.id ? { ...b, ...seriesChanges } : b);
   }
   const single = {
     ...booking,
-    id: `${booking.id}-${fromDate}-${Date.now()}`,
+    id: `${booking.id}-${occurrenceDate}-${Date.now()}`,
     repetition: "Einmalig",
-    date: toDate,
+    date: occurrenceDate,
     startDate: null,
     endDate: null,
     days: [],
     exceptions: [],
-    pitchId: toPitchId,
-    movedFrom
+    ...changes
   };
   return [
-    ...bookings.map(b => b.id === booking.id ? { ...b, exceptions: [...(b.exceptions || []), fromDate] } : b),
+    ...bookings.map(b => b.id === booking.id ? { ...b, exceptions: [...(b.exceptions || []), occurrenceDate] } : b),
     single
   ];
 };
+
+// Einen Termin auf anderen Platz/Tag verschieben (bei Serien nur diesen Termin)
+export const moveBookingInList = (bookings, booking, fromDate, toPitchId, toDate, movedFrom) =>
+  applyBookingEdit(bookings, booking, fromDate, { pitchId: toPitchId, date: toDate, movedFrom });
+
+// Einen Termin absagen: einmalige Buchung löschen, bei Serien nur diesen Tag ausnehmen
+export const cancelOccurrence = (bookings, booking, date) =>
+  booking.repetition === "Einmalig"
+    ? bookings.filter(b => b.id !== booking.id)
+    : bookings.map(b => b.id === booking.id ? { ...b, exceptions: [...(b.exceptions || []), date] } : b);
+
+// Alle Termine einer Serie ab fromDate (für die Konfliktprüfung beim Bearbeiten der ganzen Serie)
+export const seriesOccurrences = (booking, fromDate) => {
+  const dates = [];
+  const start = new Date(`${fromDate > booking.startDate ? fromDate : booking.startDate}T00:00:00Z`);
+  const end = new Date(`${booking.endDate}T00:00:00Z`);
+  for (const d = start; d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+    if (booking.days.includes(DAY_NAMES[d.getUTCDay()]) && !(booking.exceptions || []).includes(iso)) dates.push(iso);
+  }
+  return dates;
+};
+
+// --- PLATZSPERRUNGEN ---
+export const isPitchClosed = (closures, pitchId, date) => closures.some(c => c.pitchId === pitchId && c.date === date);
+
+// Alle Buchungen, die an diesem Tag auf dem Platz stattfinden
+export const bookingsOnPitchDay = (bookings, pitchId, date) =>
+  findOverlappingBookings(bookings, { pitchId, date, startTime: "00:00", endTime: "23:59" })
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
 // Neue Konflikt-Anfrage an Vorstand/Jugendleitung speichern
 export const createConflictRequest = (clubId, request) =>

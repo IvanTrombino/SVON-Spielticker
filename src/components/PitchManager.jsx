@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { findOverlappingBookings, createConflictRequest, findMoveConflicts, moveBookingInList } from "../pitchConflicts";
+import { findOverlappingBookings, createConflictRequest, findMoveConflicts, moveBookingInList, applyBookingEdit, cancelOccurrence, seriesOccurrences, isPitchClosed, bookingsOnPitchDay } from "../pitchConflicts";
 import PitchConflicts from "./PitchConflicts";
 import FussballImport from "./FussballImport";
 
@@ -54,7 +54,11 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
   // --- VERSCHIEBEN (Drag & Drop am PC, Antippen am Handy) ---
   const [dragging, setDragging] = useState(null); // { booking, fromDate, fromPitchId }
   const [dropTarget, setDropTarget] = useState(null); // "pitchId|datum"
-  const [moveDialog, setMoveDialog] = useState(null); // { booking, fromDate, fromPitchId, pitchId, date }
+  const [editDialog, setEditDialog] = useState(null); // Buchung bearbeiten/verschieben (siehe openEditDialog)
+
+  // --- PLATZSPERRUNGEN ---
+  const [closures, setClosures] = useState([]); // [{ id, pitchId, date, reason, closedBy }]
+  const [closeDialog, setCloseDialog] = useState(null); // { pitchId, date, reason, targetPitchId }
 
   const daysOfWeek = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
   const bookingTypes = ["Training", "Ligaspiel", "Pokalspiel", "Freundschaftsspiel"];
@@ -73,6 +77,10 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
       else setBookings([]);
     });
 
+    const unsubClosures = onSnapshot(doc(db, "ticker", `${clubId}_closures`), (snap) => {
+      setClosures(snap.exists() ? snap.data().list || [] : []);
+    });
+
     const unsubCoaches = onSnapshot(doc(db, "ticker", `${clubId}_teamCoaches`), (snap) => {
       if (snap.exists()) setTeamCoaches(snap.data() || {});
       else setTeamCoaches({});
@@ -82,6 +90,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
       unsubPitches();
       unsubBookings();
       unsubCoaches();
+      unsubClosures();
     };
   }, [clubId]);
 
@@ -99,6 +108,11 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
 
   const syncBookings = async (newList) => {
     try { await setDoc(doc(db, "ticker", `${clubId}_bookings`), { list: newList }); } 
+    catch (error) { console.error("Fehler:", error); }
+  };
+
+  const syncClosures = async (newList) => {
+    try { await setDoc(doc(db, "ticker", `${clubId}_closures`), { list: newList }); }
     catch (error) { console.error("Fehler:", error); }
   };
 
@@ -219,7 +233,15 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
     let conflicts = [];
     let validDates = [];
 
+    if (repetition === "Einmalig" && isPitchClosed(closures, bookPitch, bookDate)) {
+      return alert("🚫 Dieser Platz ist an dem Tag gesperrt. Bitte einen anderen Platz wählen.");
+    }
+
     datesToCheck.forEach(dateStr => {
+      if (isPitchClosed(closures, bookPitch, dateStr)) {
+        conflicts.push({ date: dateStr, team: "🚫 Platz gesperrt" });
+        return;
+      }
       const overlappingBookings = findOverlappingBookings(bookings, { pitchId: bookPitch, date: dateStr, startTime, endTime });
 
       const currentTotalShare = overlappingBookings.reduce((sum, b) => sum + shareValues[b.share || "Ganz"], 0);
@@ -273,29 +295,123 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
     setBookNotes("");
   };
 
-  // Termin verschieben; bei Konflikt darf nur ein Admin trotzdem verschieben
+  const pitchName = (id) => pitches.find(p => p.id === id)?.name || "Unbekannter Platz";
+  const formatDay = (date) => new Date(date).toLocaleDateString("de-DE");
+
+  // Prüft das Ziel einer Buchung (gesperrt/belegt). Gesperrt blockiert immer,
+  // bei Belegung darf nur ein Admin nach Rückfrage trotzdem speichern.
+  const confirmTargetFree = (bookingsToCheck, edited, dates) => {
+    const closedDates = dates.filter(d => isPitchClosed(closures, edited.pitchId, d));
+    if (closedDates.length > 0) {
+      alert(`🚫 ${pitchName(edited.pitchId)} ist am ${closedDates.map(formatDay).join(", ")} gesperrt.`);
+      return false;
+    }
+    const blocked = dates
+      .map(d => ({ date: d, teams: [...new Set(findMoveConflicts(bookingsToCheck, edited, edited.pitchId, d).map(c => c.team))] }))
+      .filter(c => c.teams.length > 0);
+    if (blocked.length === 0) return true;
+
+    const list = blocked.slice(0, 5).map(c => `${formatDay(c.date)}: ${c.teams.join(", ")}`).join("\n") + (blocked.length > 5 ? `\n… und ${blocked.length - 5} weitere` : "");
+    if (!isAdmin) {
+      alert(`${pitchName(edited.pitchId)} ist ${edited.startTime}–${edited.endTime} bereits belegt:\n${list}\n\nBitte über "Buchen" einen Konflikt melden.`);
+      return false;
+    }
+    return window.confirm(`⚠️ ${pitchName(edited.pitchId)} ist ${edited.startTime}–${edited.endTime} bereits belegt:\n${list}\n\nTrotzdem speichern?`);
+  };
+
+  // Termin per Drag & Drop verschieben (bei Serien nur diesen Termin)
   const moveBooking = (booking, fromDate, fromPitchId, toPitchId, toDate) => {
     if (fromPitchId === toPitchId && fromDate === toDate) return false;
-    const pitchName = (id) => pitches.find(p => p.id === id)?.name || "Unbekannter Platz";
-    const conflicts = findMoveConflicts(bookings, booking, toPitchId, toDate);
-    const target = `${pitchName(toPitchId)} am ${new Date(toDate).toLocaleDateString("de-DE")}`;
-
-    if (conflicts.length > 0) {
-      const teamsInWay = [...new Set(conflicts.map(c => c.team))].join(", ");
-      if (!isAdmin) {
-        alert(`${target} ist ${booking.startTime}–${booking.endTime} bereits durch ${teamsInWay} belegt. Bitte über "Buchen" einen Konflikt melden.`);
-        return false;
-      }
-      if (!window.confirm(`⚠️ ${target} ist bereits durch ${teamsInWay} belegt. Trotzdem verschieben?`)) return false;
-    }
+    if (!confirmTargetFree(bookings, { ...booking, pitchId: toPitchId }, [toDate])) return false;
 
     const seriesHint = booking.repetition === "Einmalig" ? "" : "\n(Nur dieser Termin – die restliche Serie bleibt unverändert.)";
-    if (!window.confirm(`${booking.team} (${booking.startTime}–${booking.endTime}) verschieben nach ${target}?${seriesHint}`)) return false;
+    if (!window.confirm(`${booking.team} (${booking.startTime}–${booking.endTime}) verschieben nach ${pitchName(toPitchId)} am ${formatDay(toDate)}?${seriesHint}`)) return false;
 
-    const updated = moveBookingInList(bookings, booking, fromDate, toPitchId, toDate, `${pitchName(fromPitchId)}, ${new Date(fromDate).toLocaleDateString("de-DE")}`);
+    const updated = moveBookingInList(bookings, booking, fromDate, toPitchId, toDate, `${pitchName(fromPitchId)}, ${formatDay(fromDate)}`);
     setBookings(updated);
     syncBookings(updated);
     return true;
+  };
+
+  const openEditDialog = (booking, occurrenceDate, pitchId) => setEditDialog({
+    booking,
+    fromDate: occurrenceDate,
+    fromPitchId: pitchId,
+    scope: "occurrence",
+    pitchId,
+    date: occurrenceDate,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    share: booking.share || "Ganz",
+    type: booking.type,
+    team: booking.team,
+    notes: booking.notes || ""
+  });
+
+  const saveEdit = () => {
+    const d = editDialog;
+    if (!d.date || !d.startTime || !d.endTime) return alert("Bitte Datum und Uhrzeit ausfüllen.");
+    if (d.startTime >= d.endTime) return alert("Die Endzeit muss nach der Startzeit liegen.");
+
+    const isSeriesEdit = d.booking.repetition !== "Einmalig" && d.scope === "series";
+    const changes = { pitchId: d.pitchId, startTime: d.startTime, endTime: d.endTime, share: d.share, type: d.type, team: d.team, notes: d.notes };
+    if (!isSeriesEdit) changes.date = d.date;
+    if (d.pitchId !== d.fromPitchId || (!isSeriesEdit && d.date !== d.fromDate)) {
+      changes.movedFrom = `${pitchName(d.fromPitchId)}, ${formatDay(d.fromDate)}`;
+    }
+
+    const edited = { ...d.booking, ...changes };
+    const today = new Date().toLocaleDateString("sv-SE");
+    const datesToCheck = isSeriesEdit ? seriesOccurrences(d.booking, today) : [d.date];
+    if (!confirmTargetFree(bookings, edited, datesToCheck)) return;
+
+    const updated = applyBookingEdit(bookings, d.booking, d.fromDate, changes, isSeriesEdit ? "series" : "occurrence");
+    setBookings(updated);
+    syncBookings(updated);
+    setEditDialog(null);
+  };
+
+  // Platz an einem Tag sperren und alle Buchungen umbuchen (oder absagen)
+  const handleClosePitch = () => {
+    const { pitchId, date, reason, targetPitchId } = closeDialog;
+    if (!date) return alert("Bitte ein Datum wählen.");
+    if (isPitchClosed(closures, pitchId, date)) return alert("Dieser Platz ist an dem Tag bereits gesperrt.");
+
+    const affected = bookingsOnPitchDay(bookings, pitchId, date);
+    let updated = bookings;
+
+    if (affected.length > 0 && targetPitchId) {
+      if (isPitchClosed(closures, targetPitchId, date)) return alert(`🚫 ${pitchName(targetPitchId)} ist an dem Tag ebenfalls gesperrt.`);
+      // Nacheinander prüfen, damit auch bereits umgebuchte Termine mitzählen
+      const problems = [];
+      affected.forEach(b => {
+        const inWay = findMoveConflicts(updated, { ...b, pitchId: targetPitchId }, targetPitchId, date);
+        if (inWay.length > 0) problems.push(`${b.startTime}–${b.endTime} ${b.team} ↔ ${[...new Set(inWay.map(c => c.team))].join(", ")}`);
+        updated = moveBookingInList(updated, b, date, targetPitchId, date, `${pitchName(pitchId)} (gesperrt)`);
+      });
+      if (problems.length > 0 && !window.confirm(`⚠️ Auf ${pitchName(targetPitchId)} gibt es Überschneidungen:\n${problems.join("\n")}\n\nTrotzdem alle umbuchen?`)) return;
+    } else if (affected.length > 0) {
+      affected.forEach(b => { updated = cancelOccurrence(updated, b, date); });
+    }
+
+    const action = affected.length === 0 ? "" : targetPitchId ? `\n${affected.length} Buchung(en) werden nach ${pitchName(targetPitchId)} verlegt.` : `\n${affected.length} Buchung(en) werden ABGESAGT.`;
+    if (!window.confirm(`${pitchName(pitchId)} am ${formatDay(date)} sperren?${action}`)) return;
+
+    if (updated !== bookings) {
+      setBookings(updated);
+      syncBookings(updated);
+    }
+    const newClosures = [...closures, { id: Date.now().toString(), pitchId, date, reason: reason.trim(), closedBy: currentUserName || "Admin" }];
+    setClosures(newClosures);
+    syncClosures(newClosures);
+    setCloseDialog(null);
+  };
+
+  const handleReopenPitch = (closure) => {
+    if (!window.confirm(`Sperre für ${pitchName(closure.pitchId)} am ${formatDay(closure.date)} aufheben?\n(Umgebuchte Termine bleiben auf dem Ausweichplatz.)`)) return;
+    const newClosures = closures.filter(c => c.id !== closure.id);
+    setClosures(newClosures);
+    syncClosures(newClosures);
   };
 
   const handleDrop = (pitchId, date) => {
@@ -529,7 +645,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                  )}
               </div>
 
-              <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>💡 Buchung auf einen anderen Platz oder Tag ziehen – oder antippen – um sie zu verschieben.</p>
+              <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>💡 Buchung antippen zum Bearbeiten (Zeit, Platzanteil, Platz …) – oder auf einen anderen Platz/Tag ziehen.</p>
 
               {/* GRIDS PRO PLATZ */}
               {pitches.filter(p => filterPitch ? p.id === filterPitch : true).map((p, idx) => (
@@ -539,6 +655,18 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                     <span style={{ fontSize: "16px" }}>🌱</span>
                     <strong style={{ fontSize: "15px", color: "#333" }}>{p.name}</strong>
                     <span style={{ fontSize: "12px", color: "#888" }}>{p.hasFloodlight ? "· Flutlicht" : ""} {p.hasCabin ? "· Kabine" : ""}</span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          const todayStr = new Date().toLocaleDateString("sv-SE");
+                          const visible = displayDates.map(dt => dt.toISOString().split("T")[0]);
+                          setCloseDialog({ pitchId: p.id, date: visible.includes(todayStr) ? todayStr : visible[0], reason: "", targetPitchId: pitches.find(o => o.id !== p.id)?.id || "" });
+                        }}
+                        style={{ marginLeft: "auto", background: "white", color: "#c0392b", border: "1px solid #e6b0aa", borderRadius: "6px", padding: "4px 10px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}
+                      >
+                        🚫 Platz sperren
+                      </button>
+                    )}
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${displayDates.length}, minmax(0, 1fr))`, background: "white", borderTop: "1px solid #eee" }}>
@@ -562,6 +690,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                       const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][dateObj.getDay()];
                       const cellDateString = dateObj.toISOString().split("T")[0];
                       const isToday = dateObj.toDateString() === new Date().toDateString();
+                      const closure = closures.find(c => c.pitchId === p.id && c.date === cellDateString);
 
                       const cellBookings = bookings.filter(b => {
                         if (b.pitchId !== p.id) return false;
@@ -581,9 +710,15 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                           onDragOver={(e) => { if (!dragging) return; e.preventDefault(); setDropTarget(`${p.id}|${cellDateString}`); }}
                           onDragLeave={() => setDropTarget(null)}
                           onDrop={(e) => { e.preventDefault(); handleDrop(p.id, cellDateString); }}
-                          style={{ background: dropTarget === `${p.id}|${cellDateString}` ? "#dbeafe" : isToday ? "#f0faf4" : "white", padding: "5px", minHeight: "90px", display: "flex", flexDirection: "column", gap: "4px", borderRight: "1px solid #eee", boxShadow: dropTarget === `${p.id}|${cellDateString}` ? "inset 0 0 0 2px #2146d0" : isToday ? "inset 2px 0 0 #27ae60, inset -2px 0 0 #27ae60" : "none", transition: "background 0.1s" }}
+                          style={{ background: dropTarget === `${p.id}|${cellDateString}` ? "#dbeafe" : closure ? "repeating-linear-gradient(45deg, #fdecea, #fdecea 6px, #fff 6px, #fff 12px)" : isToday ? "#f0faf4" : "white", padding: "5px", minHeight: "90px", display: "flex", flexDirection: "column", gap: "4px", borderRight: "1px solid #eee", boxShadow: dropTarget === `${p.id}|${cellDateString}` ? "inset 0 0 0 2px #2146d0" : isToday ? "inset 2px 0 0 #27ae60, inset -2px 0 0 #27ae60" : "none", transition: "background 0.1s" }}
                         >
-                          {cellBookings.length === 0 && <div style={{ fontSize: "11px", color: "#bbb", textAlign: "center", marginTop: "8px" }}>frei</div>}
+                          {closure && (
+                            <div style={{ background: "#c0392b", color: "white", borderRadius: "4px", padding: "4px 6px", fontSize: "11px", lineHeight: 1.3 }}>
+                              <strong>🚫 Gesperrt</strong>{closure.reason ? `: ${closure.reason}` : ""}
+                              {isAdmin && <button onClick={() => handleReopenPitch(closure)} style={{ display: "block", marginTop: "3px", background: "white", color: "#c0392b", border: "none", borderRadius: "3px", padding: "2px 6px", fontSize: "10px", fontWeight: "bold", cursor: "pointer" }}>Sperre aufheben</button>}
+                            </div>
+                          )}
+                          {!closure && cellBookings.length === 0 && <div style={{ fontSize: "11px", color: "#bbb", textAlign: "center", marginTop: "8px" }}>frei</div>}
                           {cellBookings.map(b => {
                             const bColor = getTeamColor(b.team);
                             const shareLabel = b.share === "Halb" ? "½ Platz" : b.share === "Viertel" ? "¼ Platz" : "";
@@ -594,8 +729,8 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                                 draggable
                                 onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", b.id); setDragging({ booking: b, fromDate: cellDateString, fromPitchId: p.id }); }}
                                 onDragEnd={() => { setDragging(null); setDropTarget(null); }}
-                                onClick={() => setMoveDialog({ booking: b, fromDate: cellDateString, fromPitchId: p.id, pitchId: p.id, date: cellDateString })}
-                                title={[b.notes, b.movedFrom ? `Verlegt von ${b.movedFrom}` : "", "Ziehen oder antippen zum Verschieben"].filter(Boolean).join("\n")}
+                                onClick={() => openEditDialog(b, cellDateString, p.id)}
+                                title={[b.notes, b.movedFrom ? `Verlegt von ${b.movedFrom}` : "", "Antippen zum Bearbeiten, ziehen zum Verschieben"].filter(Boolean).join("\n")}
                                 style={{ background: `${bColor}1f`, borderLeft: `4px solid ${bColor}`, color: "#333", padding: "4px 18px 4px 6px", borderRadius: "4px", position: "relative", boxSizing: "border-box", lineHeight: 1.3, cursor: "grab", opacity: dragging?.booking.id === b.id && dragging?.fromDate === cellDateString ? 0.4 : 1 }}
                               >
                                 <div style={{ fontSize: "11px", fontWeight: "bold", color: "#555", display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -621,41 +756,139 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
         </div>
       )}
 
-      {/* DIALOG: BUCHUNG VERSCHIEBEN (v. a. fürs Handy) */}
-      {moveDialog && (
-        <div onClick={() => setMoveDialog(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "10px", padding: "18px", width: "100%", maxWidth: "380px", textAlign: "left", boxShadow: "0 6px 20px rgba(0,0,0,0.2)" }}>
-            <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", color: "#2146d0" }}>↪ Buchung verschieben</h3>
-            <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#555" }}>
-              <strong>{moveDialog.booking.team}</strong> · {moveDialog.booking.startTime}–{moveDialog.booking.endTime}<br />
-              bisher: {pitches.find(pt => pt.id === moveDialog.fromPitchId)?.name}, {new Date(moveDialog.fromDate).toLocaleDateString("de-DE")}
-              {moveDialog.booking.movedFrom && <><br /><span style={{ color: "#2146d0" }}>ursprünglich: {moveDialog.booking.movedFrom}</span></>}
-            </p>
-            {moveDialog.booking.notes && <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#777" }}>📝 {moveDialog.booking.notes}</p>}
+      {/* DIALOG: BUCHUNG BEARBEITEN */}
+      {editDialog && (() => {
+        const d = editDialog;
+        const isSeries = d.booking.repetition !== "Einmalig";
+        const teamOptions = teams && teams.includes(d.team) ? teams : [d.team, ...(teams || [])];
+        const label = { fontSize: "12px", fontWeight: "bold", color: "#555" };
+        const choiceStyle = (active) => ({ flex: 1, padding: "8px", borderRadius: "6px", border: active ? "2px solid #2146d0" : "1px solid #ccc", background: active ? "#eef2ff" : "white", fontWeight: active ? "bold" : "normal", fontSize: "12px", cursor: "pointer", color: "#333" });
+        return (
+          <div onClick={() => setEditDialog(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "10px", padding: "18px", width: "100%", maxWidth: "420px", maxHeight: "90vh", overflowY: "auto", textAlign: "left", boxShadow: "0 6px 20px rgba(0,0,0,0.2)" }}>
+              <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", color: "#2146d0" }}>✏️ Buchung bearbeiten</h3>
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#666" }}>
+                {d.booking.team} · {pitchName(d.fromPitchId)} · {formatDay(d.fromDate)} · {d.booking.startTime}–{d.booking.endTime}
+                {d.booking.movedFrom && <><br /><span style={{ color: "#2146d0" }}>↪ ursprünglich: {d.booking.movedFrom}</span></>}
+                {d.booking.bookedBy && <><br />Gebucht von: {d.booking.bookedBy}</>}
+              </p>
 
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Neuer Platz</label>
-            <select value={moveDialog.pitchId} onChange={(e) => setMoveDialog({ ...moveDialog, pitchId: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }}>
-              {pitches.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-            </select>
+              {isSeries && (
+                <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+                  {[{ id: "occurrence", text: "Nur dieser Termin" }, { id: "series", text: "Ganze Serie" }].map(o => (
+                    <button key={o.id} onClick={() => setEditDialog({ ...d, scope: o.id })} style={choiceStyle(d.scope === o.id)}>{o.text}</button>
+                  ))}
+                </div>
+              )}
 
-            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Neues Datum</label>
-            <input type="date" value={moveDialog.date} onChange={(e) => setMoveDialog({ ...moveDialog, date: e.target.value })} style={{ ...inputStyle, margin: "4px 0 14px 0" }} />
+              <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Platz</label>
+                  <select value={d.pitchId} onChange={(e) => setEditDialog({ ...d, pitchId: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }}>
+                    {pitches.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+                  </select>
+                </div>
+                {!(isSeries && d.scope === "series") && (
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Datum</label>
+                    <input type="date" value={d.date} onChange={(e) => setEditDialog({ ...d, date: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }} />
+                  </div>
+                )}
+              </div>
 
-            {moveDialog.booking.repetition !== "Einmalig" && <p style={{ fontSize: "11px", color: "#888", margin: "0 0 12px 0" }}>Serienbuchung: Es wird nur dieser eine Termin verschoben.</p>}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Von</label>
+                  <input type="time" value={d.startTime} onChange={(e) => setEditDialog({ ...d, startTime: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Bis</label>
+                  <input type="time" value={d.endTime} onChange={(e) => setEditDialog({ ...d, endTime: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }} />
+                </div>
+              </div>
 
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                onClick={() => { if (moveBooking(moveDialog.booking, moveDialog.fromDate, moveDialog.fromPitchId, moveDialog.pitchId, moveDialog.date)) setMoveDialog(null); }}
-                disabled={!moveDialog.date || (moveDialog.pitchId === moveDialog.fromPitchId && moveDialog.date === moveDialog.fromDate)}
-                style={{ flex: 1, padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", opacity: (moveDialog.pitchId === moveDialog.fromPitchId && moveDialog.date === moveDialog.fromDate) ? 0.5 : 1 }}
-              >
-                Verschieben
-              </button>
-              <button onClick={() => setMoveDialog(null)} style={{ flex: 1, padding: "11px", background: "#eee", color: "#333", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Abbrechen</button>
+              <label style={label}>Platzanteil</label>
+              <div style={{ display: "flex", gap: "6px", margin: "4px 0 10px 0" }}>
+                {[{ v: "Viertel", t: "¼ Platz" }, { v: "Halb", t: "½ Platz" }, { v: "Ganz", t: "Ganzer Platz" }].map(o => (
+                  <button key={o.v} onClick={() => setEditDialog({ ...d, share: o.v })} style={choiceStyle(d.share === o.v)}>{o.t}</button>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Mannschaft</label>
+                  <select value={d.team} onChange={(e) => setEditDialog({ ...d, team: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }}>
+                    {teamOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Art</label>
+                  <select value={d.type} onChange={(e) => setEditDialog({ ...d, type: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }}>
+                    {(bookingTypes.includes(d.type) ? bookingTypes : [d.type, ...bookingTypes]).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <label style={label}>Notiz</label>
+              <textarea value={d.notes} onChange={(e) => setEditDialog({ ...d, notes: e.target.value })} rows={2} style={{ ...inputStyle, margin: "4px 0 12px 0", fontFamily: "inherit" }} />
+
+              {isSeries && d.scope === "series" && <p style={{ fontSize: "11px", color: "#888", margin: "0 0 12px 0" }}>Änderungen gelten für alle Termine der Serie ({(d.booking.days || []).join(", ")}, bis {formatDay(d.booking.endDate)}).</p>}
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button onClick={saveEdit} style={{ flex: "1 1 120px", padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>💾 Speichern</button>
+                <button onClick={() => setEditDialog(null)} style={{ flex: "1 1 80px", padding: "11px", background: "#eee", color: "#333", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Abbrechen</button>
+                <button onClick={() => { setEditDialog(null); handleDeleteBooking(d.booking, d.fromDate); }} style={{ flex: "1 1 100%", padding: "9px", background: "white", color: "#c0392b", border: "1px solid #e6b0aa", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px" }}>🗑️ Buchung löschen</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* DIALOG: PLATZ SPERREN */}
+      {closeDialog && (() => {
+        const affected = closeDialog.date ? bookingsOnPitchDay(bookings, closeDialog.pitchId, closeDialog.date) : [];
+        return (
+          <div onClick={() => setCloseDialog(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "10px", padding: "18px", width: "100%", maxWidth: "420px", maxHeight: "90vh", overflowY: "auto", textAlign: "left", boxShadow: "0 6px 20px rgba(0,0,0,0.2)" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", color: "#c0392b" }}>🚫 {pitchName(closeDialog.pitchId)} sperren</h3>
+
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Datum</label>
+              <input type="date" value={closeDialog.date} onChange={(e) => setCloseDialog({ ...closeDialog, date: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }} />
+
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Grund (optional)</label>
+              <input type="text" placeholder="z. B. Platz unbespielbar" value={closeDialog.reason} onChange={(e) => setCloseDialog({ ...closeDialog, reason: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }} />
+
+              <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Buchungen an diesem Tag</label>
+              <select value={closeDialog.targetPitchId} onChange={(e) => setCloseDialog({ ...closeDialog, targetPitchId: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }}>
+                {pitches.filter(pt => pt.id !== closeDialog.pitchId).map(pt => <option key={pt.id} value={pt.id}>↪ verlegen nach {pt.name}</option>)}
+                <option value="">❌ alle absagen</option>
+              </select>
+
+              <div style={{ background: "#f8f9fa", border: "1px solid #eee", borderRadius: "6px", padding: "8px", fontSize: "12px", marginBottom: "12px" }}>
+                {affected.length === 0 ? <span style={{ color: "#888" }}>Keine Buchungen an diesem Tag.</span> : (
+                  <>
+                    <strong>{affected.length} Buchung(en) betroffen:</strong>
+                    {affected.map(b => {
+                      const inWay = closeDialog.targetPitchId ? findMoveConflicts(bookings, { ...b, pitchId: closeDialog.targetPitchId }, closeDialog.targetPitchId, closeDialog.date) : [];
+                      return (
+                        <div key={b.id} style={{ marginTop: "3px" }}>
+                          {b.startTime}–{b.endTime} {b.team}
+                          {inWay.length > 0 && <span style={{ color: "#e67e22" }}> ⚠️ Überschneidung mit {[...new Set(inWay.map(c => c.team))].join(", ")}</span>}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={handleClosePitch} style={{ flex: 1, padding: "11px", background: "#c0392b", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Sperren{affected.length > 0 ? (closeDialog.targetPitchId ? " & umbuchen" : " & absagen") : ""}</button>
+                <button onClick={() => setCloseDialog(null)} style={{ flex: 1, padding: "11px", background: "#eee", color: "#333", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Abbrechen</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* TAB: DASHBOARD (MANNSCHAFTEN WIE AUF BILD 9) */}
       {activeTab === "dashboard" && (

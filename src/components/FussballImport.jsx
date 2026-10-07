@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc, runTransaction } from "firebase/firestore";
 import { db } from "../firebase";
-import { findOverlappingBookings } from "../pitchConflicts";
+import { findMoveConflicts } from "../pitchConflicts";
 
 // Belegung pro Mannschaft: Vorlauf vor Anpfiff, Spieldauer inkl. Halbzeit, Nachlauf nach Spielende (Minuten).
 // Standard = 1 Stunde vor bis 2 Stunden nach Anpfiff.
-const DEFAULT_TIMING = { before: 60, duration: 105, after: 15 };
+const DEFAULT_TIMING = { before: 60, duration: 105, after: 15, share: "Ganz" };
+const SHARE_OPTIONS = [{ v: "Ganz", t: "Ganzer Platz" }, { v: "Halb", t: "½ Platz" }, { v: "Viertel", t: "¼ Platz" }];
 const TIMING_FIELDS = [
   { key: "before", label: "Vorlauf" },
   { key: "duration", label: "Spieldauer" },
@@ -91,13 +92,20 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
   // Zeiten einer Mannschaft speichern (beim Verlassen eines Feldes)
   const saveTiming = async (team) => {
     const current = timingOf(team);
-    const updated = Object.fromEntries(TIMING_FIELDS.map(({ key }) => {
-      const value = parseInt(inputValue(team, key), 10);
-      return [key, Number.isFinite(value) && value >= 0 && value <= 300 ? value : current[key]];
-    }));
+    const updated = {
+      ...current,
+      ...Object.fromEntries(TIMING_FIELDS.map(({ key }) => {
+        const value = parseInt(inputValue(team, key), 10);
+        return [key, Number.isFinite(value) && value >= 0 && value <= 300 ? value : current[key]];
+      }))
+    };
     setTimingInputs({ ...timingInputs, [team]: undefined });
     if (TIMING_FIELDS.every(({ key }) => updated[key] === current[key])) return;
     await setDoc(linksRef, { links, timings: { ...timings, [team]: updated } });
+  };
+
+  const saveShare = async (team, share) => {
+    await setDoc(linksRef, { links, timings: { ...timings, [team]: { ...timingOf(team), share } } });
   };
 
   // Beispiel für die Anzeige: Anpfiff 16:00 -> belegt 15:00–18:00
@@ -114,7 +122,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
       const unchanged = existing.date === c.date && existing.startTime === c.startTime && existing.endTime === c.endTime;
       return unchanged ? { kind: "imported", text: "✔ bereits im Kalender" } : { kind: "changed", text: "🔁 Termin geändert", existing };
     }
-    const conflicts = findOverlappingBookings(bookings, { pitchId, date: c.date, startTime: c.startTime, endTime: c.endTime });
+    const conflicts = findMoveConflicts(bookings, { id: null, startTime: c.startTime, endTime: c.endTime, share: c.share }, pitchId, c.date);
     if (conflicts.length > 0) return { kind: "conflict", text: `⚠️ Konflikt mit ${[...new Set(conflicts.map(b => b.team))].join(", ")}` };
     return { kind: "new", text: "🆕 neu" };
   };
@@ -147,6 +155,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
               opponent: m.isHome ? m.away : m.home,
               startTime: toTime(kickoff - timing.before),
               endTime: toTime(kickoff + timing.duration + timing.after),
+              share: timing.share,
               type: bookingTypeFor(m.competition)
             });
           });
@@ -157,7 +166,11 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
     }));
 
     found.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-    const pitchDefaults = Object.fromEntries(found.map(c => [c.matchId, guessPitch(c.venue, pitches, pitches[0].id)]));
+    // Bereits importierte Spiele behalten ihren (evtl. von Hand geänderten) Platz
+    const pitchDefaults = Object.fromEntries(found.map(c => [
+      c.matchId,
+      bookings.find(b => b.fussballMatchId === c.matchId)?.pitchId || guessPitch(c.venue, pitches, pitches[0].id)
+    ]));
     setPitchFor(pitchDefaults);
     setCandidates(found);
     // Neue und geänderte Spiele vorauswählen, Konflikte nicht
@@ -203,7 +216,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
               endDate: null,
               days: [],
               exceptions: [],
-              share: "Ganz",
+              share: c.share || "Ganz",
               bookedBy: "fussball.de-Import",
               fussballMatchId: c.matchId
             });
@@ -258,6 +271,9 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
                       Min
                     </label>
                   ))}
+                  <select value={timingOf(team).share} onChange={(e) => saveShare(team, e.target.value)} style={{ padding: "4px", borderRadius: "4px", border: "1px solid #ccc", fontSize: "12px", background: "#fff", color: "#333" }}>
+                    {SHARE_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}
+                  </select>
                   <span style={{ color: "#888", fontSize: "11px" }}>{exampleRange(team)}</span>
                 </div>
               </>
@@ -308,7 +324,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
                         <input type="checkbox" disabled={status.kind === "imported"} checked={!!selected[c.matchId] && status.kind !== "imported"} onChange={(e) => setSelected({ ...selected, [c.matchId]: e.target.checked })} />
                       </td>
                       <td style={cellStyle}>{new Date(c.date).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "2-digit" })}</td>
-                      <td style={cellStyle}>{c.startTime}–{c.endTime}<div style={{ color: "#888", fontSize: "11px" }}>Anpfiff {c.kickoff}</div></td>
+                      <td style={cellStyle}>{c.startTime}–{c.endTime}<div style={{ color: "#888", fontSize: "11px" }}>Anpfiff {c.kickoff}{c.share && c.share !== "Ganz" ? ` · ${c.share === "Halb" ? "½" : "¼"} Platz` : ""}</div></td>
                       <td style={cellStyle}>{c.team}<div style={{ color: "#888", fontSize: "11px" }}>{c.competition}</div></td>
                       <td style={cellStyle}>{c.opponent}</td>
                       <td style={cellStyle}>

@@ -95,12 +95,12 @@ service cloud.firestore {
 
     // 8. Spielticker: Öffentlich lesbar, schreiben nur Trainer / Admins / Ticker-Personen mit gültigem Code.
     //    Dokument-IDs beginnen immer mit der Vereins-ID, z. B. "svon_live_match_F-Jugend".
-    //    Mannschaftsliste, Plätze, Trainer-Zuordnung und fussball.de-Links
-    //    (svon_teams, svon_pitches, svon_teamCoaches, svon_fussballde) nur Admin.
+    //    Mannschaftsliste, Plätze, Trainer-Zuordnung, fussball.de-Links und Platzsperren
+    //    (svon_teams, svon_pitches, svon_teamCoaches, svon_fussballde, svon_closures) nur Admin.
     match /ticker/{docId} {
       allow read: if true;
       allow write: if isAdmin();
-      allow write: if !docId.matches('[a-z0-9]+_(teams|pitches|teamCoaches|fussballde)')
+      allow write: if !docId.matches('[a-z0-9]+_(teams|pitches|teamCoaches|fussballde|closures)')
         && (isStaff() || hasValidTickerSession(docId.split('_')[0]));
     }
   }
