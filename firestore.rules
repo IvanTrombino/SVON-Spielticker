@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- HILFSFUNKTIONEN ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Muss mit der Liste in src/admins.js übereinstimmen!
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && request.auth.token.email.lower() in [
+          'ivan.trombino@outlook.de',
+          'cordula.buhl@gmail.com'
+        ];
+    }
+
+    // Trainer = hat ein Profil in youth_coaches (wird nur von Admins angelegt)
+    function isCoach() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/youth_coaches/$(request.auth.uid));
+    }
+
+    // Echte Accounts: Admins und Trainer (keine anonymen Ticker-Personen, keine selbst registrierten Accounts)
+    function isStaff() {
+      return isAdmin() || isCoach();
+    }
+
+    // Stimmt der Code mit dem aktuellen, nicht abgelaufenen Tagescode des Vereins überein?
+    function codeMatches(club, code) {
+      let codeDoc = /databases/$(database)/documents/ticker_codes/$(club);
+      return exists(codeDoc)
+        && get(codeDoc).data.code == code
+        && request.time < get(codeDoc).data.expiresAt;
+    }
+
+    // Ticker-Person mit gültigem Tagescode für diesen Verein
+    function hasValidTickerSession(club) {
+      let session = /databases/$(database)/documents/ticker_sessions/$(request.auth.uid);
+      return isSignedIn()
+        && exists(session)
+        && get(session).data.clubId == club
+        && codeMatches(club, get(session).data.code);
+    }
+
+    // --- REGELN ---
+
+    // 1. Basis-Sicherheit: Standardmäßig alles blockieren
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. DSGVO-Daten (Spieler): Nur Trainer / Jugendleitung
+    match /youth_players/{player} {
+      allow read, write: if isStaff();
+    }
+
+    // 3. Trainer-Profile: Trainer dürfen lesen, nur Admins anlegen/ändern
+    match /youth_coaches/{coach} {
+      allow read: if isStaff() || (isSignedIn() && request.auth.uid == coach);
+      allow write: if isAdmin();
+    }
+
+    // 4. Einstellungen & Teams: Öffentlich lesbar, schreiben nur Trainer / Jugendleitung
+    match /youth_settings/{setting} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // 5. Trainingserfassung: Nur Trainer / Jugendleitung
+    match /youth_trainings/{training} {
+      allow read, write: if isStaff();
+    }
+
+    // 6. Ticker-Tagescodes: Trainer erzeugen/sehen den Code, Ticker-Personen nur mit gültigem Code
+    match /ticker_codes/{club} {
+      allow read: if isStaff() || hasValidTickerSession(club);
+      allow write: if isStaff();
+    }
+
+    // 7. Ticker-Sitzungen: Anlegen nur mit korrektem, gültigem Tagescode
+    match /ticker_sessions/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['clubId', 'code'])
+        && request.resource.data.clubId is string
+        && request.resource.data.code is string
+        && codeMatches(request.resource.data.clubId, request.resource.data.code);
+    }
+
+    // 8. Spielticker: Öffentlich lesbar, schreiben nur Trainer / Admins / Ticker-Personen mit gültigem Code.
+    //    Dokument-IDs beginnen immer mit der Vereins-ID, z. B. "svon_live_match_F-Jugend".
+    match /ticker/{docId} {
+      allow read: if true;
+      allow write: if isStaff() || hasValidTickerSession(docId.split('_')[0]);
+    }
+  }
+}

@@ -7,6 +7,8 @@ import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trai
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
+import { isAdminUser } from "./admins";
+import { redeemTickerCode, isTickerSessionValid } from "./tickerCode";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
@@ -26,7 +28,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   const [clubInput, setClubInput] = useState("");
-  const [trainerPasswordInput, setTrainerPasswordInput] = useState("");
+  const [tickerCodeInput, setTickerCodeInput] = useState("");
+  const [isRedeemingCode, setIsRedeemingCode] = useState(false);
   const [teams, setTeams] = useState([]);
 
   useEffect(() => {
@@ -36,6 +39,32 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  const isAdmin = isAdminUser(firebaseUser);
+  // Anonym angemeldet = Ticker-Person mit Tagescode
+  const isTickerUser = !!firebaseUser?.isAnonymous;
+
+  // Ticker-Zugang regelmäßig prüfen: Code abgelaufen oder durch neuen Tagescode ersetzt -> abmelden
+  useEffect(() => {
+    if (!isTickerUser || !clubId) return;
+    const verify = async () => {
+      if (await isTickerSessionValid(clubId)) return;
+      await signOut(auth);
+      alert("Dein Ticker-Code ist abgelaufen. Bitte hol dir den aktuellen Code von deinem Trainer.");
+    };
+    verify();
+    const interval = setInterval(verify, 60000);
+    return () => clearInterval(interval);
+  }, [isTickerUser, clubId]);
+
+  // Ohne Admin-Login oder gültigen Ticker-Code kein Zugriff auf Spiel/Administration
+  useEffect(() => {
+    if (authLoading) return;
+    if ((view === "match" || view === "admin") && !isAdmin && !isTickerUser) {
+      setView("home");
+      localStorage.removeItem("svon_current_view");
+    }
+  }, [authLoading, view, isAdmin, isTickerUser]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -111,16 +140,26 @@ export default function App() {
     setClubInput("");
   };
 
-  const handleTrainerLogin = (e) => {
+  const openTicker = () => {
+    setView("match");
+    localStorage.setItem("svon_current_view", "match");
+  };
+
+  const handleTickerCodeLogin = async (e) => {
     e.preventDefault();
-    if (trainerPasswordInput === "2002") {
-      localStorage.setItem("svon_user_role", "trainer");
-      setView("match"); 
-      localStorage.setItem("svon_current_view", "match");
-      setTrainerPasswordInput("");
-    } else {
-      alert("Falsches Trainer-Passwort!");
-      setTrainerPasswordInput("");
+    if (!tickerCodeInput.trim()) return;
+    setIsRedeemingCode(true);
+    try {
+      await redeemTickerCode(clubId, tickerCodeInput);
+      setTickerCodeInput("");
+      openTicker();
+    } catch (error) {
+      console.error("Ticker-Code Fehler:", error);
+      alert(error.code === "permission-denied"
+        ? "Ungültiger oder abgelaufener Ticker-Code!"
+        : "Anmeldung fehlgeschlagen. Bitte später erneut versuchen.");
+    } finally {
+      setIsRedeemingCode(false);
     }
   };
 
@@ -132,7 +171,6 @@ export default function App() {
   const handleBackToHome = () => {
     setView("home");
     localStorage.removeItem("svon_current_view");
-    localStorage.removeItem("svon_user_role");
     window.location.hash = `#${clubId}`;
   };
 
@@ -260,21 +298,41 @@ export default function App() {
 
           {/* Die weiße Live-Ticker Box ist nun OBERHALB des Coach-Portals */}
           <div style={{ background: "white", padding: "18px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "center" }}>
-            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "15px" }}>⚽ Live-Ticker Trainer Bereich</h3>
-            <form onSubmit={handleTrainerLogin}>
-              <input 
-                type="password" 
-                value={trainerPasswordInput} 
-                onChange={(e) => setTrainerPasswordInput(e.target.value)} 
-                placeholder="Trainer-Passwort..." 
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center", color: "#333", background: "#fff" }} 
-              />
-              <button 
-                type="submit" 
-                style={{ width: "100%", padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer" }}>
-                In Ticker einloggen
-              </button>
-            </form>
+            <h3 style={{ color: "#2146d0", margin: "0 0 10px 0", fontSize: "15px" }}>⚽ Live-Ticker bedienen</h3>
+            {isTickerUser ? (
+              <>
+                <p style={{ color: "#27ae60", fontSize: "13px", fontWeight: "bold", margin: "0 0 10px 0" }}>✅ Ticker-Zugang aktiv</p>
+                <button 
+                  onClick={openTicker}
+                  style={{ width: "100%", padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: "pointer", marginBottom: "8px" }}>
+                  Zum Ticker
+                </button>
+                <button 
+                  onClick={() => signOut(auth)}
+                  style={{ background: "transparent", border: "none", color: "#e74c3c", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}>
+                  Ticker-Zugang beenden
+                </button>
+              </>
+            ) : (
+              <form onSubmit={handleTickerCodeLogin}>
+                <input 
+                  type="text" 
+                  value={tickerCodeInput} 
+                  onChange={(e) => setTickerCodeInput(e.target.value)} 
+                  placeholder="Ticker-Code (z.B. K7P-4XM)" 
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", boxSizing: "border-box", marginBottom: "10px", textAlign: "center", color: "#333", background: "#fff", textTransform: "uppercase" }} 
+                />
+                <button 
+                  type="submit" 
+                  disabled={isRedeemingCode}
+                  style={{ width: "100%", padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "14px", cursor: isRedeemingCode ? "not-allowed" : "pointer" }}>
+                  {isRedeemingCode ? "Wird geprüft..." : "In Ticker einloggen"}
+                </button>
+                <p style={{ color: "#888", fontSize: "11px", margin: "8px 0 0 0" }}>Den Tagescode bekommst du von deinem Trainer.</p>
+              </form>
+            )}
           </div>
 
           {/* Der orange Button ist nun UNTERHALB der weißen Box */}
@@ -287,7 +345,7 @@ export default function App() {
 
           <button 
             onClick={() => {
-              if (firebaseUser) {
+              if (isAdmin) {
                 setView("match");
                 localStorage.setItem("svon_current_view", "match");
               } else {
@@ -306,7 +364,7 @@ export default function App() {
     );
   }
 
-  const role = firebaseUser ? "admin" : (localStorage.getItem("svon_user_role") || "trainer");
+  const role = isAdmin ? "admin" : "trainer";
 
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", paddingBottom: "40px" }}>
@@ -316,7 +374,7 @@ export default function App() {
           justifyContent: "space-between",
           alignItems: "center",
           padding: "10px 15px",
-          background: firebaseUser ? "#c0392b" : "#2146d0",
+          background: isAdmin ? "#c0392b" : "#2146d0",
           boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
           flexWrap: "wrap",
           gap: "8px"
@@ -324,9 +382,9 @@ export default function App() {
       >
         <button 
           onClick={handleBackToHome}
-          style={{ background: "white", color: firebaseUser ? "#c0392b" : "#2146d0", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
+          style={{ background: "white", color: isAdmin ? "#c0392b" : "#2146d0", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
         >
-          🏠 Startseite ({firebaseUser ? "Admin" : "Trainer"})
+          🏠 Startseite ({isAdmin ? "Admin" : "Ticker"})
         </button>
 
         <div style={{ display: "flex", gap: "8px" }}>
@@ -337,7 +395,7 @@ export default function App() {
               borderRadius: "6px",
               border: 0,
               background: view === "match" ? "white" : "rgba(255,255,255,0.2)",
-              color: view === "match" ? (firebaseUser ? "#c0392b" : "#2146d0") : "white",
+              color: view === "match" ? (isAdmin ? "#c0392b" : "#2146d0") : "white",
               fontWeight: "bold",
               cursor: "pointer",
               fontSize: "13px"
@@ -353,7 +411,7 @@ export default function App() {
               borderRadius: "6px",
               border: 0,
               background: view === "admin" ? "white" : "rgba(255,255,255,0.2)",
-              color: view === "admin" ? (firebaseUser ? "#c0392b" : "#2146d0") : "white",
+              color: view === "admin" ? (isAdmin ? "#c0392b" : "#2146d0") : "white",
               fontWeight: "bold",
               cursor: "pointer",
               fontSize: "13px"
@@ -364,7 +422,7 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
-          {firebaseUser && (
+          {isAdmin && (
             <button
               onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}
               style={{
@@ -398,7 +456,7 @@ export default function App() {
             👀 Zuschauer
           </button>
 
-          {firebaseUser && (
+          {(isAdmin || isTickerUser) && (
             <button
               onClick={handleLogout}
               style={{
@@ -419,13 +477,13 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
-        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={firebaseUser ? "admin" : role} />}
+        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={role} />}
         {view === "admin" && (
           <AdminPanel 
             clubId={clubId}
             teams={teams} 
-            setTeams={firebaseUser ? saveTeamsToCloud : null} 
-            userRole={firebaseUser ? "admin" : role} 
+            setTeams={isAdmin ? saveTeamsToCloud : null} 
+            userRole={role} 
           />
         )}
       </div>

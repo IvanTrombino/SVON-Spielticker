@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../firebase"; 
+import { ADMIN_EMAILS } from "../admins";
 import YouthManager from "./YouthManager"; 
 
 export default function YouthAdminPage({ clubId }) {
@@ -10,17 +11,12 @@ export default function YouthAdminPage({ clubId }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // STRIKTE LISTE: Nur diese beiden E-Mail-Adressen haben Zugriff auf den Admin-Bereich!
-  const allowedAdminEmails = [
-    "ivan.trombino@outlook.de",
-    "cordula.buhl@gmail.com" // <-- Hier kannst du Cordulas echte E-Mail-Adresse eintragen
-  ];
 
   // Prüfen, ob der Nutzer eingeloggt ist und zur harten Admin-Liste gehört
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        if (currentUser.email && allowedAdminEmails.map(e => e.toLowerCase()).includes(currentUser.email.toLowerCase())) {
+        if (currentUser.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase())) {
           setUser(currentUser); 
         } else {
           // Falscher Account -> Sofort wieder ausloggen!
@@ -44,7 +40,7 @@ export default function YouthAdminPage({ clubId }) {
     const enteredEmailLower = email.trim().toLowerCase();
 
     // Vorab-Prüfung der E-Mail
-    if (!allowedAdminEmails.map(e => e.toLowerCase()).includes(enteredEmailLower)) {
+    if (!ADMIN_EMAILS.includes(enteredEmailLower)) {
       setError("Zugriff verweigert: Diese E-Mail-Adresse hat keine Administrator-Rechte.");
       setLoading(false);
       return;

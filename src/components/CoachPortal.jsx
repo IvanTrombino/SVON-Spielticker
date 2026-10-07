@@ -3,6 +3,7 @@ import { collection, query, where, getDoc, addDoc, updateDoc, deleteDoc, doc, on
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from "../firebase";
 import PitchManager from "./PitchManager"; // <-- NEU: Import für die Platzbelegung
+import { getOrCreateDailyCode } from "../tickerCode";
 
 export default function CoachPortal({ clubId }) {
   // --- LOGIN STATES ---
@@ -27,6 +28,10 @@ export default function CoachPortal({ clubId }) {
   const [pastTrainings, setPastTrainings] = useState([]);
   const [editingTrainingId, setEditingTrainingId] = useState(null);
   const [expandedTrainingId, setExpandedTrainingId] = useState(null);
+
+  // --- TICKER-TAGESCODE ---
+  const [tickerCode, setTickerCode] = useState(null);
+  const [tickerCodeError, setTickerCodeError] = useState("");
 
   const auth = getAuth();
 
@@ -75,6 +80,26 @@ export default function CoachPortal({ clubId }) {
       console.error("Fehler beim Passwort-Reset:", error);
       setLoginError("Fehler beim Senden der Reset-E-Mail.");
     }
+  };
+
+  // Tagescode für den Live-Ticker laden bzw. erzeugen, sobald ein Trainer eingeloggt ist
+  useEffect(() => {
+    if (!loggedInCoach || !clubId) return;
+    getOrCreateDailyCode(clubId)
+      .then((code) => { setTickerCode(code); setTickerCodeError(""); })
+      .catch((error) => {
+        console.error("Fehler beim Laden des Ticker-Codes:", error);
+        setTickerCodeError("Ticker-Code konnte nicht geladen werden.");
+      });
+  }, [loggedInCoach, clubId]);
+
+  const tickerCodeValidUntil = tickerCode
+    ? tickerCode.expiresAt.toDate().toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "";
+
+  const shareTickerCode = () => {
+    const text = `⚽ Live-Ticker ${clubId.toUpperCase()}\nDein Ticker-Code: ${tickerCode.code}\nGültig bis ${tickerCodeValidUntil} Uhr\n\nHier eingeben: ${window.location.origin}/#${clubId}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
   const handleLogout = () => {
@@ -340,6 +365,26 @@ export default function CoachPortal({ clubId }) {
           </div>
         </div>
         <button onClick={handleLogout} style={{ background: "#e74c3c", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>Abmelden</button>
+      </div>
+
+      {/* TICKER-TAGESCODE */}
+      <div style={{ background: "#eef2ff", border: "1px solid #c7d2fe", padding: "12px 15px", borderRadius: "10px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+        <div>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#3730a3" }}>⚽ Live-Ticker Code für heute</div>
+          {tickerCode ? (
+            <>
+              <div style={{ fontSize: "24px", fontWeight: "bold", letterSpacing: "3px", color: "#2146d0", fontFamily: "monospace" }}>{tickerCode.code}</div>
+              <div style={{ fontSize: "11px", color: "#666" }}>Gültig bis {tickerCodeValidUntil} Uhr · für alle Teams</div>
+            </>
+          ) : (
+            <div style={{ fontSize: "13px", color: tickerCodeError ? "#e74c3c" : "#666" }}>{tickerCodeError || "Wird geladen..."}</div>
+          )}
+        </div>
+        {tickerCode && (
+          <button onClick={shareTickerCode} style={{ background: "#25d366", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
+            📤 Per WhatsApp teilen
+          </button>
+        )}
       </div>
 
       {/* NAVIGATION */}
