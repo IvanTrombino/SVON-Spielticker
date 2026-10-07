@@ -342,7 +342,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
 
       const message = `${requestedBy} (${bookTeam}) benötigt den ${pitchName} am ${new Date(bookDate).toLocaleDateString("de-DE")} (${startTime}-${endTime}). Platz ist belegt durch ${conflictTeams.join(", ")}. Bitte im Admin Portal entscheiden!`;
       // Push ist nur ein Zusatz – die Anfrage ist bereits gespeichert
-      fetch(`https://ntfy.sh/${clubId}jugendleitung`, { method: "POST", body: `🏟️ Platzkonflikt: ${message}`, headers: { "Priority": "high" } }).catch(() => {});
+      fetch(`https://ntfy.sh/${clubId}vorstandundjugend`, { method: "POST", body: `🏟️ Platzkonflikt: ${message}`, headers: { "Priority": "high" } }).catch(() => {});
 
       alert("Vorstand und Jugendleitung wurden benachrichtigt! Die Entscheidung siehst du unter \"⚠️ Konflikte\".");
       setConflictBooking(null);
