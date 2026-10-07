@@ -18,6 +18,40 @@ export const findOverlappingBookings = (bookings, { pitchId, date, startTime, en
     return occurs && startTime < b.endTime && endTime > b.startTime;
   });
 
+const SHARE_VALUES = { "Ganz": 1, "Halb": 0.5, "Viertel": 0.25 };
+
+// Buchungen, die am Ziel (Platz/Tag/Zeit) im Weg wären – nur wenn der Platzanteil nicht mehr reicht
+export const findMoveConflicts = (bookings, booking, toPitchId, toDate) => {
+  const overlapping = findOverlappingBookings(bookings, { pitchId: toPitchId, date: toDate, startTime: booking.startTime, endTime: booking.endTime })
+    .filter(b => b.id !== booking.id);
+  const used = overlapping.reduce((sum, b) => sum + SHARE_VALUES[b.share || "Ganz"], 0);
+  return used + SHARE_VALUES[booking.share || "Ganz"] > 1 ? overlapping : [];
+};
+
+// Einen Termin auf anderen Platz/Tag verschieben. Einmalige Buchung wird geändert,
+// bei einer Serie wird nur dieser Termin herausgenommen und als Einzeltermin neu angelegt.
+export const moveBookingInList = (bookings, booking, fromDate, toPitchId, toDate, movedFrom) => {
+  if (booking.repetition === "Einmalig") {
+    return bookings.map(b => b.id === booking.id ? { ...b, pitchId: toPitchId, date: toDate, movedFrom } : b);
+  }
+  const single = {
+    ...booking,
+    id: `${booking.id}-${fromDate}-${Date.now()}`,
+    repetition: "Einmalig",
+    date: toDate,
+    startDate: null,
+    endDate: null,
+    days: [],
+    exceptions: [],
+    pitchId: toPitchId,
+    movedFrom
+  };
+  return [
+    ...bookings.map(b => b.id === booking.id ? { ...b, exceptions: [...(b.exceptions || []), fromDate] } : b),
+    single
+  ];
+};
+
 // Neue Konflikt-Anfrage an Vorstand/Jugendleitung speichern
 export const createConflictRequest = (clubId, request) =>
   runTransaction(db, async (transaction) => {

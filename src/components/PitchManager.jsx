@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { findOverlappingBookings, createConflictRequest } from "../pitchConflicts";
+import { findOverlappingBookings, createConflictRequest, findMoveConflicts, moveBookingInList } from "../pitchConflicts";
 import PitchConflicts from "./PitchConflicts";
 import FussballImport from "./FussballImport";
 
@@ -50,6 +50,11 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
   // --- KONFLIKT-STATE ---
   const [conflictBooking, setConflictBooking] = useState(null);
   const [isSendingConflict, setIsSendingConflict] = useState(false);
+
+  // --- VERSCHIEBEN (Drag & Drop am PC, Antippen am Handy) ---
+  const [dragging, setDragging] = useState(null); // { booking, fromDate, fromPitchId }
+  const [dropTarget, setDropTarget] = useState(null); // "pitchId|datum"
+  const [moveDialog, setMoveDialog] = useState(null); // { booking, fromDate, fromPitchId, pitchId, date }
 
   const daysOfWeek = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
   const bookingTypes = ["Training", "Ligaspiel", "Pokalspiel", "Freundschaftsspiel"];
@@ -266,6 +271,37 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
     alert("✅ Platz erfolgreich gebucht!");
     setActiveTab("schedule");
     setBookNotes("");
+  };
+
+  // Termin verschieben; bei Konflikt darf nur ein Admin trotzdem verschieben
+  const moveBooking = (booking, fromDate, fromPitchId, toPitchId, toDate) => {
+    if (fromPitchId === toPitchId && fromDate === toDate) return false;
+    const pitchName = (id) => pitches.find(p => p.id === id)?.name || "Unbekannter Platz";
+    const conflicts = findMoveConflicts(bookings, booking, toPitchId, toDate);
+    const target = `${pitchName(toPitchId)} am ${new Date(toDate).toLocaleDateString("de-DE")}`;
+
+    if (conflicts.length > 0) {
+      const teamsInWay = [...new Set(conflicts.map(c => c.team))].join(", ");
+      if (!isAdmin) {
+        alert(`${target} ist ${booking.startTime}–${booking.endTime} bereits durch ${teamsInWay} belegt. Bitte über "Buchen" einen Konflikt melden.`);
+        return false;
+      }
+      if (!window.confirm(`⚠️ ${target} ist bereits durch ${teamsInWay} belegt. Trotzdem verschieben?`)) return false;
+    }
+
+    const seriesHint = booking.repetition === "Einmalig" ? "" : "\n(Nur dieser Termin – die restliche Serie bleibt unverändert.)";
+    if (!window.confirm(`${booking.team} (${booking.startTime}–${booking.endTime}) verschieben nach ${target}?${seriesHint}`)) return false;
+
+    const updated = moveBookingInList(bookings, booking, fromDate, toPitchId, toDate, `${pitchName(fromPitchId)}, ${new Date(fromDate).toLocaleDateString("de-DE")}`);
+    setBookings(updated);
+    syncBookings(updated);
+    return true;
+  };
+
+  const handleDrop = (pitchId, date) => {
+    if (dragging) moveBooking(dragging.booking, dragging.fromDate, dragging.fromPitchId, pitchId, date);
+    setDragging(null);
+    setDropTarget(null);
   };
 
   const handleDeleteBooking = (b, cellDateString) => {
@@ -493,6 +529,8 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                  )}
               </div>
 
+              <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>💡 Buchung auf einen anderen Platz oder Tag ziehen – oder antippen – um sie zu verschieben.</p>
+
               {/* GRIDS PRO PLATZ */}
               {pitches.filter(p => filterPitch ? p.id === filterPitch : true).map((p, idx) => (
                 <div key={p.id} style={{ marginBottom: "20px", background: "white", borderRadius: "10px", border: "1px solid #ddd", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
@@ -538,22 +576,37 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                       }).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
                       return (
-                        <div key={`cell-${i}`} style={{ background: isToday ? "#f0faf4" : "white", padding: "5px", minHeight: "90px", display: "flex", flexDirection: "column", gap: "4px", borderRight: "1px solid #eee", boxShadow: isToday ? "inset 2px 0 0 #27ae60, inset -2px 0 0 #27ae60" : "none" }}>
+                        <div
+                          key={`cell-${i}`}
+                          onDragOver={(e) => { if (!dragging) return; e.preventDefault(); setDropTarget(`${p.id}|${cellDateString}`); }}
+                          onDragLeave={() => setDropTarget(null)}
+                          onDrop={(e) => { e.preventDefault(); handleDrop(p.id, cellDateString); }}
+                          style={{ background: dropTarget === `${p.id}|${cellDateString}` ? "#dbeafe" : isToday ? "#f0faf4" : "white", padding: "5px", minHeight: "90px", display: "flex", flexDirection: "column", gap: "4px", borderRight: "1px solid #eee", boxShadow: dropTarget === `${p.id}|${cellDateString}` ? "inset 0 0 0 2px #2146d0" : isToday ? "inset 2px 0 0 #27ae60, inset -2px 0 0 #27ae60" : "none", transition: "background 0.1s" }}
+                        >
                           {cellBookings.length === 0 && <div style={{ fontSize: "11px", color: "#bbb", textAlign: "center", marginTop: "8px" }}>frei</div>}
                           {cellBookings.map(b => {
                             const bColor = getTeamColor(b.team);
                             const shareLabel = b.share === "Halb" ? "½ Platz" : b.share === "Viertel" ? "¼ Platz" : "";
 
                             return (
-                              <div key={b.id} title={b.notes || ""} style={{ background: `${bColor}1f`, borderLeft: `4px solid ${bColor}`, color: "#333", padding: "4px 18px 4px 6px", borderRadius: "4px", position: "relative", boxSizing: "border-box", lineHeight: 1.3 }}>
+                              <div
+                                key={b.id}
+                                draggable
+                                onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", b.id); setDragging({ booking: b, fromDate: cellDateString, fromPitchId: p.id }); }}
+                                onDragEnd={() => { setDragging(null); setDropTarget(null); }}
+                                onClick={() => setMoveDialog({ booking: b, fromDate: cellDateString, fromPitchId: p.id, pitchId: p.id, date: cellDateString })}
+                                title={[b.notes, b.movedFrom ? `Verlegt von ${b.movedFrom}` : "", "Ziehen oder antippen zum Verschieben"].filter(Boolean).join("\n")}
+                                style={{ background: `${bColor}1f`, borderLeft: `4px solid ${bColor}`, color: "#333", padding: "4px 18px 4px 6px", borderRadius: "4px", position: "relative", boxSizing: "border-box", lineHeight: 1.3, cursor: "grab", opacity: dragging?.booking.id === b.id && dragging?.fromDate === cellDateString ? 0.4 : 1 }}
+                              >
                                 <div style={{ fontSize: "11px", fontWeight: "bold", color: "#555", display: "flex", gap: "6px", flexWrap: "wrap" }}>
                                   <span>{b.startTime}–{b.endTime}</span>
                                   {shareLabel && <span style={{ fontWeight: "normal", color: "#777" }}>{shareLabel}</span>}
+                                  {b.movedFrom && <span style={{ fontWeight: "normal", color: "#2146d0" }}>↪ verlegt</span>}
                                 </div>
                                 <div style={{ fontSize: "12px", fontWeight: "bold", wordBreak: "break-word" }}>
                                   {b.type === "Training" ? "⚽" : "🏆"} {b.team}
                                 </div>
-                                <button onClick={() => handleDeleteBooking(b, cellDateString)} title="Buchung löschen" style={{ position: "absolute", top: "3px", right: "4px", background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "11px", padding: 0 }}>✖</button>
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteBooking(b, cellDateString); }} title="Buchung löschen" style={{ position: "absolute", top: "3px", right: "4px", background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "11px", padding: 0 }}>✖</button>
                               </div>
                             );
                           })}
@@ -565,6 +618,42 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* DIALOG: BUCHUNG VERSCHIEBEN (v. a. fürs Handy) */}
+      {moveDialog && (
+        <div onClick={() => setMoveDialog(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "10px", padding: "18px", width: "100%", maxWidth: "380px", textAlign: "left", boxShadow: "0 6px 20px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", color: "#2146d0" }}>↪ Buchung verschieben</h3>
+            <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#555" }}>
+              <strong>{moveDialog.booking.team}</strong> · {moveDialog.booking.startTime}–{moveDialog.booking.endTime}<br />
+              bisher: {pitches.find(pt => pt.id === moveDialog.fromPitchId)?.name}, {new Date(moveDialog.fromDate).toLocaleDateString("de-DE")}
+              {moveDialog.booking.movedFrom && <><br /><span style={{ color: "#2146d0" }}>ursprünglich: {moveDialog.booking.movedFrom}</span></>}
+            </p>
+            {moveDialog.booking.notes && <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#777" }}>📝 {moveDialog.booking.notes}</p>}
+
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Neuer Platz</label>
+            <select value={moveDialog.pitchId} onChange={(e) => setMoveDialog({ ...moveDialog, pitchId: e.target.value })} style={{ ...inputStyle, margin: "4px 0 10px 0" }}>
+              {pitches.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
+
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#555" }}>Neues Datum</label>
+            <input type="date" value={moveDialog.date} onChange={(e) => setMoveDialog({ ...moveDialog, date: e.target.value })} style={{ ...inputStyle, margin: "4px 0 14px 0" }} />
+
+            {moveDialog.booking.repetition !== "Einmalig" && <p style={{ fontSize: "11px", color: "#888", margin: "0 0 12px 0" }}>Serienbuchung: Es wird nur dieser eine Termin verschoben.</p>}
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => { if (moveBooking(moveDialog.booking, moveDialog.fromDate, moveDialog.fromPitchId, moveDialog.pitchId, moveDialog.date)) setMoveDialog(null); }}
+                disabled={!moveDialog.date || (moveDialog.pitchId === moveDialog.fromPitchId && moveDialog.date === moveDialog.fromDate)}
+                style={{ flex: 1, padding: "11px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", opacity: (moveDialog.pitchId === moveDialog.fromPitchId && moveDialog.date === moveDialog.fromDate) ? 0.5 : 1 }}
+              >
+                Verschieben
+              </button>
+              <button onClick={() => setMoveDialog(null)} style={{ flex: 1, padding: "11px", background: "#eee", color: "#333", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Abbrechen</button>
+            </div>
+          </div>
         </div>
       )}
 
