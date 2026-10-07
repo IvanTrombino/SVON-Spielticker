@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../firebase"; 
-import { ADMIN_EMAILS } from "../admins";
+import { ADMIN_EMAILS, isAdminUser } from "../admins";
 import YouthManager from "./YouthManager"; 
 
 export default function YouthAdminPage({ clubId }) {
@@ -14,16 +14,11 @@ export default function YouthAdminPage({ clubId }) {
 
   // Prüfen, ob der Nutzer eingeloggt ist und zur harten Admin-Liste gehört
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        if (currentUser.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase())) {
-          setUser(currentUser); 
-        } else {
-          // Falscher Account -> Sofort wieder ausloggen!
-          await signOut(auth);
-          setUser(null);
-          setError("Zugriff verweigert: Dieser Bereich ist ausschließlich für die Jugendleitung.");
-        }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Nicht-Admins (Trainer, Ticker-Personen) werden nur nicht reingelassen, aber NICHT abgemeldet –
+      // die Anmeldung gilt für den ganzen Browser und würde sonst z. B. den Ticker in einem anderen Tab beenden.
+      if (currentUser && isAdminUser(currentUser)) {
+        setUser(currentUser);
       } else {
         setUser(null);
       }
