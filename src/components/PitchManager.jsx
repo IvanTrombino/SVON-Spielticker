@@ -3,6 +3,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { findOverlappingBookings, createConflictRequest } from "../pitchConflicts";
 import PitchConflicts from "./PitchConflicts";
+import FussballImport from "./FussballImport";
 
 // isAdmin: Plätze verwalten, Dashboard bearbeiten, Massen-Stornierung und Konflikte entscheiden
 export default function PitchManager({ clubId, teams, currentUserName, isAdmin = false }) {
@@ -423,6 +424,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
         <button onClick={() => setActiveTab("book")} style={tabButtonStyle("book")}>➕ Buchen</button>
         {isAdmin && <button onClick={() => setActiveTab("manage")} style={tabButtonStyle("manage")}>⚙ Plätze verwalten</button>}
         <button onClick={() => setActiveTab("conflicts")} style={tabButtonStyle("conflicts")}>⚠️ Konflikte</button>
+        {isAdmin && <button onClick={() => setActiveTab("import")} style={tabButtonStyle("import")}>📥 fussball.de</button>}
       </div>
 
       {/* TAB 1: KALENDER GRID */}
@@ -766,6 +768,8 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
 
       {/* TAB 4: PLÄTZE VERWALTEN */}
       {activeTab === "conflicts" && <PitchConflicts clubId={clubId} canDecide={isAdmin} />}
+
+      {activeTab === "import" && isAdmin && <FussballImport clubId={clubId} teams={teams || []} pitches={pitches} bookings={bookings} />}
 
       {activeTab === "manage" && isAdmin && (
         <div style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", maxWidth: "600px", margin: "0 auto", textAlign: "left" }}>
