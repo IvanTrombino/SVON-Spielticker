@@ -327,7 +327,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
       const pitchName = pitches.find(p => p.id === bookPitch)?.name || "Unbekannter Platz";
       const message = `${currentUserName || bookTeam} benötigt den ${pitchName} (${startTime}-${endTime}). Platz ist belegt durch ${conflictBooking.team}. Bitte klären!`;
       await fetch(`https://ntfy.sh/${clubId}jugendleitung`, { method: "POST", body: `🏟️ Platzkonflikt: ${message}`, headers: { "Priority": "high" } });
-      alert("Jugendleitung wurde benachrichtigt!");
+      alert("Vorstand und Jugendleitung wurden benachrichtigt!");
       setConflictBooking(null);
     } catch (error) { alert("Fehler beim Senden."); }
   };
