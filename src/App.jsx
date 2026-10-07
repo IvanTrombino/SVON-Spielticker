@@ -46,7 +46,8 @@ export default function App() {
 
   // Ticker-Zugang regelmäßig prüfen: Code abgelaufen oder durch neuen Tagescode ersetzt -> abmelden
   useEffect(() => {
-    if (!isTickerUser || !clubId) return;
+    // Während der Code-Anmeldung noch nicht prüfen – die Sitzung wird erst nach dem Login angelegt
+    if (!isTickerUser || !clubId || isRedeemingCode) return;
     const verify = async () => {
       if (await isTickerSessionValid(clubId)) return;
       await signOut(auth);
@@ -55,7 +56,7 @@ export default function App() {
     verify();
     const interval = setInterval(verify, 60000);
     return () => clearInterval(interval);
-  }, [isTickerUser, clubId]);
+  }, [isTickerUser, clubId, isRedeemingCode]);
 
   // Ohne Admin-Login oder gültigen Ticker-Code kein Zugriff auf Spiel/Administration
   useEffect(() => {
