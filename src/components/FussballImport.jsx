@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc, runTransaction } from "firebase/firestore";
 import { db } from "../firebase";
 import { findMoveConflicts } from "../pitchConflicts";
+import { HOME_ADDRESS, isAtHomeVenue, fetchTeamMatches } from "../fussballde";
 
 // Belegung pro Mannschaft: Vorlauf vor Anpfiff, Spieldauer inkl. Halbzeit, Nachlauf nach Spielende (Minuten).
 // Standard = 1 Stunde vor bis 2 Stunden nach Anpfiff.
@@ -31,15 +32,6 @@ const extractTeamId = (input) => {
   const fromUrl = input.match(/team-id\/([A-Z0-9]+)/i);
   const raw = (fromUrl ? fromUrl[1] : input.trim()).toUpperCase();
   return /^[A-Z0-9]{20,40}$/.test(raw) ? raw : null;
-};
-
-// Heimspiel = Spielort ist unser Sportpark (Orsinger Str. 42, 78359 Orsingen-Nenzingen).
-// Vergleich ohne Leerzeichen/Punkte und mit "Str."/"Straße" gleichwertig.
-const HOME_ADDRESS = "Orsinger Str. 42, 78359 Orsingen-Nenzingen";
-const normalizeAddress = (text) => text.toLowerCase().replace(/straße|strasse/g, "str").replace(/[\s.,-]/g, "");
-const isAtHomeVenue = (venue) => {
-  const v = normalizeAddress(venue || "");
-  return v.includes(normalizeAddress("Orsinger Str. 42")) && v.includes("78359");
 };
 
 // Platz anhand des Spielorts erraten, z. B. "Sportpark ... Pl.1" -> Platz mit "1" im Namen
@@ -140,10 +132,8 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
 
     await Promise.all(linked.map(async ([team, teamId]) => {
       try {
-        const response = await fetch(`/api/fussballde?teamId=${teamId}`);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || response.status);
-        data.matches
+        const matches = await fetchTeamMatches(teamId);
+        matches
           .filter(m => isAtHomeVenue(m.venue) && m.time && m.matchId && m.date >= today)
           .forEach(m => {
             const kickoff = toMinutes(m.time);

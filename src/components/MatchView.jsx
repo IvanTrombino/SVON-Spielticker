@@ -3,6 +3,7 @@ import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase"; 
 import { displayNameFor } from "../nameConsent";
+import { findLinkedTeamId } from "../fussballde";
 
 // Signatur unter geteilten Spielberichten
 const CLUB_SIGNATURES = {
@@ -18,6 +19,14 @@ export default function MatchView({ clubId, teams }) {
   const [players, setPlayers] = useState([]); 
   // Spieler ohne Einwilligung zur Namensnennung -> Initialen (gepflegt in der Jugenddatenbank)
   const [nameDisplayMap, setNameDisplayMap] = useState({});
+  const [fussballLinks, setFussballLinks] = useState({});
+
+  useEffect(() => {
+    if (!clubId) return;
+    return onSnapshot(doc(db, "ticker", `${clubId}_fussballde`), (snap) => {
+      setFussballLinks(snap.exists() ? snap.data().links || {} : {});
+    }, () => setFussballLinks({}));
+  }, [clubId]);
 
   useEffect(() => {
     if (!clubId) return;
@@ -886,7 +895,13 @@ export default function MatchView({ clubId, teams }) {
       {activeTab === "next" && (
         <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", textAlign: "left" }}>
           <h3 style={{ fontSize: "1.1rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📅 Nächstes Spiel für {selectedTeam}</h3>
-          <p style={{ fontSize: "11px", color: "#666", textAlign: "center", marginBottom: "15px" }}>Trage hier das kommende Spiel ein.</p>
+          {findLinkedTeamId(fussballLinks, selectedTeam) ? (
+            <p style={{ fontSize: "12px", color: "#1e8449", background: "#e8f8f5", border: "1px solid #a3e4d7", borderRadius: "8px", padding: "8px", textAlign: "center", marginBottom: "15px" }}>
+              🔄 {selectedTeam} ist mit fussball.de verknüpft – das nächste Spiel wird automatisch angezeigt. Ein Eintrag hier wird nur genutzt, falls fussball.de nichts liefert.
+            </p>
+          ) : (
+            <p style={{ fontSize: "11px", color: "#666", textAlign: "center", marginBottom: "15px" }}>Trage hier das kommende Spiel ein.</p>
+          )}
           <form onSubmit={saveNextMatchToCloud}>
             <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
               <div style={{ flex: 1 }}>

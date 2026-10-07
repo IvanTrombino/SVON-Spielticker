@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef } from "react";
 import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom } from "../fussballde";
+
+// "2026-10-10" -> "Sa, 10.10.2026"; andere Schreibweisen bleiben unverändert
+const formatMatchDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
+  ? new Date(`${value}T12:00:00`).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })
+  : value;
 
 export default function PublicView({ clubId, teams, onBackToAdmin }) {
   const [selectedTeam, setSelectedTeam] = useState("übersicht"); // Standardmäßig auf Gesamtübersicht starten
@@ -48,7 +54,40 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
     }
   }, [selectedTeam]);
 
-  // 1. Nächste Spiele aus der Cloud laden (${clubId}_next_matches)
+  // 1a. Nächste Spiele automatisch von fussball.de (für verknüpfte Mannschaften)
+  const [fussballLinks, setFussballLinks] = useState({});
+  const [autoNextMatches, setAutoNextMatches] = useState({});
+
+  useEffect(() => {
+    if (!clubId) return;
+    return onSnapshot(doc(db, "ticker", `${clubId}_fussballde`), (snap) => {
+      setFussballLinks(snap.exists() ? snap.data().links || {} : {});
+    }, () => setFussballLinks({}));
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!teams || teams.length === 0 || Object.keys(fussballLinks).length === 0) return;
+    let cancelled = false;
+    const load = async () => {
+      const entries = await Promise.all(teams.map(async (teamName) => {
+        const teamId = findLinkedTeamId(fussballLinks, teamName);
+        if (!teamId) return null;
+        try {
+          const next = nextMatchFrom(await fetchTeamMatches(teamId));
+          return next ? [teamName, next] : null;
+        } catch (error) {
+          console.error(`fussball.de (${teamName}):`, error);
+          return null;
+        }
+      }));
+      if (!cancelled) setAutoNextMatches(Object.fromEntries(entries.filter(Boolean)));
+    };
+    load();
+    const interval = setInterval(load, 30 * 60 * 1000); // alle 30 Minuten aktualisieren
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [teams, fussballLinks]);
+
+  // 1b. Von Hand eingetragene nächste Spiele (${clubId}_next_matches) – für nicht verknüpfte Mannschaften
   useEffect(() => {
     if (!clubId) return;
     const unsubNext = onSnapshot(doc(db, "ticker", `${clubId}_next_matches`), (snap) => {
@@ -365,7 +404,8 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
                 // Blende "E-Jugend Funino" und "F-Jugend Funino" aus der Liste aus
                 .filter(t => t !== "E-Jugend Funino" && t !== "F-Jugend Funino")
                 .map((teamName) => {
-                  const nextMatch = nextMatches[teamName];
+                  // fussball.de hat Vorrang, sonst von Hand eingetragen
+                  const nextMatch = autoNextMatches[teamName] || nextMatches[teamName];
                   return (
                     <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
                       <div style={{ flex: 1, paddingRight: "10px" }}>
@@ -388,9 +428,10 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
                       </div>
 
                       <div style={{ fontSize: "12px", color: "#555", textAlign: "right", whiteSpace: "nowrap" }}>
-                        {nextMatch?.date && <div style={{ marginBottom: "2px", fontWeight: "bold" }}>{nextMatch.date}</div>}
+                        {nextMatch?.date && <div style={{ marginBottom: "2px", fontWeight: "bold" }}>{formatMatchDate(nextMatch.date)}</div>}
                         {nextMatch?.time && <div>⏱️ {nextMatch.time} Uhr</div>}
                         {!nextMatch?.date && !nextMatch?.time && <span style={{ fontStyle: "italic", color: "#999", fontSize: "11px" }}>Kein Termin</span>}
+                        {nextMatch?.competition && <div style={{ fontSize: "10px", color: "#999", marginTop: "2px" }}>{nextMatch.competition}</div>}
                       </div>
                     </div>
                   );

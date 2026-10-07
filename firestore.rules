@@ -64,8 +64,9 @@ service cloud.firestore {
     }
 
     // Was die Zuschauer-Ansicht braucht – öffentlich lesbar
+    // (fussballde = Verknüpfung Mannschaft -> öffentliche fussball.de-Team-ID, für "Nächste Spiele")
     function isPublicTickerDoc(docId) {
-      return docId.matches('[a-z0-9]+_(teams|matches|next_matches|live_match_.*)');
+      return docId.matches('[a-z0-9]+_(teams|matches|next_matches|fussballde|live_match_.*)');
     }
 
     // Spieldaten, die eine Ticker-Person mit Tagescode lesen bzw. schreiben darf
