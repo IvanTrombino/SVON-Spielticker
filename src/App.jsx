@@ -380,7 +380,7 @@ export default function App() {
         {renderNav()}
       </div>
 
-      <div style={{ maxWidth: view === "admin" ? "650px" : "600px", margin: "20px auto", padding: "0 10px" }}>
+      <div style={{ maxWidth: view === "admin" ? "1000px" : "600px", margin: "20px auto", padding: "0 10px" }}>
         {view === "admin"
           ? <TickerAdmin clubId={clubId} teams={[...teams].sort(compareTeamNames)} canManageTeams />
           : <MatchView clubId={clubId} teams={teams} userRole={role} />}

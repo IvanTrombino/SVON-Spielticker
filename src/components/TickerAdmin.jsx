@@ -1,8 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db, auth } from "../firebase";
+import { compareTeamNames } from "../teamOrder";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 import TeamManager from "./TeamManager";
 import PitchConflicts from "./PitchConflicts";
+import PitchManager from "./PitchManager";
+
+// Platzbelegung mit Admin-Rechten; Mannschaften wie im Trainer Portal aus der Jugenddatenbank
+function AdminPitches({ clubId }) {
+  const [teams, setTeams] = useState([]);
+
+  useEffect(() => {
+    if (!clubId) return;
+    return onSnapshot(doc(db, "youth_settings", clubId), (snap) => {
+      const list = snap.exists() ? snap.data().teams || [] : [];
+      setTeams(list.map(t => t.name).sort(compareTeamNames));
+    });
+  }, [clubId]);
+
+  return <PitchManager clubId={clubId} teams={teams} currentUserName={auth.currentUser?.email || "Admin"} isAdmin />;
+}
 
 // Live-Ticker-Verwaltung: Spieler & Spielstatistik; Mannschaften und Platzkonflikte nur für Admins
 export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
@@ -11,7 +30,7 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
   const tabs = [
     { id: "players", label: "👤 Spieler" },
     { id: "stats", label: "🏆 Spielstatistik" },
-    ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }, { id: "conflicts", label: "🏟️ Platzkonflikte" }] : [])
+    ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }, { id: "pitches", label: "🏟️ Plätze" }, { id: "conflicts", label: "⚠️ Platzkonflikte" }] : [])
   ];
 
   return (
@@ -25,6 +44,7 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
       </div>
 
       {tab === "teams" && canManageTeams && <TeamManager clubId={clubId} />}
+      {tab === "pitches" && canManageTeams && <AdminPitches clubId={clubId} />}
       {tab === "conflicts" && canManageTeams && <PitchConflicts clubId={clubId} canDecide />}
 
       {(tab === "players" || tab === "stats") && (teams.length === 0 ? (

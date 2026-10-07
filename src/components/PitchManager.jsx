@@ -4,10 +4,11 @@ import { db } from "../firebase";
 import { findOverlappingBookings, createConflictRequest } from "../pitchConflicts";
 import PitchConflicts from "./PitchConflicts";
 
-export default function PitchManager({ clubId, teams, currentUserName }) {
+// isAdmin: Plätze verwalten, Dashboard bearbeiten, Massen-Stornierung und Konflikte entscheiden
+export default function PitchManager({ clubId, teams, currentUserName, isAdmin = false }) {
   // --- NAVIGATION & VIEW STATES ---
   const [activeTab, setActiveTab] = useState("schedule"); // "schedule", "book", "manage", "dashboard", "conflicts"
-  const [calendarView, setCalendarView] = useState("week"); // "week", "3days", "day"
+  const [calendarView, setCalendarView] = useState("3days"); // "week", "3days", "day"
   const [viewDate, setViewDate] = useState(new Date());
   
   // --- FILTER STATES ---
@@ -165,7 +166,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
   };
 
   const getTeamColor = (teamName) => {
-    if(!teamName) return "#666";
+    if(!teamName) return "#666666";
     // Versuchen, eine vordefinierte Farbe zu finden (z.B. wenn der Name "1. Mannschaft Herren" lautet)
     for (const [key, color] of Object.entries(teamColorMap)) {
       if (teamName.includes(key)) return color;
@@ -420,7 +421,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
         <button onClick={() => setActiveTab("schedule")} style={tabButtonStyle("schedule")}>📅 Kalender</button>
         <button onClick={() => setActiveTab("dashboard")} style={tabButtonStyle("dashboard")}>📋 Dashboard</button>
         <button onClick={() => setActiveTab("book")} style={tabButtonStyle("book")}>➕ Buchen</button>
-        <button onClick={() => setActiveTab("manage")} style={tabButtonStyle("manage")}>⚙ Plätze verwalten</button>
+        {isAdmin && <button onClick={() => setActiveTab("manage")} style={tabButtonStyle("manage")}>⚙ Plätze verwalten</button>}
         <button onClick={() => setActiveTab("conflicts")} style={tabButtonStyle("conflicts")}>⚠️ Konflikte</button>
       </div>
 
@@ -430,7 +431,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
           {pitches.length === 0 ? (
             <p style={{ color: "#666", textAlign: "center" }}>Noch keine Plätze angelegt.</p>
           ) : (
-            <div style={{ minWidth: calendarView === "week" ? "900px" : "100%" }}> 
+            <div style={{ minWidth: calendarView === "week" ? "1000px" : calendarView === "3days" ? "560px" : "100%" }}> 
               
               {/* Header über allem */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "20px", background: "white", padding: "12px 20px", borderRadius: "10px", boxShadow: "0 2px 5px rgba(0,0,0,0.05)" }}>
@@ -461,9 +462,9 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                   </div>
 
                   <button onClick={() => setActiveTab("book")} style={{ background: "#27ae60", color: "white", padding: "8px 15px", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>➕ Buchen</button>
-                  <button onClick={() => setShowMenu(!showMenu)} style={{ background: "transparent", border: "none", fontSize: "20px", cursor: "pointer", padding: "0 5px" }}>⋮</button>
+                  {isAdmin && <button onClick={() => setShowMenu(!showMenu)} style={{ background: "transparent", border: "none", fontSize: "20px", cursor: "pointer", padding: "0 5px" }}>⋮</button>}
 
-                  {showMenu && (
+                  {isAdmin && showMenu && (
                     <div style={{ position: "absolute", top: "100%", right: "0", marginTop: "5px", background: "white", border: "1px solid #ddd", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", zIndex: 100, minWidth: "200px" }}>
                       <button onClick={() => handleBulkDelete("pitch")} disabled={!filterPitch} style={{ display: "block", width: "100%", padding: "12px", background: "white", border: "none", borderBottom: "1px solid #eee", textAlign: "left", cursor: filterPitch ? "pointer" : "not-allowed", opacity: filterPitch ? 1 : 0.5 }}>Platz komplett leeren</button>
                       <button onClick={() => handleBulkDelete("team")} disabled={!filterTeam} style={{ display: "block", width: "100%", padding: "12px", background: "white", border: "none", borderBottom: "1px solid #eee", textAlign: "left", cursor: filterTeam ? "pointer" : "not-allowed", opacity: filterTeam ? 1 : 0.5 }}>Mannschaft stornieren</button>
@@ -500,7 +501,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                     <span style={{ fontSize: "12px", color: "#888" }}>{p.hasFloodlight ? "· Flutlicht" : ""} {p.hasCabin ? "· Kabine" : ""}</span>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${displayDates.length}, 1fr)`, background: "white", gap: "1px", borderTop: "1px solid #eee" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${displayDates.length}, minmax(0, 1fr))`, background: "white", borderTop: "1px solid #eee" }}>
                     
                     {/* Spaltenköpfe */}
                     {displayDates.map((dateObj, i) => {
@@ -509,8 +510,9 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                       const dateStr = `${dateObj.getDate()}.${dateObj.getMonth() + 1}.`;
 
                       return (
-                        <div key={`head-${i}`} style={{ background: isToday ? "#27ae60" : "white", color: isToday ? "white" : "#666", padding: "8px", textAlign: "center", fontSize: "13px", borderRight: "1px solid #eee", borderBottom: "1px solid #eee" }}>
+                        <div key={`head-${i}`} style={{ background: isToday ? "#27ae60" : "#fafafa", color: isToday ? "white" : "#555", padding: "6px 4px", textAlign: "center", fontSize: "12px", fontWeight: "bold", borderRight: "1px solid #eee", borderBottom: isToday ? "2px solid #1e8449" : "1px solid #eee" }}>
                           {dayShort} {dateStr}
+                          {isToday && <div style={{ fontSize: "10px", fontWeight: "normal", letterSpacing: "1px", textTransform: "uppercase", opacity: 0.9 }}>Heute</div>}
                         </div>
                       );
                     })}
@@ -519,6 +521,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                     {displayDates.map((dateObj, i) => {
                       const dayNameFull = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"][dateObj.getDay()];
                       const cellDateString = dateObj.toISOString().split("T")[0];
+                      const isToday = dateObj.toDateString() === new Date().toDateString();
 
                       const cellBookings = bookings.filter(b => {
                         if (b.pitchId !== p.id) return false;
@@ -533,23 +536,25 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                       }).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
                       return (
-                        <div key={`cell-${i}`} style={{ background: "white", padding: "6px", minHeight: "120px", display: "flex", flexDirection: "column", gap: "4px", borderRight: "1px solid #eee" }}>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", width: "100%" }}>
-                            {cellBookings.map(b => {
-                              const shareWidth = b.share === "Halb" ? "calc(50% - 2px)" : b.share === "Viertel" ? "calc(25% - 3px)" : "100%";
-                              const bColor = getTeamColor(b.team);
+                        <div key={`cell-${i}`} style={{ background: isToday ? "#f0faf4" : "white", padding: "5px", minHeight: "90px", display: "flex", flexDirection: "column", gap: "4px", borderRight: "1px solid #eee", boxShadow: isToday ? "inset 2px 0 0 #27ae60, inset -2px 0 0 #27ae60" : "none" }}>
+                          {cellBookings.length === 0 && <div style={{ fontSize: "11px", color: "#bbb", textAlign: "center", marginTop: "8px" }}>frei</div>}
+                          {cellBookings.map(b => {
+                            const bColor = getTeamColor(b.team);
+                            const shareLabel = b.share === "Halb" ? "½ Platz" : b.share === "Viertel" ? "¼ Platz" : "";
 
-                              return (
-                                <div key={b.id} style={{ width: shareWidth, background: bColor, color: "white", padding: "8px", borderRadius: "6px", position: "relative", boxSizing: "border-box" }}>
-                                  <div style={{ fontSize: "12px", fontWeight: "bold", paddingRight: "14px", whiteSpace: "normal", wordWrap: "break-word", lineHeight: "1.2" }}>
-                                    {b.type === "Training" ? "⚽" : "🏆"} {b.team}
-                                  </div>
-                                  <div style={{ fontSize: "11px", opacity: 0.9, marginTop: "4px" }}>{b.startTime}–{b.endTime}</div>
-                                  <button onClick={() => handleDeleteBooking(b, cellDateString)} style={{ position: "absolute", top: "4px", right: "4px", background: "none", border: "none", color: "white", cursor: "pointer", fontSize: "12px", padding: 0 }}>✖</button>
+                            return (
+                              <div key={b.id} title={b.notes || ""} style={{ background: `${bColor}1f`, borderLeft: `4px solid ${bColor}`, color: "#333", padding: "4px 18px 4px 6px", borderRadius: "4px", position: "relative", boxSizing: "border-box", lineHeight: 1.3 }}>
+                                <div style={{ fontSize: "11px", fontWeight: "bold", color: "#555", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                                  <span>{b.startTime}–{b.endTime}</span>
+                                  {shareLabel && <span style={{ fontWeight: "normal", color: "#777" }}>{shareLabel}</span>}
                                 </div>
-                              );
-                            })}
-                          </div>
+                                <div style={{ fontSize: "12px", fontWeight: "bold", wordBreak: "break-word" }}>
+                                  {b.type === "Training" ? "⚽" : "🏆"} {b.team}
+                                </div>
+                                <button onClick={() => handleDeleteBooking(b, cellDateString)} title="Buchung löschen" style={{ position: "absolute", top: "3px", right: "4px", background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "11px", padding: 0 }}>✖</button>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })}
@@ -578,18 +583,20 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
                             <div style={{ width: "14px", height: "14px", background: tColor, borderRadius: "4px" }}></div>
                             <h4 style={{ margin: 0, fontSize: "18px", color: "#333" }}>{t}</h4>
                          </div>
-                         <button 
-                           onClick={() => { setEditingCoachForTeam(t); setTempCoachName(teamCoaches[t] || ""); }}
-                           style={{ background: "transparent", border: "none", color: "#666", cursor: "pointer", fontSize: "14px" }}
-                         >
-                           ✏️
-                         </button>
+                         {isAdmin && (
+                           <button 
+                             onClick={() => { setEditingCoachForTeam(t); setTempCoachName(teamCoaches[t] || ""); }}
+                             style={{ background: "transparent", border: "none", color: "#666", cursor: "pointer", fontSize: "14px" }}
+                           >
+                             ✏️
+                           </button>
+                         )}
                        </div>
                        
                        <div style={{ fontSize: "13px", color: "#555", marginBottom: "8px", display: "flex", alignItems: "center", gap: "5px" }}>
                           <span style={{ fontSize: "16px" }}>👤</span> Trainer: 
                           
-                          {editingCoachForTeam === t ? (
+                          {isAdmin && editingCoachForTeam === t ? (
                             <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
                               <input 
                                 type="text" 
@@ -632,7 +639,7 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
             <h3 style={{ fontSize: "1.4rem", margin: 0 }}>Buchen</h3>
             <div>
               <button onClick={() => setActiveTab("schedule")} style={{ background: "transparent", color: "#27ae60", border: "none", fontWeight: "bold", cursor: "pointer", marginRight: "10px" }}>Abbrechen</button>
-              <button onClick={() => setActiveTab("manage")} style={{ background: "#f8f9fa", color: "#333", border: "1px solid #ccc", padding: "6px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>⚙️ Plätze anlegen</button>
+              {isAdmin && <button onClick={() => setActiveTab("manage")} style={{ background: "#f8f9fa", color: "#333", border: "1px solid #ccc", padding: "6px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>⚙️ Plätze anlegen</button>}
             </div>
           </div>
 
@@ -758,9 +765,9 @@ export default function PitchManager({ clubId, teams, currentUserName }) {
       )}
 
       {/* TAB 4: PLÄTZE VERWALTEN */}
-      {activeTab === "conflicts" && <PitchConflicts clubId={clubId} />}
+      {activeTab === "conflicts" && <PitchConflicts clubId={clubId} canDecide={isAdmin} />}
 
-      {activeTab === "manage" && (
+      {activeTab === "manage" && isAdmin && (
         <div style={{ background: "white", padding: "20px", borderRadius: "10px", border: "1px solid #ddd", maxWidth: "600px", margin: "0 auto", textAlign: "left" }}>
           
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
