@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import AdminPanel from "./components/AdminPanel";
 import MatchView from "./components/MatchView";
 import PublicView from "./components/PublicView";
 import YouthAdminPage from "./components/YouthAdminPage"; 
 import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trainer-Portal
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { isAdminUser } from "./admins";
@@ -21,7 +20,9 @@ export default function App() {
   });
 
   const [view, setView] = useState(() => {
-    return localStorage.getItem("svon_current_view") || "home";
+    const saved = localStorage.getItem("svon_current_view");
+    // Die frühere Ansicht "admin" gibt es nicht mehr (jetzt im Trainer Portal)
+    return saved === "admin" ? "match" : (saved || "home");
   });
   
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -58,10 +59,10 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isTickerUser, clubId, isRedeemingCode]);
 
-  // Ohne Admin-Login oder gültigen Ticker-Code kein Zugriff auf Spiel/Administration
+  // Ohne Admin-Login oder gültigen Ticker-Code kein Zugriff auf den Ticker
   useEffect(() => {
     if (authLoading) return;
-    if ((view === "match" || view === "admin") && !isAdmin && !isTickerUser) {
+    if (view === "match" && !isAdmin && !isTickerUser) {
       setView("home");
       localStorage.removeItem("svon_current_view");
     }
@@ -117,16 +118,6 @@ export default function App() {
     });
     return () => unsub();
   }, [clubId]);
-
-  const saveTeamsToCloud = async (newTeams) => {
-    setTeams(newTeams);
-    try {
-      const docName = `${clubId}_teams`;
-      await setDoc(doc(db, "ticker", docName), { teamsList: newTeams });
-    } catch (e) {
-      console.error("Fehler beim Speichern der Teams:", e);
-    }
-  };
 
   const handleSelectClub = (e) => {
     e.preventDefault();
@@ -261,7 +252,7 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
         <div style={{ background: "#f39c12", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white" }}>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>📋 Jugend-Trainer Portal ({clubId.toUpperCase()})</span>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>📋 Trainer Portal ({clubId.toUpperCase()})</span>
           <button 
             onClick={handleBackToHome}
             style={{ background: "white", color: "#f39c12", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
@@ -269,7 +260,7 @@ export default function App() {
             🏠 Zur Startseite
           </button>
         </div>
-        <CoachPortal clubId={clubId} />
+        <CoachPortal clubId={clubId} tickerTeams={teams} />
       </div>
     );
   }
@@ -341,7 +332,7 @@ export default function App() {
             onClick={() => { setView("coachportal"); localStorage.setItem("svon_current_view", "coachportal"); window.location.hash = "#trainer"; }}
             style={{ padding: "15px", background: "#f39c12", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
-            📋 Jugend-Trainer Portal
+            📋 Trainer Portal
           </button>
 
           <button 
@@ -387,40 +378,6 @@ export default function App() {
         >
           🏠 Startseite ({isAdmin ? "Admin" : "Ticker"})
         </button>
-
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            onClick={() => setView("match")}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "6px",
-              border: 0,
-              background: view === "match" ? "white" : "rgba(255,255,255,0.2)",
-              color: view === "match" ? (isAdmin ? "#c0392b" : "#2146d0") : "white",
-              fontWeight: "bold",
-              cursor: "pointer",
-              fontSize: "13px"
-            }}
-          >
-            ⚽ Spiel
-          </button>
-
-          <button
-            onClick={() => setView("admin")}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "6px",
-              border: 0,
-              background: view === "admin" ? "white" : "rgba(255,255,255,0.2)",
-              color: view === "admin" ? (isAdmin ? "#c0392b" : "#2146d0") : "white",
-              fontWeight: "bold",
-              cursor: "pointer",
-              fontSize: "13px"
-            }}
-          >
-            ⚙ Administration
-          </button>
-        </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
           {isAdmin && (
@@ -478,15 +435,7 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
-        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={role} />}
-        {view === "admin" && (
-          <AdminPanel 
-            clubId={clubId}
-            teams={teams} 
-            setTeams={isAdmin ? saveTeamsToCloud : null} 
-            userRole={role} 
-          />
-        )}
+        <MatchView clubId={clubId} teams={teams} userRole={role} />
       </div>
     </div>
   );

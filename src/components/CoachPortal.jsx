@@ -3,9 +3,12 @@ import { collection, query, where, getDoc, addDoc, updateDoc, deleteDoc, doc, on
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from "../firebase";
 import PitchManager from "./PitchManager"; // <-- NEU: Import für die Platzbelegung
+import PlayerManager from "./PlayerManager";
+import Statistics from "./Statistics";
+import TeamManager from "./TeamManager";
 import { getOrCreateDailyCode } from "../tickerCode";
 
-export default function CoachPortal({ clubId }) {
+export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- LOGIN STATES ---
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +18,7 @@ export default function CoachPortal({ clubId }) {
 
   // --- APP STATES ---
   const [activeTab, setActiveTab] = useState("team");
+  const [tickerTab, setTickerTab] = useState("players");
   const [teamPlayers, setTeamPlayers] = useState([]);
   
   // --- TEAMAUSWAHL STATES ---
@@ -128,6 +132,11 @@ export default function CoachPortal({ clubId }) {
   const currentTeamOptions = isJugendleitung 
     ? (availableTeams.length > 0 ? availableTeams : fallbackTeams)
     : (loggedInCoach?.assignedTeams?.filter(t => t !== "Jugendleitung").map(name => ({ id: name, name })) || []);
+
+  // Live-Ticker: Jugendleitung verwaltet alle Ticker-Teams, Trainer nur ihre eigenen
+  const coachTickerTeams = isJugendleitung
+    ? tickerTeams
+    : tickerTeams.filter(t => loggedInCoach?.assignedTeams?.includes(t));
 
   const activeViewTeam = selectedTeam || (currentTeamOptions[0]?.name ?? "");
 
@@ -394,6 +403,7 @@ export default function CoachPortal({ clubId }) {
         <TabButton id="stats" icon="📊" label="Statistik" />
         {/* NEU: PLATZBELEGUNG BUTTON */}
         <TabButton id="pitches" icon="🏟️" label="Plätze" />
+        <TabButton id="ticker" icon="⚽" label="Live-Ticker" />
       </div>
 
       {/* INHALTE JE NACH TAB */}
@@ -561,6 +571,33 @@ export default function CoachPortal({ clubId }) {
       {/* NEU: PLATZBELEGUNG INHALT RENDERN */}
       {activeTab === "pitches" && (
         <PitchManager clubId={clubId} teams={currentTeamOptions.map(t => t.name)} />
+      )}
+
+      {/* LIVE-TICKER VERWALTUNG (früher "Administration" im Ticker) */}
+      {activeTab === "ticker" && (
+        <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "15px", flexWrap: "wrap" }}>
+            {[
+              { id: "players", label: "👤 Spieler" },
+              { id: "stats", label: "🏆 Spielstatistik" },
+              ...(isJugendleitung ? [{ id: "teams", label: "👥 Teams" }] : [])
+            ].map(t => (
+              <button key={t.id} onClick={() => setTickerTab(t.id)} style={{ flex: 1, padding: "10px", border: "none", borderRadius: "8px", background: tickerTab === t.id ? "#2146d0" : "#e0e7ff", color: tickerTab === t.id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "13px" }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {coachTickerTeams.length === 0 && tickerTab !== "teams" ? (
+            <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Für deine Mannschaften gibt es noch kein Team im Live-Ticker.</p>
+          ) : (
+            <>
+              {tickerTab === "players" && <PlayerManager clubId={clubId} teams={coachTickerTeams} />}
+              {tickerTab === "stats" && <Statistics clubId={clubId} teams={coachTickerTeams} />}
+              {tickerTab === "teams" && isJugendleitung && <TeamManager clubId={clubId} />}
+            </>
+          )}
+        </div>
       )}
 
     </div>
