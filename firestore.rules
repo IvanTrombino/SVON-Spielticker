@@ -115,6 +115,14 @@ service cloud.firestore {
       allow update: if isAdmin() || (coachHasTeam(resource.data.team) && coachHasTeam(request.resource.data.team));
     }
 
+    // 5b. Sommercamp (Anmeldungen inkl. Allergien, Preise): nur Admins
+    match /summercamp_participants/{participant} {
+      allow read, write: if isAdmin();
+    }
+    match /summercamp_settings/{club} {
+      allow read, write: if isAdmin();
+    }
+
     // 6. Ticker-Tagescodes: Trainer erzeugen/sehen den Code, Ticker-Personen nur mit gültigem Code
     match /ticker_codes/{club} {
       allow read: if isStaff() || hasValidTickerSession(club);

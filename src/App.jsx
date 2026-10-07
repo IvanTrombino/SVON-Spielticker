@@ -4,6 +4,7 @@ import PublicView from "./components/PublicView";
 import YouthAdminPage from "./components/YouthAdminPage"; 
 import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trainer-Portal
 import TickerAdmin from "./components/TickerAdmin";
+import SummerCamp from "./components/SummerCamp";
 import LegalPage, { LegalFooter } from "./components/LegalPage";
 import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -64,7 +65,7 @@ export default function App() {
   // Ticker nur mit Admin-Login oder gültigem Ticker-Code, Ticker-Verwaltung nur für Admins
   useEffect(() => {
     if (authLoading) return;
-    if ((view === "match" && !isAdmin && !isTickerUser) || (view === "admin" && !isAdmin)) {
+    if ((view === "match" && !isAdmin && !isTickerUser) || ((view === "admin" || view === "summercamp") && !isAdmin)) {
       setView("home");
       localStorage.removeItem("svon_current_view");
     }
@@ -193,6 +194,7 @@ export default function App() {
           <button onClick={() => goTo("youth")} style={navButtonStyle(view === "youth")}>👦 Jugend</button>
           <button onClick={() => goTo("admin")} style={navButtonStyle(view === "admin")}>⚙ Admin</button>
           <button onClick={() => goTo("match")} style={navButtonStyle(view === "match")}>⚽ Ticker</button>
+          <button onClick={() => goTo("summercamp")} style={navButtonStyle(view === "summercamp")}>☀️ Sommercamp</button>
         </>
       )}
       <button onClick={() => goTo("public")} style={{ ...navButtonStyle(false), background: "#27ae60" }}>👀 Zuschauer</button>
@@ -392,10 +394,10 @@ export default function App() {
         {renderNav()}
       </div>
 
-      <div style={{ maxWidth: view === "admin" ? "1000px" : "600px", margin: "20px auto", padding: "0 10px" }}>
-        {view === "admin"
-          ? <TickerAdmin clubId={clubId} teams={[...teams].sort(compareTeamNames)} canManageTeams />
-          : <MatchView clubId={clubId} teams={teams} userRole={role} />}
+      <div style={{ maxWidth: view === "summercamp" ? "1400px" : view === "admin" ? "1000px" : "600px", margin: "20px auto", padding: "0 10px" }}>
+        {view === "summercamp" && isAdmin && <SummerCamp clubId={clubId} />}
+        {view === "admin" && <TickerAdmin clubId={clubId} teams={[...teams].sort(compareTeamNames)} canManageTeams />}
+        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={role} />}
       </div>
     </div>
   );
