@@ -7,6 +7,7 @@ import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 import TeamManager from "./TeamManager";
 import { getOrCreateDailyCode } from "../tickerCode";
+import { compareTeamNames } from "../teamOrder";
 
 export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- LOGIN STATES ---
@@ -131,12 +132,13 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
 
   const currentTeamOptions = isJugendleitung 
     ? (availableTeams.length > 0 ? availableTeams : fallbackTeams)
-    : (loggedInCoach?.assignedTeams?.filter(t => t !== "Jugendleitung").map(name => ({ id: name, name })) || []);
+    : (loggedInCoach?.assignedTeams?.filter(t => t !== "Jugendleitung").sort(compareTeamNames).map(name => ({ id: name, name })) || []);
 
   // Live-Ticker: Jugendleitung verwaltet alle Ticker-Teams, Trainer nur ihre eigenen
-  const coachTickerTeams = isJugendleitung
+  const coachTickerTeams = (isJugendleitung
     ? tickerTeams
-    : tickerTeams.filter(t => loggedInCoach?.assignedTeams?.includes(t));
+    : tickerTeams.filter(t => loggedInCoach?.assignedTeams?.includes(t))
+  ).slice().sort(compareTeamNames);
 
   const activeViewTeam = selectedTeam || (currentTeamOptions[0]?.name ?? "");
 
@@ -148,13 +150,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       let loadedTeams = [];
       if (docSnap.exists() && docSnap.data().teams && docSnap.data().teams.length > 0) {
         loadedTeams = docSnap.data().teams;
-        loadedTeams.sort((a, b) => {
-          const nameA = a.name || "";
-          const nameB = b.name || "";
-          if (nameA.toLowerCase() === "aktive") return -1;
-          if (nameB.toLowerCase() === "aktive") return 1;
-          return nameA.localeCompare(nameB);
-        });
+        loadedTeams = [...loadedTeams].sort((a, b) => compareTeamNames(a.name, b.name));
       } else {
         loadedTeams = fallbackTeams;
       }

@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, where, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { compareTeamNames } from "../teamOrder";
 
 // --- HILFS-KOMPONENTEN ---
 
@@ -232,34 +233,7 @@ export default function YouthManager({ clubId }) {
 
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
 
-  // STRIKTE WUNSCH-REIHENFOLGE (Index bestimmt die Position)
-  const customSortOrder = [
-    "1. Mannschaft",
-    "2. Mannschaft",
-    "3. Mannschaft",
-    "Damen",
-    "A-Jugend",
-    "B-Jugend",
-    "C-Jugend",
-    "D-Jugend",
-    "E-Jugend",
-    "F-Jugend",
-    "G-Jugend"
-  ];
-
-  // Erzwingungs-Sortierfunktion
-  const sortTeamsLogic = (a, b) => {
-    const nameA = (a.name || "").trim();
-    const nameB = (b.name || "").trim();
-    
-    let indexA = customSortOrder.findIndex(item => item.toLowerCase() === nameA.toLowerCase());
-    let indexB = customSortOrder.findIndex(item => item.toLowerCase() === nameB.toLowerCase());
-
-    if (indexA === -1) indexA = 999;
-    if (indexB === -1) indexB = 999;
-
-    return indexA - indexB;
-  };
+  const sortTeamsLogic = (a, b) => compareTeamNames(a.name, b.name);
 
   // 1. Teams laden und E-R-Z-W-I-N-G-E-N in Firebase zu sortieren
   useEffect(() => {
@@ -367,13 +341,7 @@ export default function YouthManager({ clubId }) {
     return acc;
   }, {});
   
-  const dashboardSortedTeams = Object.keys(playersPerTeam).sort((a, b) => {
-    let indexA = customSortOrder.findIndex(item => item.toLowerCase() === a.toLowerCase());
-    let indexB = customSortOrder.findIndex(item => item.toLowerCase() === b.toLowerCase());
-    if (indexA === -1) indexA = 999;
-    if (indexB === -1) indexB = 999;
-    return indexA - indexB;
-  });
+  const dashboardSortedTeams = Object.keys(playersPerTeam).sort(compareTeamNames);
 
   const exportCSV = (type) => {
     let dataList = type === "active" ? activePlayers : inactivePlayers;
@@ -972,7 +940,7 @@ export default function YouthManager({ clubId }) {
                     const details = p.deregistrationDetails || {};
 
                     return (
-                      <React.Fragment key={p.id}>
+                      <Fragment key={p.id}>
                         <tr style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
                           <td style={{ padding: "10px", fontWeight: "bold", color: "#7f8c8d", fontSize: "13px" }}>{p.lastName}, {p.firstName}</td>
                           <td style={{ padding: "10px", textAlign: "center", color: "#7f8c8d", fontSize: "13px" }}>{details.date ? new Date(details.date).toLocaleDateString("de-DE") : "Unbekannt"}</td>
@@ -1003,7 +971,7 @@ export default function YouthManager({ clubId }) {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     );
                   })}
                 </tbody>
