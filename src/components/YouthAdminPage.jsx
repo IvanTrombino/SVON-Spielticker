@@ -81,9 +81,9 @@ export default function YouthAdminPage({ clubId }) {
     return (
       <div style={{ padding: "20px", maxWidth: "400px", margin: "50px auto", fontFamily: "sans-serif", color: "#333" }}>
         <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "10px", border: "1px solid #ccc", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
-          <h2 style={{ textAlign: "center", color: "#2146d0", marginBottom: "10px" }}>🔒 Jugend-Admin</h2>
+          <h2 style={{ textAlign: "center", color: "#2146d0", marginBottom: "10px" }}>🔒 Admin Portal</h2>
           <p style={{ fontSize: "13px", color: "#e74c3c", textAlign: "center", fontWeight: "bold", marginBottom: "20px" }}>
-            Nur für Jugendleitung.
+            Nur für Administratoren.
           </p>
           
           <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>

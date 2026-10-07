@@ -227,7 +227,7 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
         <div style={{ background: "#2980b9", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white", flexWrap: "wrap", gap: "8px" }}>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>👦 Jugenddatenbank ({clubId.toUpperCase()})</span>
+          <span style={{ fontWeight: "bold", fontSize: "14px" }}>🔒 Admin Portal ({clubId.toUpperCase()})</span>
           <div style={{ display: "flex", gap: "8px" }}>
             <button 
               onClick={() => { setView("match"); window.location.hash = `#${clubId}`; }}
@@ -348,7 +348,7 @@ export default function App() {
             }}
             style={{ padding: "15px", background: "#c0392b", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
-            🔒 Jugend-Admin (Login)
+            🔒 Admin Portal
           </button>
 
         </div>

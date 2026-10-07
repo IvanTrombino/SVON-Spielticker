@@ -8,6 +8,7 @@ import Statistics from "./Statistics";
 import TeamManager from "./TeamManager";
 import { getOrCreateDailyCode } from "../tickerCode";
 import { compareTeamNames } from "../teamOrder";
+import { isAdminUser } from "../admins";
 
 export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- LOGIN STATES ---
@@ -133,6 +134,9 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   const currentTeamOptions = isJugendleitung 
     ? (availableTeams.length > 0 ? availableTeams : fallbackTeams)
     : (loggedInCoach?.assignedTeams?.filter(t => t !== "Jugendleitung").sort(compareTeamNames).map(name => ({ id: name, name })) || []);
+
+  // Ticker-Mannschaften anlegen/löschen darf nur ein Admin
+  const isAdmin = isAdminUser(auth.currentUser);
 
   // Live-Ticker: Jugendleitung verwaltet alle Ticker-Teams, Trainer nur ihre eigenen
   const coachTickerTeams = (isJugendleitung
@@ -576,7 +580,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
             {[
               { id: "players", label: "👤 Spieler" },
               { id: "stats", label: "🏆 Spielstatistik" },
-              ...(isJugendleitung ? [{ id: "teams", label: "👥 Teams" }] : [])
+              ...(isAdmin ? [{ id: "teams", label: "👥 Teams" }] : [])
             ].map(t => (
               <button key={t.id} onClick={() => setTickerTab(t.id)} style={{ flex: 1, padding: "10px", border: "none", borderRadius: "8px", background: tickerTab === t.id ? "#2146d0" : "#e0e7ff", color: tickerTab === t.id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "13px" }}>
                 {t.label}
@@ -590,7 +594,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
             <>
               {tickerTab === "players" && <PlayerManager clubId={clubId} teams={coachTickerTeams} />}
               {tickerTab === "stats" && <Statistics clubId={clubId} teams={coachTickerTeams} />}
-              {tickerTab === "teams" && isJugendleitung && <TeamManager clubId={clubId} />}
+              {tickerTab === "teams" && isAdmin && <TeamManager clubId={clubId} />}
             </>
           )}
         </div>

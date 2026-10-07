@@ -94,9 +94,12 @@ service cloud.firestore {
 
     // 8. Spielticker: Öffentlich lesbar, schreiben nur Trainer / Admins / Ticker-Personen mit gültigem Code.
     //    Dokument-IDs beginnen immer mit der Vereins-ID, z. B. "svon_live_match_F-Jugend".
+    //    Die Mannschaftsliste ("svon_teams") darf nur ein Admin ändern.
     match /ticker/{docId} {
       allow read: if true;
-      allow write: if isStaff() || hasValidTickerSession(docId.split('_')[0]);
+      allow write: if isAdmin();
+      allow write: if !docId.matches('[a-z0-9]+_teams')
+        && (isStaff() || hasValidTickerSession(docId.split('_')[0]));
     }
   }
 }
