@@ -32,6 +32,15 @@ const extractTeamId = (input) => {
   return /^[A-Z0-9]{20,40}$/.test(raw) ? raw : null;
 };
 
+// Heimspiel = Spielort ist unser Sportpark (Orsinger Str. 42, 78359 Orsingen-Nenzingen).
+// Vergleich ohne Leerzeichen/Punkte und mit "Str."/"Straße" gleichwertig.
+const HOME_ADDRESS = "Orsinger Str. 42, 78359 Orsingen-Nenzingen";
+const normalizeAddress = (text) => text.toLowerCase().replace(/straße|strasse/g, "str").replace(/[\s.,-]/g, "");
+const isAtHomeVenue = (venue) => {
+  const v = normalizeAddress(venue || "");
+  return v.includes(normalizeAddress("Orsinger Str. 42")) && v.includes("78359");
+};
+
 // Platz anhand des Spielorts erraten, z. B. "Sportpark ... Pl.1" -> Platz mit "1" im Namen
 const guessPitch = (venue, pitches, fallback) => {
   const number = (venue.match(/Pl(?:atz)?\.?\s*(\d)/i) || [])[1];
@@ -127,7 +136,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || response.status);
         data.matches
-          .filter(m => m.isHome && m.time && m.matchId && m.date >= today)
+          .filter(m => isAtHomeVenue(m.venue) && m.time && m.matchId && m.date >= today)
           .forEach(m => {
             const kickoff = toMinutes(m.time);
             const timing = timingOf(team);
@@ -135,6 +144,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
               ...m,
               team,
               kickoff: m.time,
+              opponent: m.isHome ? m.away : m.home,
               startTime: toTime(kickoff - timing.before),
               endTime: toTime(kickoff + timing.duration + timing.after),
               type: bookingTypeFor(m.competition)
@@ -217,7 +227,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
     <div style={{ background: "white", padding: "15px", borderRadius: "10px", border: "1px solid #ddd", textAlign: "left" }}>
       <h3 style={{ marginTop: 0, fontSize: "16px", color: "#2146d0" }}>📥 Heimspiele von fussball.de</h3>
       <p style={{ fontSize: "12px", color: "#666", marginTop: 0 }}>
-        Heimspiele werden als Belegung eingetragen – Vorlauf, Spieldauer und Nachlauf legst du pro Mannschaft fest. Bereits importierte Spiele werden erkannt, geänderte Termine aktualisiert.
+        Heimspiele werden als Belegung eingetragen – Vorlauf, Spieldauer und Nachlauf legst du pro Mannschaft fest. Als Heimspiel zählen nur Spiele mit Spielort {HOME_ADDRESS}. Bereits importierte Spiele werden erkannt, geänderte Termine aktualisiert.
       </p>
 
       {/* 1. Verknüpfungen */}
@@ -300,7 +310,7 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
                       <td style={cellStyle}>{new Date(c.date).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "2-digit" })}</td>
                       <td style={cellStyle}>{c.startTime}–{c.endTime}<div style={{ color: "#888", fontSize: "11px" }}>Anpfiff {c.kickoff}</div></td>
                       <td style={cellStyle}>{c.team}<div style={{ color: "#888", fontSize: "11px" }}>{c.competition}</div></td>
-                      <td style={cellStyle}>{c.away}</td>
+                      <td style={cellStyle}>{c.opponent}</td>
                       <td style={cellStyle}>
                         <select value={pitchFor[c.matchId] || ""} onChange={(e) => setPitchFor({ ...pitchFor, [c.matchId]: e.target.value })} style={{ padding: "4px", fontSize: "12px", borderRadius: "4px", border: "1px solid #ccc" }}>
                           {pitches.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
