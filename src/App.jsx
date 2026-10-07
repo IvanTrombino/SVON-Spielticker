@@ -3,11 +3,13 @@ import MatchView from "./components/MatchView";
 import PublicView from "./components/PublicView";
 import YouthAdminPage from "./components/YouthAdminPage"; 
 import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trainer-Portal
+import TickerAdmin from "./components/TickerAdmin";
 import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { isAdminUser } from "./admins";
 import { redeemTickerCode, isTickerSessionValid } from "./tickerCode";
+import { compareTeamNames } from "./teamOrder";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
@@ -20,9 +22,7 @@ export default function App() {
   });
 
   const [view, setView] = useState(() => {
-    const saved = localStorage.getItem("svon_current_view");
-    // Die frühere Ansicht "admin" gibt es nicht mehr (jetzt im Trainer Portal)
-    return saved === "admin" ? "match" : (saved || "home");
+    return localStorage.getItem("svon_current_view") || "home";
   });
   
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -59,14 +59,20 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isTickerUser, clubId, isRedeemingCode]);
 
-  // Ohne Admin-Login oder gültigen Ticker-Code kein Zugriff auf den Ticker
+  // Ticker nur mit Admin-Login oder gültigem Ticker-Code, Ticker-Verwaltung nur für Admins
   useEffect(() => {
     if (authLoading) return;
-    if (view === "match" && !isAdmin && !isTickerUser) {
+    if ((view === "match" && !isAdmin && !isTickerUser) || (view === "admin" && !isAdmin)) {
       setView("home");
       localStorage.removeItem("svon_current_view");
     }
   }, [authLoading, view, isAdmin, isTickerUser]);
+
+  const goTo = (target) => {
+    setView(target);
+    localStorage.setItem("svon_current_view", target);
+    window.location.hash = target === "youth" ? "#jugend" : target === "public" ? "#zuschauer" : `#${clubId}`;
+  };
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -166,6 +172,35 @@ export default function App() {
     window.location.hash = `#${clubId}`;
   };
 
+  // Gemeinsame Navigation für Admin Portal (blauer Balken) und Ticker (roter Balken)
+  const navButtonStyle = (active) => ({
+    padding: "8px 12px",
+    borderRadius: "6px",
+    border: 0,
+    background: active ? "white" : "rgba(255,255,255,0.2)",
+    color: active ? "#333" : "white",
+    fontWeight: "bold",
+    cursor: "pointer",
+    fontSize: "13px"
+  });
+
+  const renderNav = () => (
+    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+      {isAdmin && (
+        <>
+          <button onClick={() => goTo("youth")} style={navButtonStyle(view === "youth")}>👦 Jugend</button>
+          <button onClick={() => goTo("admin")} style={navButtonStyle(view === "admin")}>⚙ Admin</button>
+          <button onClick={() => goTo("match")} style={navButtonStyle(view === "match")}>⚽ Ticker</button>
+        </>
+      )}
+      <button onClick={() => goTo("public")} style={{ ...navButtonStyle(false), background: "#27ae60" }}>👀 Zuschauer</button>
+      <button onClick={handleBackToHome} style={navButtonStyle(false)}>🏠 Startseite</button>
+      {(isAdmin || isTickerUser) && (
+        <button onClick={handleLogout} style={{ ...navButtonStyle(false), background: "#333" }}>🚪 Logout</button>
+      )}
+    </div>
+  );
+
   if (authLoading) {
     return <div style={{ textAlign: "center", marginTop: "50px", fontFamily: "sans-serif" }}>Lade...</div>;
   }
@@ -228,20 +263,7 @@ export default function App() {
       <div style={{ minHeight: "100vh", background: "#f0f2f5" }}>
         <div style={{ background: "#2980b9", padding: "10px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "white", flexWrap: "wrap", gap: "8px" }}>
           <span style={{ fontWeight: "bold", fontSize: "14px" }}>🔒 Admin Portal ({clubId.toUpperCase()})</span>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button 
-              onClick={() => { setView("match"); window.location.hash = `#${clubId}`; }}
-              style={{ background: "white", color: "#2980b9", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
-            >
-              ⬅️ Zurück zum Admin
-            </button>
-            <button 
-              onClick={handleBackToHome}
-              style={{ background: "#c0392b", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
-            >
-              🏠 Startseite
-            </button>
-          </div>
+          {renderNav()}
         </div>
         <YouthAdminPage clubId={clubId} />
       </div>
@@ -336,16 +358,7 @@ export default function App() {
           </button>
 
           <button 
-            onClick={() => {
-              if (isAdmin) {
-                setView("match");
-                localStorage.setItem("svon_current_view", "match");
-              } else {
-                setView("youth");
-                localStorage.setItem("svon_current_view", "youth");
-                window.location.hash = "#jugend";
-              }
-            }}
+            onClick={() => goTo("youth")}
             style={{ padding: "15px", background: "#c0392b", color: "white", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
           >
             🔒 Admin Portal
@@ -360,82 +373,17 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", paddingBottom: "40px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "10px 15px",
-          background: isAdmin ? "#c0392b" : "#2146d0",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-          flexWrap: "wrap",
-          gap: "8px"
-        }}
-      >
-        <button 
-          onClick={handleBackToHome}
-          style={{ background: "white", color: isAdmin ? "#c0392b" : "#2146d0", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}
-        >
-          🏠 Startseite ({isAdmin ? "Admin" : "Ticker"})
-        </button>
-
-        <div style={{ display: "flex", gap: "8px" }}>
-          {isAdmin && (
-            <button
-              onClick={() => { setView("youth"); localStorage.setItem("svon_current_view", "youth"); window.location.hash = "#jugend"; }}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "6px",
-                border: 0,
-                background: "#2980b9",
-                color: "white",
-                fontWeight: "bold",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              👦 Jugend
-            </button>
-          )}
-
-          <button
-            onClick={() => { setView("public"); localStorage.setItem("svon_current_view", "public"); window.location.hash = "#zuschauer"; }}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "6px",
-              border: 0,
-              background: "#27ae60",
-              color: "white",
-              fontWeight: "bold",
-              cursor: "pointer",
-              fontSize: "13px"
-            }}
-          >
-            👀 Zuschauer
-          </button>
-
-          {(isAdmin || isTickerUser) && (
-            <button
-              onClick={handleLogout}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "6px",
-                border: 0,
-                background: "#333",
-                color: "white",
-                fontWeight: "bold",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              🚪 Logout
-            </button>
-          )}
-        </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 15px", background: isAdmin ? "#c0392b" : "#2146d0", color: "white", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", flexWrap: "wrap", gap: "8px" }}>
+        <span style={{ fontWeight: "bold", fontSize: "14px" }}>
+          {isAdmin ? "🔒 Admin Portal" : "⚽ Live-Ticker"} ({clubId.toUpperCase()})
+        </span>
+        {renderNav()}
       </div>
 
-      <div style={{ maxWidth: "600px", margin: "20px auto", padding: "0 10px" }}>
-        <MatchView clubId={clubId} teams={teams} userRole={role} />
+      <div style={{ maxWidth: view === "admin" ? "650px" : "600px", margin: "20px auto", padding: "0 10px" }}>
+        {view === "admin"
+          ? <TickerAdmin clubId={clubId} teams={[...teams].sort(compareTeamNames)} canManageTeams />
+          : <MatchView clubId={clubId} teams={teams} userRole={role} />}
       </div>
     </div>
   );
