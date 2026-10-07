@@ -30,6 +30,16 @@ service cloud.firestore {
       return isAdmin() || isCoach();
     }
 
+    function coachProfile() {
+      return get(/databases/$(database)/documents/youth_coaches/$(request.auth.uid)).data;
+    }
+
+    // Trainer, der für diese Mannschaft zuständig ist ("Jugendleitung" = alle Mannschaften)
+    function coachHasTeam(team) {
+      return isCoach()
+        && ('Jugendleitung' in coachProfile().assignedTeams || team in coachProfile().assignedTeams);
+    }
+
     // Stimmt der Code mit dem aktuellen, nicht abgelaufenen Tagescode des Vereins überein?
     function codeMatches(club, code) {
       let codeDoc = /databases/$(database)/documents/ticker_codes/$(club);
@@ -47,6 +57,30 @@ service cloud.firestore {
         && codeMatches(club, get(session).data.code);
     }
 
+    // --- TICKER-DOKUMENTE (IDs beginnen mit der Vereins-ID, z. B. "svon_live_match_F-Jugend") ---
+
+    function tickerClub(docId) {
+      return docId.split('_')[0];
+    }
+
+    // Was die Zuschauer-Ansicht braucht – öffentlich lesbar
+    function isPublicTickerDoc(docId) {
+      return docId.matches('[a-z0-9]+_(teams|matches|next_matches|live_match_.*)');
+    }
+
+    // Spieldaten, die eine Ticker-Person mit Tagescode lesen bzw. schreiben darf
+    function isMatchReadDoc(docId) {
+      return docId.matches('[a-z0-9]+_(matches|next_matches|lineups|scorers|players|live_match_.*)');
+    }
+    function isMatchWriteDoc(docId) {
+      return docId.matches('[a-z0-9]+_(matches|next_matches|lineups|scorers|live_match_.*)');
+    }
+
+    // Vereins-Einstellungen: nur Admins
+    function isAdminOnlyDoc(docId) {
+      return docId.matches('[a-z0-9]+_(teams|pitches|teamCoaches|fussballde|closures)');
+    }
+
     // --- REGELN ---
 
     // 1. Basis-Sicherheit: Standardmäßig alles blockieren
@@ -54,26 +88,30 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // 2. DSGVO-Daten (Spieler): Nur Trainer / Jugendleitung
+    // 2. DSGVO-Daten (Spieler, inkl. Gesundheitsdaten): Admins alles,
+    //    Trainer nur Spieler ihrer eigenen Mannschaften (Jugendleitung: alle), ändern nur Admins
     match /youth_players/{player} {
-      allow read, write: if isStaff();
-    }
-
-    // 3. Trainer-Profile: Trainer dürfen lesen, nur Admins anlegen/ändern
-    match /youth_coaches/{coach} {
-      allow read: if isStaff() || (isSignedIn() && request.auth.uid == coach);
+      allow read: if isAdmin() || coachHasTeam(resource.data.youthTeam);
       allow write: if isAdmin();
     }
 
-    // 4. Einstellungen & Teams: Öffentlich lesbar, schreiben nur Trainer / Jugendleitung
-    match /youth_settings/{setting} {
-      allow read: if true;
-      allow write: if isStaff();
+    // 3. Trainer-Profile: jeder nur sein eigenes, Admins alle; anlegen/ändern nur Admins
+    match /youth_coaches/{coach} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == coach);
+      allow write: if isAdmin();
     }
 
-    // 5. Trainingserfassung: Nur Trainer / Jugendleitung
+    // 4. Mannschaften & Jahrgänge: öffentlich lesbar, ändern nur Admins
+    match /youth_settings/{setting} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 5. Trainingserfassung (Anwesenheit): Admins alles, Trainer nur ihre Mannschaften
     match /youth_trainings/{training} {
-      allow read, write: if isStaff();
+      allow read, delete: if isAdmin() || coachHasTeam(resource.data.team);
+      allow create: if isAdmin() || coachHasTeam(request.resource.data.team);
+      allow update: if isAdmin() || (coachHasTeam(resource.data.team) && coachHasTeam(request.resource.data.team));
     }
 
     // 6. Ticker-Tagescodes: Trainer erzeugen/sehen den Code, Ticker-Personen nur mit gültigem Code
@@ -93,15 +131,16 @@ service cloud.firestore {
         && codeMatches(request.resource.data.clubId, request.resource.data.code);
     }
 
-    // 8. Spielticker: Öffentlich lesbar, schreiben nur Trainer / Admins / Ticker-Personen mit gültigem Code.
-    //    Dokument-IDs beginnen immer mit der Vereins-ID, z. B. "svon_live_match_F-Jugend".
-    //    Mannschaftsliste, Plätze, Trainer-Zuordnung, fussball.de-Links und Platzsperren
-    //    (svon_teams, svon_pitches, svon_teamCoaches, svon_fussballde, svon_closures) nur Admin.
+    // 8. Spielticker & Platzbelegung
+    //    Lesen: Zuschauer-Daten öffentlich, alles andere nur Trainer/Admins bzw. Spieldaten für Ticker-Personen
+    //    Schreiben: Admins alles, Trainer alles außer Vereins-Einstellungen, Ticker-Personen nur Spieldaten
     match /ticker/{docId} {
-      allow read: if true;
+      allow read: if isPublicTickerDoc(docId)
+        || isStaff()
+        || (isMatchReadDoc(docId) && hasValidTickerSession(tickerClub(docId)));
       allow write: if isAdmin();
-      allow write: if !docId.matches('[a-z0-9]+_(teams|pitches|teamCoaches|fussballde|closures)')
-        && (isStaff() || hasValidTickerSession(docId.split('_')[0]));
+      allow write: if !isAdminOnlyDoc(docId) && isStaff();
+      allow write: if isMatchWriteDoc(docId) && hasValidTickerSession(tickerClub(docId));
     }
   }
 }
