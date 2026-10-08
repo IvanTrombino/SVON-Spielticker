@@ -115,8 +115,14 @@ service cloud.firestore {
       allow update: if isAdmin() || (coachHasTeam(resource.data.team) && coachHasTeam(request.resource.data.team));
     }
 
-    // 5b. Sommercamp (Anmeldungen inkl. Allergien, Preise): nur Admins
+    // 5b. Sommercamp (Teilnehmer inkl. Allergien, Betreuer, Spenden, Preise/Gruppen): nur Admins
     match /summercamp_participants/{participant} {
+      allow read, write: if isAdmin();
+    }
+    match /summercamp_staff/{member} {
+      allow read, write: if isAdmin();
+    }
+    match /summercamp_donations/{donation} {
       allow read, write: if isAdmin();
     }
     match /summercamp_settings/{club} {

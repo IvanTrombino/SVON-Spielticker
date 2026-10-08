@@ -1,0 +1,171 @@
+// Tests für firestore.rules mit dem Firestore-Emulator.
+//
+// Ausführen (Emulator auf 127.0.0.1:8085, Pakete @firebase/rules-unit-testing + firebase installiert):
+//   node firestore-rules.test.mjs /pfad/zu/firestore.rules
+//
+// Jede Zeile prüft: darf diese Rolle diese Aktion (erlaubt) oder nicht (verboten)?
+
+import { readFileSync } from "fs";
+import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
+import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, where, Timestamp, addDoc } from "firebase/firestore";
+
+const rulesPath = process.argv[2] || "firestore.rules";
+const env = await initializeTestEnvironment({
+  projectId: "svon-test",
+  firestore: { rules: readFileSync(rulesPath, "utf8"), host: "127.0.0.1", port: 8085 }
+});
+
+const future = Timestamp.fromMillis(Date.now() + 3600_000);
+const past = Timestamp.fromMillis(Date.now() - 3600_000);
+
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, "youth_coaches", "coachF"), { clubId: "svon", firstName: "F", assignedTeams: ["F-Jugend"] });
+  await setDoc(doc(db, "youth_coaches", "leitung"), { clubId: "svon", firstName: "L", assignedTeams: ["Jugendleitung"] });
+  await setDoc(doc(db, "youth_players", "pF"), { clubId: "svon", youthTeam: "F-Jugend", status: "aktiv", medicalComment: "Allergie" });
+  await setDoc(doc(db, "youth_players", "pD"), { clubId: "svon", youthTeam: "D-Jugend", status: "aktiv" });
+  await setDoc(doc(db, "youth_trainings", "tF"), { clubId: "svon", team: "F-Jugend" });
+  await setDoc(doc(db, "youth_trainings", "tD"), { clubId: "svon", team: "D-Jugend" });
+  await setDoc(doc(db, "youth_settings", "svon"), { teams: [] });
+  await setDoc(doc(db, "ticker_codes", "svon"), { code: "ABC-123", expiresAt: future });
+  await setDoc(doc(db, "ticker_codes", "old"), { code: "OLD-111", expiresAt: past });
+  for (const id of ["svon_live_match_F-Jugend", "svon_matches", "svon_next_matches", "svon_teams", "svon_players", "svon_lineups", "svon_scorers",
+    "svon_bookings", "svon_pitchConflicts", "svon_teamCoaches", "svon_pitches", "svon_closures", "svon_fussballde", "svon_nameDisplay"]) {
+    await setDoc(doc(db, "ticker", id), { x: 1 });
+  }
+  await setDoc(doc(db, "summercamp_participants", "sc1"), { clubId: "svon", campYear: 2026, allergies: "Nüsse" });
+  await setDoc(doc(db, "summercamp_staff", "st1"), { clubId: "svon", campYear: 2026 });
+  await setDoc(doc(db, "summercamp_donations", "d1"), { clubId: "svon", campYear: 2026, amount: 50 });
+  await setDoc(doc(db, "summercamp_settings", "svon"), { years: {} });
+});
+
+const ctx = (uid, token) => env.authenticatedContext(uid, token).firestore();
+const admin = ctx("adminUid", { email: "ivan.trombino@outlook.de", firebase: { sign_in_provider: "password" } });
+const coachF = ctx("coachF", { email: "f@x.de", firebase: { sign_in_provider: "password" } });
+const leitung = ctx("leitung", { email: "l@x.de", firebase: { sign_in_provider: "password" } });
+const stranger = ctx("stranger", { email: "fremd@x.de", firebase: { sign_in_provider: "password" } });
+const fakeAdminAnon = ctx("anonAdmin", { email: "ivan.trombino@outlook.de", firebase: { sign_in_provider: "anonymous" } });
+const ticker = ctx("anonT", { firebase: { sign_in_provider: "anonymous" } });
+const tickerNoCode = ctx("anonX", { firebase: { sign_in_provider: "anonymous" } });
+const publicDb = env.unauthenticatedContext().firestore();
+
+let passed = 0, failed = 0;
+const t = async (name, expectOk, fn) => {
+  try {
+    await (expectOk ? assertSucceeds(fn()) : assertFails(fn()));
+    passed++;
+  } catch (e) {
+    failed++;
+    console.log(`❌ ${name} (erwartet: ${expectOk ? "erlaubt" : "verboten"}) – ${e.message.split("\n")[0]}`);
+  }
+};
+const tick = (id) => doc(ticker, "ticker", id);
+
+// --- Zuschauer (nicht angemeldet) ---
+await t("Zuschauer liest Live-Spiel", true, () => getDoc(doc(publicDb, "ticker", "svon_live_match_F-Jugend")));
+await t("Zuschauer liest Spielhistorie", true, () => getDoc(doc(publicDb, "ticker", "svon_matches")));
+await t("Zuschauer liest nächste Spiele", true, () => getDoc(doc(publicDb, "ticker", "svon_next_matches")));
+await t("Zuschauer liest Teamliste", true, () => getDoc(doc(publicDb, "ticker", "svon_teams")));
+await t("Zuschauer liest fussball.de-Links", true, () => getDoc(doc(publicDb, "ticker", "svon_fussballde")));
+await t("Zuschauer liest Jugend-Teams", true, () => getDoc(doc(publicDb, "youth_settings", "svon")));
+await t("Zuschauer liest Spielerliste Ticker", false, () => getDoc(doc(publicDb, "ticker", "svon_players")));
+await t("Zuschauer liest Initialen-Liste", false, () => getDoc(doc(publicDb, "ticker", "svon_nameDisplay")));
+await t("Zuschauer liest Buchungen", false, () => getDoc(doc(publicDb, "ticker", "svon_bookings")));
+await t("Zuschauer liest Platzkonflikte", false, () => getDoc(doc(publicDb, "ticker", "svon_pitchConflicts")));
+await t("Zuschauer schreibt Live-Spiel", false, () => setDoc(doc(publicDb, "ticker", "svon_live_match_F-Jugend"), { y: 1 }));
+await t("Zuschauer schreibt fussball.de-Links", false, () => setDoc(doc(publicDb, "ticker", "svon_fussballde"), { links: {} }));
+await t("Zuschauer liest Jugendspieler", false, () => getDoc(doc(publicDb, "youth_players", "pF")));
+await t("Zuschauer liest Tagescode", false, () => getDoc(doc(publicDb, "ticker_codes", "svon")));
+
+// --- Ticker-Person (anonym, Tagescode) ---
+await t("Ticker: falscher Code", false, () => setDoc(doc(ticker, "ticker_sessions", "anonT"), { clubId: "svon", code: "XXX-999" }));
+await t("Ticker: abgelaufener Code", false, () => setDoc(doc(ticker, "ticker_sessions", "anonT"), { clubId: "old", code: "OLD-111" }));
+await t("Ticker: Sitzung für fremde UID", false, () => setDoc(doc(ticker, "ticker_sessions", "someoneElse"), { clubId: "svon", code: "ABC-123" }));
+await t("Ticker: Zusatzfelder in Sitzung", false, () => setDoc(doc(ticker, "ticker_sessions", "anonT"), { clubId: "svon", code: "ABC-123", admin: true }));
+await t("Ticker: richtiger Code", true, () => setDoc(doc(ticker, "ticker_sessions", "anonT"), { clubId: "svon", code: "ABC-123" }));
+await t("Ticker: liest Tagescode", true, () => getDoc(doc(ticker, "ticker_codes", "svon")));
+await t("Ticker: schreibt Live-Spiel", true, () => setDoc(tick("svon_live_match_F-Jugend"), { y: 2 }));
+await t("Ticker: schreibt Aufstellung", true, () => setDoc(tick("svon_lineups"), { y: 2 }));
+await t("Ticker: schreibt Torschützen", true, () => setDoc(tick("svon_scorers"), { y: 2 }));
+await t("Ticker: liest Spielerliste", true, () => getDoc(tick("svon_players")));
+await t("Ticker: liest Initialen-Liste", true, () => getDoc(tick("svon_nameDisplay")));
+await t("Ticker: schreibt Initialen-Liste", false, () => setDoc(tick("svon_nameDisplay"), { map: {} }));
+await t("Ticker: schreibt Spielerliste", false, () => setDoc(tick("svon_players"), { y: 2 }));
+await t("Ticker: schreibt Buchungen", false, () => setDoc(tick("svon_bookings"), { y: 2 }));
+await t("Ticker: schreibt Platzkonflikte", false, () => setDoc(tick("svon_pitchConflicts"), { y: 2 }));
+await t("Ticker: schreibt Teamliste", false, () => setDoc(tick("svon_teams"), { y: 2 }));
+await t("Ticker: liest Buchungen", false, () => getDoc(tick("svon_bookings")));
+await t("Ticker: liest Jugendspieler", false, () => getDoc(doc(ticker, "youth_players", "pF")));
+await t("Ticker: schreibt fremden Verein", false, () => setDoc(doc(ticker, "ticker", "fcx_live_match_A"), { y: 2 }));
+await t("Ticker ohne Code: schreibt Live-Spiel", false, () => setDoc(doc(tickerNoCode, "ticker", "svon_live_match_F-Jugend"), { y: 3 }));
+await t("Anonym mit Admin-E-Mail im Token", false, () => getDoc(doc(fakeAdminAnon, "youth_players", "pF")));
+
+// --- Trainer F-Jugend ---
+await t("Trainer F: eigener Spieler", true, () => getDoc(doc(coachF, "youth_players", "pF")));
+await t("Trainer F: fremder Spieler (D)", false, () => getDoc(doc(coachF, "youth_players", "pD")));
+await t("Trainer F: Abfrage eigenes Team", true, () => getDocs(query(collection(coachF, "youth_players"), where("clubId", "==", "svon"), where("youthTeam", "==", "F-Jugend"), where("status", "==", "aktiv"))));
+await t("Trainer F: Abfrage fremdes Team", false, () => getDocs(query(collection(coachF, "youth_players"), where("clubId", "==", "svon"), where("youthTeam", "==", "D-Jugend"))));
+await t("Trainer F: Abfrage alle Spieler", false, () => getDocs(query(collection(coachF, "youth_players"), where("clubId", "==", "svon"))));
+await t("Trainer F: Spieler ändern", false, () => setDoc(doc(coachF, "youth_players", "pF"), { youthTeam: "F-Jugend", hacked: true }));
+await t("Trainer F: eigenes Profil", true, () => getDoc(doc(coachF, "youth_coaches", "coachF")));
+await t("Trainer F: fremdes Profil", false, () => getDoc(doc(coachF, "youth_coaches", "leitung")));
+await t("Trainer F: sich selbst Jugendleitung geben", false, () => setDoc(doc(coachF, "youth_coaches", "coachF"), { assignedTeams: ["Jugendleitung"] }));
+await t("Trainer F: Jugend-Teams ändern", false, () => setDoc(doc(coachF, "youth_settings", "svon"), { teams: ["x"] }));
+await t("Trainer F: Training eigenes Team anlegen", true, () => addDoc(collection(coachF, "youth_trainings"), { clubId: "svon", team: "F-Jugend" }));
+await t("Trainer F: Training fremdes Team anlegen", false, () => addDoc(collection(coachF, "youth_trainings"), { clubId: "svon", team: "D-Jugend" }));
+await t("Trainer F: Trainings eigenes Team abfragen", true, () => getDocs(query(collection(coachF, "youth_trainings"), where("clubId", "==", "svon"), where("team", "==", "F-Jugend"))));
+await t("Trainer F: fremdes Training lesen", false, () => getDoc(doc(coachF, "youth_trainings", "tD")));
+await t("Trainer F: Training auf fremdes Team umschreiben", false, () => setDoc(doc(coachF, "youth_trainings", "tF"), { clubId: "svon", team: "D-Jugend" }));
+await t("Trainer F: Buchungen schreiben", true, () => setDoc(doc(coachF, "ticker", "svon_bookings"), { list: [] }));
+await t("Trainer F: Platzkonflikt melden", true, () => setDoc(doc(coachF, "ticker", "svon_pitchConflicts"), { list: [] }));
+await t("Trainer F: Spielerliste Ticker pflegen", true, () => setDoc(doc(coachF, "ticker", "svon_players"), { a: 1 }));
+await t("Trainer F: Plätze ändern", false, () => setDoc(doc(coachF, "ticker", "svon_pitches"), { list: [] }));
+await t("Trainer F: Platz sperren", false, () => setDoc(doc(coachF, "ticker", "svon_closures"), { list: [] }));
+await t("Trainer F: Ticker-Teams ändern", false, () => setDoc(doc(coachF, "ticker", "svon_teams"), { teamsList: [] }));
+await t("Trainer F: fussball.de-Links ändern", false, () => setDoc(doc(coachF, "ticker", "svon_fussballde"), { links: {} }));
+await t("Trainer F: Initialen-Liste ändern", false, () => setDoc(doc(coachF, "ticker", "svon_nameDisplay"), { map: {} }));
+await t("Trainer F: Tagescode erzeugen", true, () => setDoc(doc(coachF, "ticker_codes", "svon"), { code: "ABC-123", expiresAt: future }));
+
+// --- Jugendleitung ---
+await t("Jugendleitung: Spieler D", true, () => getDoc(doc(leitung, "youth_players", "pD")));
+await t("Jugendleitung: Abfrage D-Jugend", true, () => getDocs(query(collection(leitung, "youth_players"), where("clubId", "==", "svon"), where("youthTeam", "==", "D-Jugend"))));
+await t("Jugendleitung: Spieler ändern", false, () => setDoc(doc(leitung, "youth_players", "pD"), { youthTeam: "D-Jugend", x: 1 }));
+await t("Jugendleitung: Spieler löschen", false, () => deleteDoc(doc(leitung, "youth_players", "pF")));
+
+// --- Admin ---
+await t("Admin: alle Spieler abfragen", true, () => getDocs(query(collection(admin, "youth_players"), where("clubId", "==", "svon"))));
+await t("Admin: Spieler anlegen", true, () => addDoc(collection(admin, "youth_players"), { clubId: "svon", youthTeam: "E-Jugend" }));
+await t("Admin: Trainer anlegen", true, () => setDoc(doc(admin, "youth_coaches", "neu"), { assignedTeams: ["E-Jugend"] }));
+await t("Admin: alle Trainer lesen", true, () => getDocs(query(collection(admin, "youth_coaches"), where("clubId", "==", "svon"))));
+await t("Admin: Jugend-Teams ändern", true, () => setDoc(doc(admin, "youth_settings", "svon"), { teams: [] }));
+await t("Admin: Vereins-Einstellungen im Ticker", true, async () => {
+  for (const id of ["svon_pitches", "svon_closures", "svon_teams", "svon_fussballde", "svon_teamCoaches", "svon_nameDisplay"]) await setDoc(doc(admin, "ticker", id), { a: 1 });
+});
+await t("Admin: Live-Spiel schreiben", true, () => setDoc(doc(admin, "ticker", "svon_live_match_F-Jugend"), { a: 1 }));
+await t("Admin: Spieler endgültig löschen", true, () => deleteDoc(doc(admin, "youth_players", "pD")));
+
+// --- Sommercamp: nur Admins ---
+for (const [col, id] of [["summercamp_participants", "sc1"], ["summercamp_staff", "st1"], ["summercamp_donations", "d1"], ["summercamp_settings", "svon"]]) {
+  await t(`Admin: ${col} lesen`, true, () => getDoc(doc(admin, col, id)));
+  await t(`Admin: ${col} schreiben`, true, () => setDoc(doc(admin, col, `${id}x`), { clubId: "svon", campYear: 2026 }));
+  await t(`Jugendleitung: ${col} lesen`, false, () => getDoc(doc(leitung, col, id)));
+  await t(`Trainer: ${col} lesen`, false, () => getDoc(doc(coachF, col, id)));
+  await t(`Trainer: ${col} schreiben`, false, () => setDoc(doc(coachF, col, "hack"), { clubId: "svon" }));
+  await t(`Ticker: ${col} lesen`, false, () => getDoc(doc(ticker, col, id)));
+  await t(`Zuschauer: ${col} lesen`, false, () => getDoc(doc(publicDb, col, id)));
+  await t(`Fremder: ${col} lesen`, false, () => getDoc(doc(stranger, col, id)));
+}
+await t("Admin: Sommercamp-Teilnehmer abfragen", true, () => getDocs(query(collection(admin, "summercamp_participants"), where("clubId", "==", "svon"), where("campYear", "==", 2026))));
+await t("Trainer: Sommercamp-Teilnehmer abfragen", false, () => getDocs(query(collection(coachF, "summercamp_participants"), where("clubId", "==", "svon"), where("campYear", "==", 2026))));
+
+// --- Fremdes, selbst registriertes Konto ---
+await t("Fremder: Spieler lesen", false, () => getDoc(doc(stranger, "youth_players", "pF")));
+await t("Fremder: Buchungen lesen", false, () => getDoc(doc(stranger, "ticker", "svon_bookings")));
+await t("Fremder: Live-Spiel schreiben", false, () => setDoc(doc(stranger, "ticker", "svon_live_match_F-Jugend"), { y: 1 }));
+await t("Fremder: Tagescode lesen", false, () => getDoc(doc(stranger, "ticker_codes", "svon")));
+await t("Fremder: sich Trainerprofil anlegen", false, () => setDoc(doc(stranger, "youth_coaches", "stranger"), { assignedTeams: ["Jugendleitung"] }));
+await t("Fremder: Live-Spiel lesen (öffentlich)", true, () => getDoc(doc(stranger, "ticker", "svon_live_match_F-Jugend")));
+
+console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
+await env.cleanup();
+process.exit(failed ? 1 : 0);
