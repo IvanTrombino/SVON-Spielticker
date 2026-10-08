@@ -145,6 +145,9 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   const isActiveView = isActiveTeam(activeViewTeam);
   const activeTickerTeam = tickerTeams.find(t => isSameTeam(t, activeViewTeam));
 
+  // Jugend: "Nachname, Vorname" aus der Jugenddatenbank, Aktive: Name wie im Ticker angelegt
+  const playerLabel = (p) => p.displayName || `${p.lastName}, ${p.firstName}`;
+
   // --- 2. TEAMS LADEN ---
   useEffect(() => {
     if (!clubId || !loggedInCoach) return;
@@ -180,21 +183,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   useEffect(() => {
     if (!loggedInCoach || !activeViewTeam) return;
 
-    const qPlayers = query(
-      collection(db, "youth_players"), 
-      where("clubId", "==", clubId),
-      where("youthTeam", "==", activeViewTeam),
-      where("status", "==", "aktiv")
-    );
-
-    const unsubPlayers = onSnapshot(qPlayers, (snapshot) => {
-      const players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      players.sort((a, b) => {
-        const nameA = (a.lastName || "").toLowerCase();
-        const nameB = (b.lastName || "").toLowerCase();
-        if (nameA === nameB) return (a.firstName || "").localeCompare(b.firstName || "");
-        return nameA.localeCompare(nameB);
-      });
+    const applyPlayers = (players) => {
       setTeamPlayers(players);
 
       if (!editingTrainingId) {
@@ -202,6 +191,29 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
         players.forEach(p => initialAttendance[p.id] = "anwesend");
         setAttendanceRecords(initialAttendance);
       }
+    };
+
+    // Aktive: Namen aus der Ticker-Spielerliste ("Mein Team"), Name dient als Spieler-ID
+    const unsubPlayers = isActiveView ? onSnapshot(doc(db, "ticker", `${clubId}_players`), (snap) => {
+      const names = (snap.exists() && activeTickerTeam ? snap.data()[activeTickerTeam] : null) || [];
+      applyPlayers([...names].sort((a, b) => a.localeCompare(b)).map(name => {
+        const [firstName, ...rest] = name.trim().split(/\s+/);
+        return { id: name.replace(/\//g, "-"), displayName: name, firstName, lastName: rest.join(" ") };
+      }));
+    }) : onSnapshot(query(
+      collection(db, "youth_players"),
+      where("clubId", "==", clubId),
+      where("youthTeam", "==", activeViewTeam),
+      where("status", "==", "aktiv")
+    ), (snapshot) => {
+      const players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      players.sort((a, b) => {
+        const nameA = (a.lastName || "").toLowerCase();
+        const nameB = (b.lastName || "").toLowerCase();
+        if (nameA === nameB) return (a.firstName || "").localeCompare(b.firstName || "");
+        return nameA.localeCompare(nameB);
+      });
+      applyPlayers(players);
     });
 
     const qTrainings = query(
@@ -220,7 +232,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       unsubPlayers();
       unsubTrainings();
     };
-  }, [loggedInCoach, clubId, activeViewTeam, editingTrainingId]);
+  }, [loggedInCoach, clubId, activeViewTeam, editingTrainingId, isActiveView, activeTickerTeam]);
 
   // --- 4. TRAININGS-ANWESENHEIT LOGIK ---
   const handleAttendanceChange = (playerId, status) => {
@@ -438,7 +450,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
                 <tbody>
                   {teamPlayers.map((p, i) => (
                     <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
-                      <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "14px" }}>{p.lastName}, {p.firstName}</td>
+                      <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "14px" }}>{playerLabel(p)}</td>
                       <td style={{ padding: "10px", textAlign: "center", color: "#555", fontSize: "13px" }}>{p.birthYear || "?"}</td>
                       <td style={{ padding: "10px", fontSize: "13px" }}>{p.fatherName ? <div>{p.fatherName}<br/><a href={`tel:${p.fatherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.fatherPhone}</a></div> : "-"}</td>
                       <td style={{ padding: "10px", fontSize: "13px" }}>{p.motherName ? <div>{p.motherName}<br/><a href={`tel:${p.motherPhone}`} style={{ color: "#2980b9", textDecoration: "none", fontWeight: "bold" }}>{p.motherPhone}</a></div> : "-"}</td>
@@ -470,7 +482,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
                     const status = attendanceRecords[p.id];
                     return (
                       <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8f9fa", padding: "10px", borderRadius: "8px", border: "1px solid #eee", flexWrap: "wrap", gap: "10px" }}>
-                        <span style={{ fontWeight: "bold", color: "#333", fontSize: "14px" }}>{p.lastName}, {p.firstName}</span>
+                        <span style={{ fontWeight: "bold", color: "#333", fontSize: "14px" }}>{playerLabel(p)}</span>
                         <div style={{ display: "flex", gap: "5px" }}>
                           <button onClick={() => handleAttendanceChange(p.id, "anwesend")} style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "anwesend" ? "#27ae60" : "#ecf0f1", color: status === "anwesend" ? "white" : "#7f8c8d" }}>✅ Da</button>
                           <button onClick={() => handleAttendanceChange(p.id, "entschuldigt")} style={{ padding: "6px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: "bold", cursor: "pointer", background: status === "entschuldigt" ? "#f39c12" : "#ecf0f1", color: status === "entschuldigt" ? "white" : "#7f8c8d" }}>⚠️ Entsch.</button>
@@ -498,9 +510,9 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
                   Object.entries(t.attendance || {}).forEach(([playerId, status]) => {
                     const player = teamPlayers.find(p => p.id === playerId);
                     if (player) {
-                      if (status === "anwesend") presentPlayers.push(player.firstName);
-                      if (status === "entschuldigt") excusedPlayers.push(player.firstName);
-                      if (status === "unentschuldigt") missingPlayers.push(player.firstName);
+                      if (status === "anwesend") presentPlayers.push(player.displayName || player.firstName);
+                      if (status === "entschuldigt") excusedPlayers.push(player.displayName || player.firstName);
+                      if (status === "unentschuldigt") missingPlayers.push(player.displayName || player.firstName);
                     }
                   });
 
@@ -562,7 +574,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
                 <tbody>
                   {getPlayerStats().map((p, i) => (
                     <tr key={p.id} style={{ borderBottom: "1px solid #eee", background: i % 2 === 0 ? "white" : "#f8f9fa" }}>
-                      <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "13px" }}>{p.lastName}, {p.firstName}</td>
+                      <td style={{ padding: "10px", fontWeight: "bold", color: "#2c3e50", fontSize: "13px" }}>{playerLabel(p)}</td>
                       <td style={{ padding: "10px", textAlign: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
                           <span style={{ fontWeight: "bold", color: p.rate >= 75 ? "#27ae60" : (p.rate >= 50 ? "#f39c12" : "#e74c3c") }}>{p.rate}%</span>
