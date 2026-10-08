@@ -81,7 +81,7 @@ function Datenschutz() {
       <ul style={{ margin: "0 0 8px 0", paddingLeft: "18px" }}>
         <li><strong>Google Firebase</strong> (Google Ireland Ltd.) – Datenbank und Anmeldung. Auftragsverarbeitung nach Art. 28 DSGVO.</li>
         <li><strong>Vercel</strong> (Vercel Inc., USA) – Hosting der App. Eine Übermittlung in die USA erfolgt auf Grundlage geeigneter Garantien (z. B. EU-US Data Privacy Framework bzw. Standardvertragsklauseln).</li>
-        <li><strong>ntfy.sh</strong> – Push-Benachrichtigungen zu Toren, Karten und Platzkonflikten. Benachrichtigungen erhält nur, wer den jeweiligen Kanal selbst abonniert.</li>
+        <li><strong>ntfy.sh</strong> – Push-Benachrichtigungen zu Toren, Karten, Platzkonflikten, Platzsperren und Infos für Trainer. Benachrichtigungen erhält nur, wer den jeweiligen Kanal selbst abonniert.</li>
         <li><strong>fussball.de</strong> – Abruf öffentlicher Spielpläne über unseren Server. Dabei werden keine Daten der App-Nutzer an fussball.de übermittelt.</li>
         <li><strong>WhatsApp / E-Mail</strong> – Inhalte werden nur geteilt, wenn Sie dies selbst über die Teilen-Funktion auslösen.</li>
       </ul>

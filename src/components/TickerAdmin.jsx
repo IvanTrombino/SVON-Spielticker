@@ -8,6 +8,8 @@ import TeamManager from "./TeamManager";
 import PitchConflicts from "./PitchConflicts";
 import PitchManager from "./PitchManager";
 import BackupPanel from "./BackupPanel";
+import TrainerInfos from "./TrainerInfos";
+import { useTrainerInfos } from "../trainerInfo";
 
 // Platzbelegung mit Admin-Rechten; Mannschaften wie im Trainer Portal aus der Jugenddatenbank
 function AdminPitches({ clubId }) {
@@ -24,6 +26,12 @@ function AdminPitches({ clubId }) {
   return <PitchManager clubId={clubId} teams={teams} currentUserName={auth.currentUser?.email || "Admin"} isAdmin />;
 }
 
+// Pinnwand im Admin Portal: Admins sehen und verwalten alle Infos
+function AdminInfos({ clubId }) {
+  const infos = useTrainerInfos(clubId);
+  return <TrainerInfos clubId={clubId} infos={infos} viewerTeams={null} uid={auth.currentUser?.uid} authorName={auth.currentUser?.email || "Admin"} canModerate />;
+}
+
 // Live-Ticker-Verwaltung: Spieler & Spielstatistik; Mannschaften und Platzkonflikte nur für Admins
 // playerTeams: Mannschaften, deren Spielernamen hier gepflegt werden (Trainer Portal: Aktive dort unter "Mein Team")
 export default function TickerAdmin({ clubId, teams, canManageTeams = false, playerTeams = teams }) {
@@ -33,7 +41,7 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false, pla
   const tabs = [
     ...(showPlayers ? [{ id: "players", label: "👤 Spieler" }] : []),
     { id: "stats", label: "🏆 Spielstatistik" },
-    ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }, { id: "pitches", label: "🏟️ Plätze" }, { id: "conflicts", label: "⚠️ Platzkonflikte" }, { id: "backup", label: "💾 Sicherung" }] : [])
+    ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }, { id: "pitches", label: "🏟️ Plätze" }, { id: "conflicts", label: "⚠️ Platzkonflikte" }, { id: "infos", label: "📢 Infos" }, { id: "backup", label: "💾 Sicherung" }] : [])
   ];
 
   return (
@@ -50,6 +58,7 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false, pla
       {tab === "pitches" && canManageTeams && <AdminPitches clubId={clubId} />}
       {tab === "conflicts" && canManageTeams && <PitchConflicts clubId={clubId} canDecide />}
       {tab === "backup" && canManageTeams && <BackupPanel />}
+      {tab === "infos" && canManageTeams && <AdminInfos clubId={clubId} />}
 
       {(tab === "players" || tab === "stats") && (teams.length === 0 ? (
         <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Für deine Mannschaften gibt es noch kein Team im Live-Ticker.</p>

@@ -6,6 +6,9 @@ import PitchManager from "./PitchManager"; // <-- NEU: Import für die Platzbele
 import TickerAdmin from "./TickerAdmin";
 import AttendanceCoach from "./AttendanceCoach";
 import PlayerManager from "./PlayerManager";
+import ClosureBanner from "./ClosureBanner";
+import TrainerInfos from "./TrainerInfos";
+import { useTrainerInfos, visibleInfos, readSeenInfos, markInfosSeen } from "../trainerInfo";
 import { getOrCreateDailyCode } from "../tickerCode";
 import { compareTeamNames, isActiveTeam, isSameTeam } from "../teamOrder";
 
@@ -36,6 +39,9 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- TICKER-TAGESCODE ---
   const [tickerCode, setTickerCode] = useState(null);
   const [tickerCodeError, setTickerCodeError] = useState("");
+
+  // --- INFOS (Pinnwand) ---
+  const [seenInfoIds, setSeenInfoIds] = useState(() => readSeenInfos(clubId));
 
   const auth = getAuth();
 
@@ -138,6 +144,21 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
     ? tickerTeams
     : tickerTeams.filter(t => loggedInCoach?.assignedTeams?.includes(t))
   ).slice().sort(compareTeamNames);
+
+  // Infos und Platzsperren: Jugendleitung sieht alles, Trainer nur ihre Mannschaften
+  const infoViewerTeams = isJugendleitung ? null : (loggedInCoach?.assignedTeams || []);
+  const trainerInfos = useTrainerInfos(clubId, !!loggedInCoach);
+  const shownInfoIds = visibleInfos(trainerInfos, infoViewerTeams, loggedInCoach?.id).map(i => i.id);
+  const unreadInfos = activeTab === "infos" ? 0 : shownInfoIds.filter(id => !seenInfoIds.includes(id)).length;
+
+  // Beim Öffnen und Verlassen des Infos-Tabs gelten alle angezeigten Infos als gelesen
+  const openTab = (id) => {
+    if (id === "infos" || activeTab === "infos") {
+      markInfosSeen(clubId, shownInfoIds);
+      setSeenInfoIds(shownInfoIds);
+    }
+    setActiveTab(id);
+  };
 
   const activeViewTeam = selectedTeam || (currentTeamOptions[0]?.name ?? "");
 
@@ -359,7 +380,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   const tabButton = (id, icon, label) => (
     <button
       key={id}
-      onClick={() => setActiveTab(id)}
+      onClick={() => openTab(id)}
       style={{ flex: 1, padding: "12px 10px", border: "none", borderRadius: "8px", background: activeTab === id ? "#2146d0" : "#e0e7ff", color: activeTab === id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "14px", transition: "all 0.2s" }}
     >
       {icon} {label}
@@ -407,6 +428,8 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
         )}
       </div>
 
+      <ClosureBanner clubId={clubId} teams={infoViewerTeams} />
+
       {/* NAVIGATION */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
         {tabButton("team", "👦", "Mein Team")}
@@ -416,6 +439,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
         {tabButton("pitches", "🏟️", "Plätze")}
         {tabButton("zusagen", "✅", "Zusagen")}
         {tabButton("ticker", "⚽", "Live-Ticker")}
+        {tabButton("infos", "📢", unreadInfos > 0 ? `Infos (${unreadInfos} neu)` : "Infos")}
       </div>
 
       {/* INHALTE JE NACH TAB */}
@@ -601,6 +625,10 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       {/* LIVE-TICKER VERWALTUNG (Mannschaften verwaltet der Admin im Admin Portal) */}
       {activeTab === "zusagen" && (
         <AttendanceCoach clubId={clubId} team={activeViewTeam} players={teamPlayers} coachName={`${loggedInCoach.firstName} ${loggedInCoach.lastName || ""}`.trim()} />
+      )}
+
+      {activeTab === "infos" && (
+        <TrainerInfos clubId={clubId} infos={trainerInfos} viewerTeams={infoViewerTeams} uid={loggedInCoach.id} authorName={`${loggedInCoach.firstName} ${loggedInCoach.lastName || ""}`.trim()} />
       )}
 
       {activeTab === "ticker" && (

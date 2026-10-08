@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { closureText, sendTrainerPush, shareViaWhatsApp } from "../trainerInfo";
 import { findOverlappingBookings, createConflictRequest, findMoveConflicts, moveBookingInList, applyBookingEdit, cancelOccurrence, seriesOccurrences, isPitchClosed, bookingsOnPitchDay } from "../pitchConflicts";
 import PitchConflicts from "./PitchConflicts";
 import FussballImport from "./FussballImport";
@@ -401,11 +402,24 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
       setBookings(updated);
       syncBookings(updated);
     }
-    const newClosures = [...closures, { id: Date.now().toString(), pitchId, date, reason: reason.trim(), closedBy: currentUserName || "Admin" }];
+    // Betroffene Termine merken, damit die Trainer im Trainer Portal sehen, was verlegt/abgesagt wurde
+    const closure = {
+      id: Date.now().toString(), pitchId, date, reason: reason.trim(), closedBy: currentUserName || "Admin",
+      affected: affected.map(b => ({ team: b.team, startTime: b.startTime, endTime: b.endTime })),
+      targetPitchId: affected.length > 0 ? targetPitchId || null : null
+    };
+    const newClosures = [...closures, closure];
     setClosures(newClosures);
     syncClosures(newClosures);
     setCloseDialog(null);
+
+    const text = closureText(closure, pitchName(pitchId), closure.targetPitchId ? pitchName(closure.targetPitchId) : null);
+    sendTrainerPush(clubId, text);
+    if (window.confirm("Platz gesperrt. Die Trainer sehen den Hinweis im Trainer Portal.\n\nJetzt zusätzlich per WhatsApp informieren?")) shareViaWhatsApp(text);
   };
+
+  const shareClosure = (closure) =>
+    shareViaWhatsApp(closureText(closure, pitchName(closure.pitchId), closure.targetPitchId ? pitchName(closure.targetPitchId) : null));
 
   const handleReopenPitch = (closure) => {
     if (!window.confirm(`Sperre für ${pitchName(closure.pitchId)} am ${formatDay(closure.date)} aufheben?\n(Umgebuchte Termine bleiben auf dem Ausweichplatz.)`)) return;
@@ -720,6 +734,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                           {closure && (
                             <div style={{ background: "#c0392b", color: "white", borderRadius: "4px", padding: "4px 6px", fontSize: "11px", lineHeight: 1.3 }}>
                               <strong>🚫 Gesperrt</strong>{closure.reason ? `: ${closure.reason}` : ""}
+                              {isAdmin && <button onClick={() => shareClosure(closure)} style={{ display: "block", marginTop: "3px", background: "#25d366", color: "white", border: "none", borderRadius: "3px", padding: "2px 6px", fontSize: "10px", fontWeight: "bold", cursor: "pointer" }}>📤 Trainer informieren</button>}
                               {isAdmin && <button onClick={() => handleReopenPitch(closure)} style={{ display: "block", marginTop: "3px", background: "white", color: "#c0392b", border: "none", borderRadius: "3px", padding: "2px 6px", fontSize: "10px", fontWeight: "bold", cursor: "pointer" }}>Sperre aufheben</button>}
                             </div>
                           )}

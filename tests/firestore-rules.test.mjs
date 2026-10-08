@@ -7,7 +7,7 @@
 
 import { readFileSync } from "fs";
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, where, Timestamp, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, getDocs, deleteDoc, updateDoc, collection, query, where, Timestamp, addDoc, serverTimestamp } from "firebase/firestore";
 
 const rulesPath = process.argv[2] || "firestore.rules";
 const env = await initializeTestEnvironment({
@@ -41,6 +41,11 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "backups", "2026-10-08", "parts", "0000"), { index: 0, data: "{}" });
   await setDoc(doc(db, "attendance_events", "evF"), { clubId: "svon", team: "F-Jugend", closed: false, roster: [{ key: "pF", name: "Lian B." }], rosterKeys: ["pF"] });
   await setDoc(doc(db, "attendance_events", "evD"), { clubId: "svon", team: "D-Jugend", closed: false, roster: [], rosterKeys: ["pD"] });
+  const infoBase = { clubId: "svon", title: "Info", text: "", teams: [], from: "2026-10-01", until: "2026-10-31", authorName: "X", createdAt: past };
+  await setDoc(doc(db, "trainer_infos", "infoF"), { ...infoBase, authorUid: "coachF", expiresAt: future });
+  await setDoc(doc(db, "trainer_infos", "infoL"), { ...infoBase, authorUid: "leitung", expiresAt: future });
+  await setDoc(doc(db, "trainer_infos", "infoL2"), { ...infoBase, authorUid: "leitung", expiresAt: future });
+  await setDoc(doc(db, "trainer_infos", "infoOld"), { ...infoBase, authorUid: "leitung", expiresAt: past });
   await setDoc(doc(db, "attendance_events", "evClosed"), { clubId: "svon", team: "F-Jugend", closed: true, roster: [], rosterKeys: ["pF"] });
 });
 
@@ -198,6 +203,31 @@ await t("Jugendleitung: Sicherungen lesen", false, () => getDocs(collection(leit
 await t("Trainer: Sicherungsteil lesen", false, () => getDoc(doc(coachF, "backups", "2026-10-08", "parts", "0000")));
 await t("Ticker: Sicherungen lesen", false, () => getDocs(collection(ticker, "backups")));
 await t("Zuschauer: Sicherungen lesen", false, () => getDocs(collection(publicDb, "backups")));
+
+// --- Pinnwand für Trainer ---
+const newInfo = (uid, extra = {}) => ({ clubId: "svon", title: "Platz zu", text: "Regen", teams: ["F-Jugend"], from: "2026-10-08", until: "2026-10-09",
+  expiresAt: future, authorUid: uid, authorName: "F", createdAt: serverTimestamp(), ...extra });
+const inDays = (d) => Timestamp.fromMillis(Date.now() + d * 86400_000);
+await t("Trainer: Infos lesen", true, () => getDocs(query(collection(coachF, "trainer_infos"), where("clubId", "==", "svon"))));
+await t("Trainer: Info anlegen", true, () => addDoc(collection(coachF, "trainer_infos"), newInfo("coachF")));
+await t("Admin: Info anlegen", true, () => addDoc(collection(admin, "trainer_infos"), newInfo("adminUid")));
+await t("Trainer: Info ohne Zeitraum", false, () => addDoc(collection(coachF, "trainer_infos"), (({ expiresAt, until, ...rest }) => rest)(newInfo("coachF"))));
+await t("Trainer: Info schon abgelaufen", false, () => addDoc(collection(coachF, "trainer_infos"), newInfo("coachF", { expiresAt: past })));
+await t("Trainer: Info länger als 1 Jahr", false, () => addDoc(collection(coachF, "trainer_infos"), newInfo("coachF", { expiresAt: inDays(400) })));
+await t("Trainer: Info Ende vor Start", false, () => addDoc(collection(coachF, "trainer_infos"), newInfo("coachF", { from: "2026-10-10", until: "2026-10-09" })));
+await t("Trainer: Info im Namen eines anderen", false, () => addDoc(collection(coachF, "trainer_infos"), newInfo("leitung")));
+await t("Trainer: Info mit Zusatzfeld", false, () => addDoc(collection(coachF, "trainer_infos"), newInfo("coachF", { hack: 1 })));
+await t("Trainer: eigene Info ändern", true, () => updateDoc(doc(coachF, "trainer_infos", "infoF"), { title: "Neu", expiresAt: inDays(5) }));
+await t("Trainer: fremde Info ändern", false, () => updateDoc(doc(coachF, "trainer_infos", "infoL"), { title: "Neu" }));
+await t("Trainer: Verfasser ändern", false, () => updateDoc(doc(coachF, "trainer_infos", "infoF"), { authorUid: "leitung" }));
+await t("Admin: fremde Info ändern", true, () => updateDoc(doc(admin, "trainer_infos", "infoL"), { title: "Admin" }));
+await t("Trainer: fremde Info löschen", false, () => deleteDoc(doc(coachF, "trainer_infos", "infoL2")));
+await t("Trainer: abgelaufene Info löschen", true, () => deleteDoc(doc(coachF, "trainer_infos", "infoOld")));
+await t("Trainer: eigene Info löschen", true, () => deleteDoc(doc(coachF, "trainer_infos", "infoF")));
+await t("Admin: fremde Info löschen", true, () => deleteDoc(doc(admin, "trainer_infos", "infoL2")));
+await t("Ticker: Infos lesen", false, () => getDocs(collection(ticker, "trainer_infos")));
+await t("Zuschauer: Infos lesen", false, () => getDocs(collection(publicDb, "trainer_infos")));
+await t("Fremder: Info anlegen", false, () => addDoc(collection(stranger, "trainer_infos"), newInfo("stranger")));
 
 // --- Fremdes, selbst registriertes Konto ---
 await t("Fremder: Spieler lesen", false, () => getDoc(doc(stranger, "youth_players", "pF")));

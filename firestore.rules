@@ -166,6 +166,36 @@ service cloud.firestore {
       }
     }
 
+    // 5e. Pinnwand für Trainer: Trainer und Admins lesen und schreiben Infos.
+    //     Jede Info braucht einen Zeitraum (höchstens ~1 Jahr). Ändern/löschen: Verfasser oder Admin,
+    //     abgelaufene Infos darf jeder Trainer löschen (Aufräumen beim Laden).
+    function validTrainerInfo(d) {
+      return d.keys().hasOnly(['clubId', 'title', 'text', 'teams', 'from', 'until', 'expiresAt', 'authorUid', 'authorName', 'createdAt'])
+        && d.clubId is string
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 100
+        && d.text is string && d.text.size() <= 2000
+        && d.teams is list && d.teams.size() <= 30
+        && d.from is string && d.until is string && d.from <= d.until
+        && d.expiresAt is timestamp
+        && d.expiresAt > request.time
+        && d.expiresAt < request.time + duration.value(370, 'd')
+        && d.authorName is string;
+    }
+    match /trainer_infos/{infoId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && validTrainerInfo(request.resource.data)
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update: if (isAdmin() || (isStaff() && resource.data.authorUid == request.auth.uid))
+        && validTrainerInfo(request.resource.data)
+        && request.resource.data.authorUid == resource.data.authorUid
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin()
+        || (isStaff() && resource.data.authorUid == request.auth.uid)
+        || (isStaff() && resource.data.expiresAt < request.time);
+    }
+
     // 6. Ticker-Tagescodes: Trainer erzeugen/sehen den Code, Ticker-Personen nur mit gültigem Code
     match /ticker_codes/{club} {
       allow read: if isStaff() || hasValidTickerSession(club);
