@@ -50,6 +50,9 @@ export default function SummerCamp({ clubId }) {
   }, [clubId]);
 
   const settings = withDefaults(settingsByYear[campYear]);
+  const openCosts = () => setSettingsDraft(JSON.parse(JSON.stringify(settings)));
+  // Letztes Jahr vor dem gewählten, für das Preise gespeichert sind
+  const previousYear = Object.keys(settingsByYear).map(Number).filter(y => y < campYear).sort((a, b) => b - a)[0];
   const saveYearSettings = (newSettings) =>
     setDoc(doc(db, "summercamp_settings", clubId), { years: { ...settingsByYear, [campYear]: newSettings } });
 
@@ -99,7 +102,7 @@ export default function SummerCamp({ clubId }) {
           <select value={campYear} onChange={(e) => setCampYear(Number(e.target.value))} style={{ ...inputStyle, width: "auto", fontWeight: "bold" }}>
             {[thisYear + 1, thisYear, thisYear - 1, thisYear - 2, thisYear - 3].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <button onClick={() => setSettingsDraft(JSON.parse(JSON.stringify(settings)))} style={button("#7f8c8d")}>⚙ Preise</button>
+          <button onClick={openCosts} style={button("#7f8c8d")}>⚙ Preise & Kosten</button>
         </div>
       </div>
 
@@ -112,8 +115,8 @@ export default function SummerCamp({ clubId }) {
       </div>
 
       {tab === "dashboard" && <Dashboard participants={participants} staff={staff} donations={donations} settings={settings} />}
-      {tab === "participants" && <Participants clubId={clubId} campYear={campYear} participants={participants} settings={settings} />}
-      {tab === "staff" && <Staff clubId={clubId} campYear={campYear} staff={staff} settings={settings} />}
+      {tab === "participants" && <Participants clubId={clubId} campYear={campYear} participants={participants} settings={settings} onEditCosts={openCosts} />}
+      {tab === "staff" && <Staff clubId={clubId} campYear={campYear} staff={staff} settings={settings} onEditCosts={openCosts} />}
       {tab === "groups" && <Groups campYear={campYear} participants={participants} staff={staff} settings={settings} onSaveGroups={(groups) => saveYearSettings({ ...settings, groups })} />}
       {tab === "donations" && <Donations clubId={clubId} campYear={campYear} donations={donations} />}
 
@@ -121,8 +124,21 @@ export default function SummerCamp({ clubId }) {
 
       {settingsDraft && (
         <Modal onClose={() => setSettingsDraft(null)} maxWidth="500px">
-          <h3 style={{ margin: "0 0 4px 0", color: "#2146d0" }}>⚙ Preise Sommercamp {campYear}</h3>
-          <p style={{ fontSize: "11px", color: "#888", margin: "0 0 12px 0" }}>Gelten für alle Anmeldungen dieses Jahres (außer mit Sonderpreis).</p>
+          <h3 style={{ margin: "0 0 4px 0", color: "#2146d0" }}>⚙ Preise & Kosten Sommercamp {campYear}</h3>
+          <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>Gelten nur für {campYear}. Andere Jahre behalten ihre eigenen Preise und Kosten.</p>
+          {!settingsByYear[campYear] && (
+            <p style={{ fontSize: "12px", background: "#fef9e7", border: "1px solid #f7dc6f", borderRadius: "6px", padding: "6px 8px", margin: "0 0 10px 0" }}>
+              Für {campYear} sind noch keine eigenen Preise gespeichert – angezeigt werden die Standardwerte.
+            </p>
+          )}
+          {previousYear && (
+            <button
+              onClick={() => setSettingsDraft({ ...JSON.parse(JSON.stringify(withDefaults(settingsByYear[previousYear]))), groups: settingsDraft.groups })}
+              style={{ ...button("#eef2ff", "#2146d0"), border: "1px solid #c7d2fe", width: "100%", marginBottom: "12px", fontSize: "12px" }}
+            >
+              📋 Preise & Kosten aus {previousYear} übernehmen (danach anpassen und speichern)
+            </button>
+          )}
 
           <h4 style={{ fontSize: "13px", margin: "0 0 6px 0" }}>Teilnahmegebühr</h4>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>

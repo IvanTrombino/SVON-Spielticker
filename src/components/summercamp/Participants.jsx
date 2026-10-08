@@ -13,7 +13,7 @@ const emptyParticipant = () => ({
 
 const hasAllergy = (text) => text && !/^(keine|-|nein)/i.test(text.trim());
 
-export default function Participants({ clubId, campYear, participants, settings }) {
+export default function Participants({ clubId, campYear, participants, settings, onEditCosts }) {
   const [form, setForm] = useState(null);
   const [search, setSearch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +77,7 @@ export default function Participants({ clubId, campYear, participants, settings 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
         <input type="text" placeholder="🔍 Name, Erziehungsberechtigte oder Verein suchen..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, flex: "1 1 240px", width: "auto" }} />
         <button onClick={() => setForm(emptyParticipant())} style={button("#27ae60")}>➕ Anmeldung</button>
+        <button onClick={onEditCosts} style={button("#7f8c8d")}>✏️ Kosten {campYear} ändern</button>
         <button onClick={exportCSV} style={button("#2146d0")}>📥 Excel (CSV)</button>
       </div>
 

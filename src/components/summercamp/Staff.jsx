@@ -8,7 +8,7 @@ import { Modal, Field } from "./ui";
 const emptyStaff = () => ({ lastName: "", firstName: "", role: "Trainer", shirtSize: "", shirtName: "", phone: "", email: "", notes: "" });
 
 // Betreuer des Sommercamps mit T-Shirt (Größe + Name) und Vereinskosten
-export default function Staff({ clubId, campYear, staff, settings }) {
+export default function Staff({ clubId, campYear, staff, settings, onEditCosts }) {
   const [form, setForm] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const costEach = staffCostSum(settings);
@@ -57,6 +57,7 @@ export default function Staff({ clubId, campYear, staff, settings }) {
     <div>
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px", justifyContent: "flex-end" }}>
         <button onClick={() => setForm(emptyStaff())} style={button("#27ae60")}>➕ Betreuer</button>
+        <button onClick={onEditCosts} style={button("#7f8c8d")}>✏️ Kosten {campYear} ändern</button>
         <button onClick={exportCSV} style={button("#2146d0")}>📥 Excel (CSV)</button>
       </div>
 
@@ -93,7 +94,7 @@ export default function Staff({ clubId, campYear, staff, settings }) {
           </table>
         </div>
       )}
-      <p style={{ fontSize: "11px", color: "#888" }}>Die Gruppen-Zuteilung erfolgt im Reiter „Gruppen“. Kosten pro Betreuer werden unter „⚙ Preise“ eingestellt.</p>
+      <p style={{ fontSize: "11px", color: "#888" }}>Die Gruppen-Zuteilung erfolgt im Reiter „Gruppen“. Kosten pro Betreuer: „✏️ Kosten {campYear} ändern“.</p>
 
       {form && (
         <Modal onClose={() => setForm(null)} maxWidth="520px">
