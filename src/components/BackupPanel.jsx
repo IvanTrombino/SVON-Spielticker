@@ -89,7 +89,9 @@ export default function BackupPanel() {
                 <strong>{b.createdAt?.toDate().toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong>
                 <span style={{ color: "#888" }}> · {b.trigger} · {formatSize(b.sizeBytes || 0)}</span>
                 <div style={{ color: "#666", marginTop: "2px" }}>
-                  {Object.entries(b.counts || {}).map(([name, count]) => `${COLLECTION_NAMES[name] || name}: ${count}`).join(" · ")}
+                  {Object.entries(b.counts || {})
+                    .sort(([a], [c]) => (Object.keys(COLLECTION_NAMES).indexOf(a) + 1 || 99) - (Object.keys(COLLECTION_NAMES).indexOf(c) + 1 || 99))
+                    .map(([name, count]) => `${COLLECTION_NAMES[name] || name}: ${count}`).join(" · ")}
                 </div>
               </div>
               <button onClick={() => download(b)} disabled={downloading === b.id} style={{ padding: "6px 10px", background: "#2146d0", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px" }}>
