@@ -156,6 +156,16 @@ service cloud.firestore {
       }
     }
 
+    // 5d. Datensicherungen: nur Admins lesen; geschrieben wird nur vom Server (api/backup.js)
+    match /backups/{backupId} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /parts/{part} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
     // 6. Ticker-Tagescodes: Trainer erzeugen/sehen den Code, Ticker-Personen nur mit gültigem Code
     match /ticker_codes/{club} {
       allow read: if isStaff() || hasValidTickerSession(club);

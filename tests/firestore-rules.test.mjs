@@ -37,6 +37,8 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "summercamp_staff", "st1"), { clubId: "svon", campYear: 2026 });
   await setDoc(doc(db, "summercamp_donations", "d1"), { clubId: "svon", campYear: 2026, amount: 50 });
   await setDoc(doc(db, "summercamp_settings", "svon"), { years: {} });
+  await setDoc(doc(db, "backups", "2026-10-08"), { parts: 1 });
+  await setDoc(doc(db, "backups", "2026-10-08", "parts", "0000"), { index: 0, data: "{}" });
   await setDoc(doc(db, "attendance_events", "evF"), { clubId: "svon", team: "F-Jugend", closed: false, roster: [{ key: "pF", name: "Lian B." }], rosterKeys: ["pF"] });
   await setDoc(doc(db, "attendance_events", "evD"), { clubId: "svon", team: "D-Jugend", closed: false, roster: [], rosterKeys: ["pD"] });
   await setDoc(doc(db, "attendance_events", "evClosed"), { clubId: "svon", team: "F-Jugend", closed: true, roster: [], rosterKeys: ["pF"] });
@@ -186,6 +188,16 @@ await t("Trainer F: Termin auf D-Jugend umschreiben", false, () => setDoc(doc(co
 await t("Trainer F: D-Termin löschen", false, () => deleteDoc(doc(coachF, "attendance_events", "evD")));
 await t("Trainer F: Antwort löschen", true, () => deleteDoc(resp(coachF, "evF", "pF")));
 await t("Admin: Termin löschen", true, () => deleteDoc(doc(admin, "attendance_events", "evD")));
+
+// --- Datensicherungen ---
+await t("Admin: Sicherungen auflisten", true, () => getDocs(collection(admin, "backups")));
+await t("Admin: Sicherung herunterladen", true, () => getDocs(collection(admin, "backups", "2026-10-08", "parts")));
+await t("Admin: Sicherung schreiben (nur Server)", false, () => setDoc(doc(admin, "backups", "x"), { a: 1 }));
+await t("Admin: Sicherung löschen (nur Server)", false, () => deleteDoc(doc(admin, "backups", "2026-10-08")));
+await t("Jugendleitung: Sicherungen lesen", false, () => getDocs(collection(leitung, "backups")));
+await t("Trainer: Sicherungsteil lesen", false, () => getDoc(doc(coachF, "backups", "2026-10-08", "parts", "0000")));
+await t("Ticker: Sicherungen lesen", false, () => getDocs(collection(ticker, "backups")));
+await t("Zuschauer: Sicherungen lesen", false, () => getDocs(collection(publicDb, "backups")));
 
 // --- Fremdes, selbst registriertes Konto ---
 await t("Fremder: Spieler lesen", false, () => getDoc(doc(stranger, "youth_players", "pF")));
