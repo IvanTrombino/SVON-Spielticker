@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function PlayerManager({ clubId, teams }) {
-  const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
+// fixedTeam: nur diese Mannschaft bearbeiten (Trainer Portal), ohne Mannschaftsauswahl
+export default function PlayerManager({ clubId, teams, fixedTeam }) {
+  const [chosenTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
+  const selectedTeam = fixedTeam || chosenTeam;
   const [playerName, setPlayerName] = useState("");
   const [playersData, setPlayersData] = useState({});
 
@@ -17,10 +19,10 @@ export default function PlayerManager({ clubId, teams }) {
   const [editedName, setEditedName] = useState(""); 
 
   useEffect(() => {
-    if (teams && teams.length > 0 && !teams.includes(selectedTeam)) {
+    if (!fixedTeam && teams && teams.length > 0 && !teams.includes(chosenTeam)) {
       setSelectedTeam(teams[0]);
     }
-  }, [teams, selectedTeam]);
+  }, [teams, chosenTeam, fixedTeam]);
 
   useEffect(() => {
     if (!clubId) return;
@@ -168,8 +170,13 @@ export default function PlayerManager({ clubId, teams }) {
 
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto", color: "#333" }}>
+      {fixedTeam ? (
+        <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Spielerliste {fixedTeam} ({currentTeamPlayers.length})</h3>
+      ) : (
       <h2 style={{ color: "#2146d0", marginBottom: "20px" }}>👤 Spielerverwaltung ({clubId?.toUpperCase()})</h2>
+      )}
 
+      {!fixedTeam && (
       <select
         value={selectedTeam}
         onChange={(e) => {
@@ -199,6 +206,7 @@ export default function PlayerManager({ clubId, teams }) {
           </option>
         ))}
       </select>
+      )}
 
       <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
         <input

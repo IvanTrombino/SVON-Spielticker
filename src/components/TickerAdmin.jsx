@@ -25,11 +25,13 @@ function AdminPitches({ clubId }) {
 }
 
 // Live-Ticker-Verwaltung: Spieler & Spielstatistik; Mannschaften und Platzkonflikte nur für Admins
-export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
-  const [tab, setTab] = useState("players");
+// playerTeams: Mannschaften, deren Spielernamen hier gepflegt werden (Trainer Portal: Aktive dort unter "Mein Team")
+export default function TickerAdmin({ clubId, teams, canManageTeams = false, playerTeams = teams }) {
+  const showPlayers = canManageTeams || playerTeams.length > 0;
+  const [tab, setTab] = useState(showPlayers ? "players" : "stats");
 
   const tabs = [
-    { id: "players", label: "👤 Spieler" },
+    ...(showPlayers ? [{ id: "players", label: "👤 Spieler" }] : []),
     { id: "stats", label: "🏆 Spielstatistik" },
     ...(canManageTeams ? [{ id: "teams", label: "👥 Teams" }, { id: "pitches", label: "🏟️ Plätze" }, { id: "conflicts", label: "⚠️ Platzkonflikte" }, { id: "backup", label: "💾 Sicherung" }] : [])
   ];
@@ -53,7 +55,7 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false }) {
         <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Für deine Mannschaften gibt es noch kein Team im Live-Ticker.</p>
       ) : (
         <>
-          {tab === "players" && <PlayerManager clubId={clubId} teams={teams} />}
+          {tab === "players" && showPlayers && <PlayerManager clubId={clubId} teams={playerTeams} />}
           {tab === "stats" && <Statistics clubId={clubId} teams={teams} />}
         </>
       ))}

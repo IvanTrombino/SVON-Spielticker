@@ -24,3 +24,10 @@ const orderIndex = (name) => {
 // Vergleicht zwei Mannschaftsnamen; unbekannte Teams landen alphabetisch am Ende
 export const compareTeamNames = (a, b) =>
   orderIndex(a) - orderIndex(b) || (a || "").localeCompare(b || "");
+
+// Gleiche Mannschaft trotz unterschiedlicher Schreibweise ("1.Mannschaft" == "1. Mannschaft")
+export const isSameTeam = (a, b) => normalize(a) === normalize(b);
+
+// Aktive Mannschaften: kein Spielerstamm in der Jugenddatenbank, Namen werden im Trainer Portal gepflegt
+export const ACTIVE_TEAMS = ["1. Mannschaft", "2. Mannschaft", "3. Mannschaft", "Damen"];
+export const isActiveTeam = (name) => ACTIVE_TEAMS.some((t) => isSameTeam(t, name));

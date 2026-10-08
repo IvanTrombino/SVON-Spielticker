@@ -5,8 +5,9 @@ import { db } from "../firebase";
 import PitchManager from "./PitchManager"; // <-- NEU: Import für die Platzbelegung
 import TickerAdmin from "./TickerAdmin";
 import AttendanceCoach from "./AttendanceCoach";
+import PlayerManager from "./PlayerManager";
 import { getOrCreateDailyCode } from "../tickerCode";
-import { compareTeamNames } from "../teamOrder";
+import { compareTeamNames, isActiveTeam, isSameTeam } from "../teamOrder";
 
 export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- LOGIN STATES ---
@@ -139,6 +140,10 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   ).slice().sort(compareTeamNames);
 
   const activeViewTeam = selectedTeam || (currentTeamOptions[0]?.name ?? "");
+
+  // Aktive: Spielernamen werden hier unter "Mein Team" gepflegt (Schlüssel = Ticker-Mannschaftsname)
+  const isActiveView = isActiveTeam(activeViewTeam);
+  const activeTickerTeam = tickerTeams.find(t => isSameTeam(t, activeViewTeam));
 
   // --- 2. TEAMS LADEN ---
   useEffect(() => {
@@ -402,7 +407,20 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       </div>
 
       {/* INHALTE JE NACH TAB */}
-      {activeTab === "team" && (
+      {activeTab === "team" && isActiveView && (
+        <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          {activeTickerTeam ? (
+            <>
+              <PlayerManager clubId={clubId} teams={coachTickerTeams.filter(isActiveTeam)} fixedTeam={activeTickerTeam} />
+              <p style={{ color: "#777", fontSize: "12px", textAlign: "center", margin: "10px 0 0 0" }}>Diese Namen stehen im Live-Ticker für die Kadererstellung zur Auswahl.</p>
+            </>
+          ) : (
+            <p style={{ color: "#777", textAlign: "center" }}>Für „{activeViewTeam}“ gibt es noch kein Team im Live-Ticker. Bitte im Admin Portal unter „Teams“ anlegen.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "team" && !isActiveView && (
         <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
           <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Spielerliste ({teamPlayers.length})</h3>
           {teamPlayers.length === 0 ? <p style={{ color: "#777", textAlign: "center" }}>Dieser Mannschaft sind aktuell keine Spieler zugewiesen.</p> : (
@@ -574,7 +592,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       )}
 
       {activeTab === "ticker" && (
-        <TickerAdmin clubId={clubId} teams={coachTickerTeams} />
+        <TickerAdmin clubId={clubId} teams={coachTickerTeams} playerTeams={coachTickerTeams.filter(t => !isActiveTeam(t))} />
       )}
 
     </div>
