@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { findOverlappingBookings, createConflictRequest, findMoveConflicts, moveBookingInList, applyBookingEdit, cancelOccurrence, seriesOccurrences, isPitchClosed, bookingsOnPitchDay } from "../pitchConflicts";
@@ -648,7 +648,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
               <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>💡 Buchung antippen zum Bearbeiten (Zeit, Platzanteil, Platz …) – oder auf einen anderen Platz/Tag ziehen.</p>
 
               {/* GRIDS PRO PLATZ */}
-              {pitches.filter(p => filterPitch ? p.id === filterPitch : true).map((p, idx) => (
+              {pitches.filter(p => filterPitch ? p.id === filterPitch : true).map((p) => (
                 <div key={p.id} style={{ marginBottom: "20px", background: "white", borderRadius: "10px", border: "1px solid #ddd", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
                   
                   <div style={{ padding: "12px 15px", background: "white", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #eee" }}>

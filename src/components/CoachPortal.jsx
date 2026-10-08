@@ -144,10 +144,9 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
     if (!clubId || !loggedInCoach) return;
     
     const unsub = onSnapshot(doc(db, "youth_settings", clubId), (docSnap) => {
-      let loadedTeams = [];
+      let loadedTeams;
       if (docSnap.exists() && docSnap.data().teams && docSnap.data().teams.length > 0) {
-        loadedTeams = docSnap.data().teams;
-        loadedTeams = [...loadedTeams].sort((a, b) => compareTeamNames(a.name, b.name));
+        loadedTeams = [...docSnap.data().teams].sort((a, b) => compareTeamNames(a.name, b.name));
       } else {
         loadedTeams = fallbackTeams;
       }
@@ -339,9 +338,10 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   }
 
   // --- RENDER: TRAINER PORTAL ---
-  const TabButton = ({ id, label, icon }) => (
-    <button 
-      onClick={() => setActiveTab(id)} 
+  const tabButton = (id, icon, label) => (
+    <button
+      key={id}
+      onClick={() => setActiveTab(id)}
       style={{ flex: 1, padding: "12px 10px", border: "none", borderRadius: "8px", background: activeTab === id ? "#2146d0" : "#e0e7ff", color: activeTab === id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "14px", transition: "all 0.2s" }}
     >
       {icon} {label}
@@ -391,12 +391,12 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
 
       {/* NAVIGATION */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
-        <TabButton id="team" icon="👦" label="Mein Team" />
-        <TabButton id="attendance" icon="📋" label="Trainingserfassung" />
-        <TabButton id="stats" icon="📊" label="Statistik" />
+        {tabButton("team", "👦", "Mein Team")}
+        {tabButton("attendance", "📋", "Trainingserfassung")}
+        {tabButton("stats", "📊", "Statistik")}
         {/* NEU: PLATZBELEGUNG BUTTON */}
-        <TabButton id="pitches" icon="🏟️" label="Plätze" />
-        <TabButton id="ticker" icon="⚽" label="Live-Ticker" />
+        {tabButton("pitches", "🏟️", "Plätze")}
+        {tabButton("ticker", "⚽", "Live-Ticker")}
       </div>
 
       {/* INHALTE JE NACH TAB */}

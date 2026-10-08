@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
@@ -9,7 +9,7 @@ const formatMatchDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
   ? new Date(`${value}T12:00:00`).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })
   : value;
 
-export default function PublicView({ clubId, teams, onBackToAdmin }) {
+export default function PublicView({ clubId, teams }) {
   const [selectedTeam, setSelectedTeam] = useState("übersicht"); // Standardmäßig auf Gesamtübersicht starten
   
   // --- Tab-Navigation für die Fans (innerhalb einer Mannschaft) ---
@@ -38,11 +38,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
   const [savedMatches, setSavedMatches] = useState([]);
   const [expandedMatchId, setExpandedMatchId] = useState(null);
 
-  const [wantsNotifications, setWantsNotifications] = useState(false);
-  const wantsNotificationsRef = useRef(false); 
   
-  const [showInfo, setShowInfo] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const historyLengthRef = useRef(0);
 
@@ -194,12 +190,6 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
           setIsRunning(false);
         }
 
-        if (newHistory.length > historyLengthRef.current && historyLengthRef.current !== 0) {
-          if (wantsNotificationsRef.current) {
-            const lastEvent = newHistory[newHistory.length - 1];
-            triggerNotification(lastEvent, data.homeTeam || selectedTeam, data.awayTeam || "Gast");
-          }
-        }
         historyLengthRef.current = newHistory.length;
 
       } else {
@@ -245,65 +235,7 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
     return "📝";
   };
 
-  const toggleNotifications = () => {
-    if (wantsNotifications) {
-      setWantsNotifications(false);
-      wantsNotificationsRef.current = false;
-      return;
-    }
-
-    if (!("Notification" in window)) {
-      alert("Dein Browser unterstützt Push-Nachrichten nicht direkt.");
-      return;
-    }
-
-    Notification.requestPermission().then((permission) => {
-      if (permission === "granted") {
-        setWantsNotifications(true);
-        wantsNotificationsRef.current = true;
-        new Notification("Live-Ticker", {
-          body: "Benachrichtigungen aktiviert!",
-          icon: logo
-        });
-      } else {
-        alert("Du hast die Benachrichtigungen in deinen Browser-Einstellungen blockiert.");
-      }
-    });
-  };
-
-  const triggerNotification = (event, currentHome, currentAway) => {
-    if (Notification.permission === "granted") {
-      let title = "Live-Ticker";
-      let body = "";
-      const eventTeam = event.team === "home" ? currentHome : currentAway;
-
-      if (event.type === "goal") {
-        title = `⚽ TOOOOR für ${eventTeam}!`;
-        body = `Torschütze: ${event.player} (Minute ${event.minute})`;
-      } else if (event.type === "yellow") {
-        title = `🟨 Gelbe Karte für ${eventTeam}`;
-        body = `Spieler: ${event.player} (Minute ${event.minute})`;
-      } else if (event.type === "yellowred") {
-        title = `🟨🟥 Gelb-Rot für ${eventTeam}`;
-        body = `Spieler: ${event.player} (Minute ${event.minute})`;
-      } else if (event.type === "red") {
-        title = `🟥 Rote Karte für ${eventTeam}`;
-        body = `Spieler: ${event.player} (Minute ${event.minute})`;
-      }
-
-      new Notification(title, { body, icon: logo });
-    }
-  };
-
   const displayDate = matchDate ? new Date(matchDate).toLocaleDateString("de-DE") : "";
-  const safeChannelName = selectedTeam !== "übersicht" ? `${clubId}${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}` : clubId;
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(safeChannelName);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   // --- FILTER FÜR DIE FANS ---
   const filteredMatches = selectedTeam !== "übersicht" ? savedMatches.filter(m => (m.team || (teams && teams[0]) || "1. Mannschaft") === selectedTeam) : [];
   
@@ -369,11 +301,11 @@ export default function PublicView({ clubId, teams, onBackToAdmin }) {
             <h3 style={{ fontSize: "1.1rem", color: "#c53030", margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "8px" }}>
               🔴 Aktive Live-Spiele
             </h3>
-            {Object.entries(allTeamsLiveStatus).filter(([_, status]) => status.isRunning || status.time > 0).length === 0 ? (
+            {Object.entries(allTeamsLiveStatus).filter(([, status]) => status.isRunning || status.time > 0).length === 0 ? (
               <p style={{ color: "#718096", fontSize: "13px", margin: "0" }}>Aktuell findet kein Live-Spiel statt.</p>
             ) : (
               Object.entries(allTeamsLiveStatus)
-                .filter(([_, status]) => status.isRunning || status.time > 0)
+                .filter(([, status]) => status.isRunning || status.time > 0)
                 .map(([teamName, status]) => {
                   // Spielminute berechnen
                   const matchMinute = status.startTime 

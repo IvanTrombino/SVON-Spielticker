@@ -265,7 +265,7 @@ export default function App() {
             🏠 Zur Startseite
           </button>
         </div>
-        <PublicView clubId={clubId} teams={teams} onBackToAdmin={handleBackToHome} />
+        <PublicView clubId={clubId} teams={teams} />
         {legal}
       </div>
     );

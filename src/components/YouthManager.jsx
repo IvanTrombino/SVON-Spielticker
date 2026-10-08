@@ -4,6 +4,21 @@ import { db } from "../firebase";
 import { compareTeamNames } from "../teamOrder";
 import { buildNameDisplayMap } from "../nameConsent";
 
+// Standard-Mannschaften, solange in der Datenbank noch keine hinterlegt sind
+const DEFAULT_TEAMS = [
+  { id: "0", name: "1. Mannschaft", years: "Erwachsene", count: 1 },
+  { id: "1", name: "2. Mannschaft", years: "Erwachsene", count: 1 },
+  { id: "2", name: "3. Mannschaft", years: "Erwachsene", count: 1 },
+  { id: "3", name: "Damen", years: "Erwachsene", count: 1 },
+  { id: "4", name: "A-Jugend", years: "2006, 2007", count: 1 },
+  { id: "5", name: "B-Jugend", years: "2008, 2009", count: 1 },
+  { id: "6", name: "C-Jugend", years: "2010, 2011", count: 1 },
+  { id: "7", name: "D-Jugend", years: "2012, 2013", count: 1 },
+  { id: "8", name: "E-Jugend", years: "2014, 2015", count: 1 },
+  { id: "9", name: "F-Jugend", years: "2016, 2017", count: 1 },
+  { id: "10", name: "G-Jugend", years: "2018 u. jünger", count: 1 }
+];
+
 // ISO-Datum -> deutsches Datum; Freitext wie "Nicht angegeben" bleibt unverändert
 const formatDateDE = (value) => /^\d{4}-\d{2}-\d{2}/.test(value || "") ? new Date(value).toLocaleDateString("de-DE") : (value || "-");
 
@@ -242,39 +257,13 @@ export default function YouthManager({ clubId }) {
 
   const sortTeamsLogic = (a, b) => compareTeamNames(a.name, b.name);
 
-  // 1. Teams laden und E-R-Z-W-I-N-G-E-N in Firebase zu sortieren
+  // 1. Teams laden (Sortierung nur für die Anzeige – es wird nichts zurückgeschrieben)
   useEffect(() => {
     if (!clubId) return;
-    const unsub = onSnapshot(doc(db, "youth_settings", clubId), async (docSnap) => {
-      let loadedTeams = [];
-      if (docSnap.exists() && docSnap.data().teams) {
-        loadedTeams = docSnap.data().teams;
-      } else {
-        loadedTeams = [
-          { id: "0", name: "1. Mannschaft", years: "Erwachsene", count: 1 },
-          { id: "1", name: "2. Mannschaft", years: "Erwachsene", count: 1 },
-          { id: "2", name: "3. Mannschaft", years: "Erwachsene", count: 1 },
-          { id: "3", name: "Damen", years: "Erwachsene", count: 1 },
-          { id: "4", name: "A-Jugend", years: "2006, 2007", count: 1 },
-          { id: "5", name: "B-Jugend", years: "2008, 2009", count: 1 },
-          { id: "6", name: "C-Jugend", years: "2010, 2011", count: 1 },
-          { id: "7", name: "D-Jugend", years: "2012, 2013", count: 1 },
-          { id: "8", name: "E-Jugend", years: "2014, 2015", count: 1 },
-          { id: "9", name: "F-Jugend", years: "2016, 2017", count: 1 },
-          { id: "10", name: "G-Jugend", years: "2018 u. jünger", count: 1 }
-        ];
-      }
-
-      // Sortieren erzwingen
+    const unsub = onSnapshot(doc(db, "youth_settings", clubId), (docSnap) => {
+      const loadedTeams = docSnap.exists() && docSnap.data().teams ? [...docSnap.data().teams] : [...DEFAULT_TEAMS];
       loadedTeams.sort(sortTeamsLogic);
       setTeamSettings(loadedTeams);
-
-      // Schreibt die sortierte Liste direkt in Firebase zurück, damit die Cloud sauber überschrieben wird!
-      try {
-        await setDoc(doc(db, "youth_settings", clubId), { teams: loadedTeams }, { merge: true });
-      } catch (err) {
-        console.error("Fehler beim automatischen Speichern der Sortierung:", err);
-      }
     });
     return () => unsub();
   }, [clubId]);
@@ -357,8 +346,8 @@ export default function YouthManager({ clubId }) {
       return;
     }
 
-    let headers = [];
-    let rows = [];
+    let headers;
+    let rows;
 
     if (type === "active") {
       headers = ["Nachname", "Vorname", "Jugend", "Geburtsdatum", "Alter", "Jahrgang", "Passnummer", "SVON", "DFB", "Bilderrechte", "Namensnennung Ticker", "Strasse", "PLZ", "Wohnort", "Vater", "Tel. Vater", "Mutter", "Tel. Mutter", "Medizinische Hinweise / Allergien"];
@@ -635,8 +624,8 @@ export default function YouthManager({ clubId }) {
     setEditingTeamId(null);
   };
 
-  const TabButton = ({ id, label }) => (
-    <button onClick={() => setActiveTab(id)} style={{ padding: "10px 12px", border: "none", borderRadius: "8px", background: activeTab === id ? "#2146d0" : "#e0e7ff", color: activeTab === id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "13px", textAlign: "center", flex: "1 1 calc(33% - 10px)", minWidth: "100px", transition: "background 0.2s" }}>
+  const tabButton = (id, label) => (
+    <button key={id} onClick={() => setActiveTab(id)} style={{ padding: "10px 12px", border: "none", borderRadius: "8px", background: activeTab === id ? "#2146d0" : "#e0e7ff", color: activeTab === id ? "white" : "#3730a3", fontWeight: "bold", cursor: "pointer", fontSize: "13px", textAlign: "center", flex: "1 1 calc(33% - 10px)", minWidth: "100px", transition: "background 0.2s" }}>
       {label}
     </button>
   );
@@ -646,12 +635,12 @@ export default function YouthManager({ clubId }) {
       <h2 style={{ color: "#2146d0", marginBottom: "15px", textAlign: "center", fontSize: "20px" }}>👦 Jugendabteilung ({clubId?.toUpperCase()})</h2>
 
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "15px" }}>
-        <TabButton id="dashboard" label="📊 Dashboard" />
-        <TabButton id="add" label="➕ Neuer Spieler" />
-        <TabButton id="active" label={`👦 Aktive (${activePlayers.length})`} />
-        <TabButton id="coaches" label={`🧑‍🏫 Trainer (${coaches.length})`} />
-        <TabButton id="teams" label="⚙️ Teams" />
-        <TabButton id="history" label={`🕰️ Historie (${inactivePlayers.length})`} />
+        {tabButton("dashboard", "📊 Dashboard")}
+        {tabButton("add", "➕ Neuer Spieler")}
+        {tabButton("active", `👦 Aktive (${activePlayers.length})`)}
+        {tabButton("coaches", `🧑‍🏫 Trainer (${coaches.length})`)}
+        {tabButton("teams", "⚙️ Teams")}
+        {tabButton("history", `🕰️ Historie (${inactivePlayers.length})`)}
       </div>
 
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
