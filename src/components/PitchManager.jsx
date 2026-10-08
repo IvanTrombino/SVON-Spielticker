@@ -532,19 +532,24 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
     }
   };
 
-  // Hilfsfunktion fürs Dashboard (Welche Tage trainiert Team X?)
-  const getTrainingDaysForTeam = (teamName) => {
+  // Hilfsfunktion fürs Dashboard (Wann und wo trainiert Team X?)
+  const getTrainingSlotsForTeam = (teamName) => {
+    const order = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
     const teamBookings = bookings.filter(b => b.team === teamName && b.type === "Training");
-    let days = new Set();
+    const slots = new Map();
+    const addSlot = (day, b) => {
+      const key = `${day}|${b.startTime}|${b.endTime}|${b.pitchId}`;
+      if (!slots.has(key)) slots.set(key, { day, startTime: b.startTime, endTime: b.endTime, pitch: pitchName(b.pitchId) });
+    };
     teamBookings.forEach(b => {
       if(b.repetition === "Wöchentlich" && b.days) {
-         b.days.forEach(d => days.add(d.substring(0,2))); 
+         b.days.forEach(d => addSlot(d.substring(0,2), b));
       } else if (b.date) {
          const d = new Date(b.date);
-         days.add(["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][d.getDay()]);
+         addSlot(["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][d.getDay()], b);
       }
     });
-    return Array.from(days).join("+") || "Keine Serie";
+    return [...slots.values()].sort((a, b) => order.indexOf(a.day) - order.indexOf(b.day) || (a.startTime || "").localeCompare(b.startTime || ""));
   };
 
   // --- UI STYLES ---
@@ -897,7 +902,8 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "15px" }}>
               {teams && teams.map(t => {
                  const tColor = getTeamColor(t);
-                 const trainingDays = getTrainingDaysForTeam(t);
+                 const trainingSlots = getTrainingSlotsForTeam(t);
+                 const trainingDays = [...new Set(trainingSlots.map(s => s.day))].join("+") || "Keine Serie";
                  const coachName = teamCoaches[t] || "Noch nicht zugewiesen";
 
                  return (
@@ -948,6 +954,16 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                        <div style={{ fontSize: "13px", color: "#555", display: "flex", alignItems: "center", gap: "5px" }}>
                           <span style={{ fontSize: "16px" }}>📅</span> Trainingstage: <strong style={{ color: trainingDays === "Keine Serie" ? "#999" : "#333" }}>{trainingDays}</strong>
                        </div>
+
+                       {trainingSlots.length > 0 && (
+                         <div style={{ fontSize: "12px", color: "#555", marginTop: "6px", paddingLeft: "26px", display: "flex", flexDirection: "column", gap: "3px" }}>
+                           {trainingSlots.map(s => (
+                             <div key={`${s.day}-${s.startTime}-${s.endTime}-${s.pitch}`}>
+                               🕒 <strong style={{ color: "#333" }}>{s.day} {s.startTime}–{s.endTime}</strong> <span style={{ color: "#777" }}>· {s.pitch}</span>
+                             </div>
+                           ))}
+                         </div>
+                       )}
                     </div>
                  )
               })}
