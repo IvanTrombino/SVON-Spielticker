@@ -17,8 +17,15 @@ const SUBCOLLECTIONS = { attendance_events: ["responses"] };
 const getApp = () => {
   if (getApps().length) return getApps()[0];
   if (process.env.FIRESTORE_EMULATOR_HOST) return initializeApp({ projectId: process.env.GCLOUD_PROJECT || "svon-spielticker" });
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) throw new Error("FIREBASE_SERVICE_ACCOUNT fehlt in den Vercel-Umgebungsvariablen");
-  return initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) throw new Error("FIREBASE_SERVICE_ACCOUNT fehlt in Vercel (Environment Variables speichern und danach Redeploy auslösen)");
+  let account;
+  try {
+    account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } catch {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT ist kein gültiges JSON – bitte den kompletten Inhalt der Schlüsseldatei einfügen, von { bis }");
+  }
+  if (account.type !== "service_account" || !account.private_key) throw new Error("FIREBASE_SERVICE_ACCOUNT enthält keinen Dienstkonto-Schlüssel");
+  return initializeApp({ credential: cert(account) });
 };
 
 // Firestore-Werte in reines JSON umwandeln (Zeitstempel und Verweise bleiben erkennbar)
@@ -49,8 +56,9 @@ const whoTriggered = async (req) => {
   const header = req.headers.authorization || "";
   if (process.env.CRON_SECRET && header === `Bearer ${process.env.CRON_SECRET}`) return "automatisch";
   if (!header.startsWith("Bearer ")) return null;
+  const app = getApp(); // Konfigurationsfehler sollen als solche gemeldet werden, nicht als "nicht berechtigt"
   try {
-    const token = await getAuth(getApp()).verifyIdToken(header.slice(7));
+    const token = await getAuth(app).verifyIdToken(header.slice(7));
     const isAdmin = token.firebase?.sign_in_provider === "password" && ADMIN_EMAILS.includes((token.email || "").toLowerCase());
     return isAdmin ? `manuell (${token.email})` : null;
   } catch {
