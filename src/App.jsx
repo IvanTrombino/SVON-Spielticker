@@ -1,10 +1,14 @@
-import { useState, useEffect } from "react";
-import MatchView from "./components/MatchView";
+import { useState, useEffect, lazy, Suspense } from "react";
 import PublicView from "./components/PublicView";
-import YouthAdminPage from "./components/YouthAdminPage"; 
-import CoachPortal from "./components/CoachPortal"; // NEU: Import für das Trainer-Portal
-import TickerAdmin from "./components/TickerAdmin";
-import SummerCamp from "./components/SummerCamp";
+
+// Bereiche, die Zuschauer nicht brauchen, werden erst beim Öffnen geladen (schnellerer Start am Handy)
+const MatchView = lazy(() => import("./components/MatchView"));
+const YouthAdminPage = lazy(() => import("./components/YouthAdminPage"));
+const CoachPortal = lazy(() => import("./components/CoachPortal"));
+const TickerAdmin = lazy(() => import("./components/TickerAdmin"));
+const SummerCamp = lazy(() => import("./components/SummerCamp"));
+
+const loadingFallback = <div style={{ textAlign: "center", padding: "40px", color: "#666", fontFamily: "sans-serif" }}>Lade...</div>;
 import LegalPage, { LegalFooter } from "./components/LegalPage";
 import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -278,7 +282,7 @@ export default function App() {
           <span style={{ fontWeight: "bold", fontSize: "14px" }}>🔒 Admin Portal ({clubId.toUpperCase()})</span>
           {renderNav()}
         </div>
-        <YouthAdminPage clubId={clubId} />
+        <Suspense fallback={loadingFallback}><YouthAdminPage clubId={clubId} /></Suspense>
       </div>
     );
   }
@@ -295,7 +299,7 @@ export default function App() {
             🏠 Zur Startseite
           </button>
         </div>
-        <CoachPortal clubId={clubId} tickerTeams={teams} />
+        <Suspense fallback={loadingFallback}><CoachPortal clubId={clubId} tickerTeams={teams} /></Suspense>
       </div>
     );
   }
@@ -395,9 +399,11 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: view === "summercamp" ? "1400px" : view === "admin" ? "1000px" : "600px", margin: "20px auto", padding: "0 10px" }}>
-        {view === "summercamp" && isAdmin && <SummerCamp clubId={clubId} />}
-        {view === "admin" && <TickerAdmin clubId={clubId} teams={[...teams].sort(compareTeamNames)} canManageTeams />}
-        {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={role} />}
+        <Suspense fallback={loadingFallback}>
+          {view === "summercamp" && isAdmin && <SummerCamp clubId={clubId} />}
+          {view === "admin" && <TickerAdmin clubId={clubId} teams={[...teams].sort(compareTeamNames)} canManageTeams />}
+          {view === "match" && <MatchView clubId={clubId} teams={teams} userRole={role} />}
+        </Suspense>
       </div>
     </div>
   );
