@@ -4,6 +4,7 @@ import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from "fir
 import { db } from "../firebase";
 import PitchManager from "./PitchManager"; // <-- NEU: Import für die Platzbelegung
 import TickerAdmin from "./TickerAdmin";
+import AttendanceCoach from "./AttendanceCoach";
 import { getOrCreateDailyCode } from "../tickerCode";
 import { compareTeamNames } from "../teamOrder";
 
@@ -396,6 +397,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
         {tabButton("stats", "📊", "Statistik")}
         {/* NEU: PLATZBELEGUNG BUTTON */}
         {tabButton("pitches", "🏟️", "Plätze")}
+        {tabButton("zusagen", "✅", "Zusagen")}
         {tabButton("ticker", "⚽", "Live-Ticker")}
       </div>
 
@@ -567,6 +569,10 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       )}
 
       {/* LIVE-TICKER VERWALTUNG (Mannschaften verwaltet der Admin im Admin Portal) */}
+      {activeTab === "zusagen" && (
+        <AttendanceCoach clubId={clubId} team={activeViewTeam} players={teamPlayers} coachName={`${loggedInCoach.firstName} ${loggedInCoach.lastName || ""}`.trim()} />
+      )}
+
       {activeTab === "ticker" && (
         <TickerAdmin clubId={clubId} teams={coachTickerTeams} />
       )}

@@ -7,7 +7,7 @@
 
 import { readFileSync } from "fs";
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, where, Timestamp, addDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, where, Timestamp, addDoc, serverTimestamp } from "firebase/firestore";
 
 const rulesPath = process.argv[2] || "firestore.rules";
 const env = await initializeTestEnvironment({
@@ -37,6 +37,9 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "summercamp_staff", "st1"), { clubId: "svon", campYear: 2026 });
   await setDoc(doc(db, "summercamp_donations", "d1"), { clubId: "svon", campYear: 2026, amount: 50 });
   await setDoc(doc(db, "summercamp_settings", "svon"), { years: {} });
+  await setDoc(doc(db, "attendance_events", "evF"), { clubId: "svon", team: "F-Jugend", closed: false, roster: [{ key: "pF", name: "Lian B." }], rosterKeys: ["pF"] });
+  await setDoc(doc(db, "attendance_events", "evD"), { clubId: "svon", team: "D-Jugend", closed: false, roster: [], rosterKeys: ["pD"] });
+  await setDoc(doc(db, "attendance_events", "evClosed"), { clubId: "svon", team: "F-Jugend", closed: true, roster: [], rosterKeys: ["pF"] });
 });
 
 const ctx = (uid, token) => env.authenticatedContext(uid, token).firestore();
@@ -157,6 +160,32 @@ for (const [col, id] of [["summercamp_participants", "sc1"], ["summercamp_staff"
 }
 await t("Admin: Sommercamp-Teilnehmer abfragen", true, () => getDocs(query(collection(admin, "summercamp_participants"), where("clubId", "==", "svon"), where("campYear", "==", 2026))));
 await t("Trainer: Sommercamp-Teilnehmer abfragen", false, () => getDocs(query(collection(coachF, "summercamp_participants"), where("clubId", "==", "svon"), where("campYear", "==", 2026))));
+
+// --- Zu-/Absage ---
+const resp = (db, ev, key) => doc(db, "attendance_events", ev, "responses", key);
+await t("Eltern: Termin öffnen (Link)", true, () => getDoc(doc(publicDb, "attendance_events", "evF")));
+await t("Eltern: alle Termine auflisten", false, () => getDocs(collection(publicDb, "attendance_events")));
+await t("Eltern: zusagen", true, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: Antwort ändern", true, () => setDoc(resp(publicDb, "evF", "pF"), { status: "no", comment: "krank", updatedAt: serverTimestamp() }));
+await t("Eltern: Antworten sehen", true, () => getDocs(collection(publicDb, "attendance_events", "evF", "responses")));
+await t("Eltern: Kind nicht im Termin", false, () => setDoc(resp(publicDb, "evF", "fremd"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: ungültiger Status", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "vielleicht", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: Zusatzfelder", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp(), name: "x" }));
+await t("Eltern: Kommentar zu lang", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "x".repeat(201), updatedAt: serverTimestamp() }));
+await t("Eltern: falsche Zeit", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: Timestamp.fromMillis(0) }));
+await t("Eltern: beendeter Termin", false, () => setDoc(resp(publicDb, "evClosed", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: nicht existierender Termin", false, () => setDoc(resp(publicDb, "gibtsnicht", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: Antwort löschen", false, () => deleteDoc(resp(publicDb, "evF", "pF")));
+await t("Eltern: Termin ändern", false, () => setDoc(doc(publicDb, "attendance_events", "evF"), { closed: true }, { merge: true }));
+await t("Trainer F: eigene Termine abfragen", true, () => getDocs(query(collection(coachF, "attendance_events"), where("clubId", "==", "svon"), where("team", "==", "F-Jugend"))));
+await t("Trainer F: fremde Termine abfragen", false, () => getDocs(query(collection(coachF, "attendance_events"), where("clubId", "==", "svon"), where("team", "==", "D-Jugend"))));
+await t("Trainer F: Termin anlegen", true, () => addDoc(collection(coachF, "attendance_events"), { clubId: "svon", team: "F-Jugend", closed: false, rosterKeys: [] }));
+await t("Trainer F: Termin für D-Jugend anlegen", false, () => addDoc(collection(coachF, "attendance_events"), { clubId: "svon", team: "D-Jugend", closed: false, rosterKeys: [] }));
+await t("Trainer F: Termin beenden", true, () => setDoc(doc(coachF, "attendance_events", "evF"), { closed: true }, { merge: true }));
+await t("Trainer F: Termin auf D-Jugend umschreiben", false, () => setDoc(doc(coachF, "attendance_events", "evClosed"), { team: "D-Jugend" }, { merge: true }));
+await t("Trainer F: D-Termin löschen", false, () => deleteDoc(doc(coachF, "attendance_events", "evD")));
+await t("Trainer F: Antwort löschen", true, () => deleteDoc(resp(coachF, "evF", "pF")));
+await t("Admin: Termin löschen", true, () => deleteDoc(doc(admin, "attendance_events", "evD")));
 
 // --- Fremdes, selbst registriertes Konto ---
 await t("Fremder: Spieler lesen", false, () => getDoc(doc(stranger, "youth_players", "pF")));

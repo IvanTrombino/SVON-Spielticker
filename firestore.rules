@@ -129,6 +129,33 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // 5c. Spieltags-Zu-/Absage: Trainer verwalten Termine ihrer Mannschaften.
+    //     Eltern öffnen den geteilten Link (nicht erratbare Termin-ID) und antworten ohne Anmeldung –
+    //     nur für Kinder aus dem Termin, nur solange er offen ist, nur Status + kurzer Kommentar.
+    function attendanceEvent(eventId) {
+      return get(/databases/$(database)/documents/attendance_events/$(eventId)).data;
+    }
+    match /attendance_events/{eventId} {
+      allow get: if true;
+      allow list: if isAdmin() || coachHasTeam(resource.data.team);
+      allow create: if isAdmin() || coachHasTeam(request.resource.data.team);
+      allow update: if isAdmin() || (coachHasTeam(resource.data.team) && coachHasTeam(request.resource.data.team));
+      allow delete: if isAdmin() || coachHasTeam(resource.data.team);
+
+      match /responses/{playerKey} {
+        allow read: if true;
+        allow create, update: if exists(/databases/$(database)/documents/attendance_events/$(eventId))
+          && attendanceEvent(eventId).closed == false
+          && playerKey in attendanceEvent(eventId).rosterKeys
+          && request.resource.data.keys().hasOnly(['status', 'comment', 'updatedAt'])
+          && request.resource.data.status in ['yes', 'no', 'maybe']
+          && request.resource.data.comment is string
+          && request.resource.data.comment.size() <= 200
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isAdmin() || coachHasTeam(attendanceEvent(eventId).team);
+      }
+    }
+
     // 6. Ticker-Tagescodes: Trainer erzeugen/sehen den Code, Ticker-Personen nur mit gültigem Code
     match /ticker_codes/{club} {
       allow read: if isStaff() || hasValidTickerSession(club);
