@@ -5,12 +5,18 @@ import { closureText, sendTrainerPush, shareViaWhatsApp } from "../trainerInfo";
 import { findOverlappingBookings, createConflictRequest, findMoveConflicts, moveBookingInList, applyBookingEdit, cancelOccurrence, seriesOccurrences, isPitchClosed, bookingsOnPitchDay } from "../pitchConflicts";
 import PitchConflicts from "./PitchConflicts";
 import FussballImport from "./FussballImport";
+import { buildSchedule, buildXlsx, buildPdf, downloadBlob, exportFileName } from "../pitchExport";
+
+const DAY_COUNTS = { "3days": 3, "5days": 5, "7days": 7 };
+const VIEWS = [["day", "TAG"], ["3days", "3 TAGE"], ["5days", "5 TAGE"], ["7days", "7 TAGE"], ["week", "AKTUELLE KW"]];
 
 // isAdmin: Plätze verwalten, Dashboard bearbeiten, Massen-Stornierung und Konflikte entscheiden
+
 export default function PitchManager({ clubId, teams, currentUserName, isAdmin = false }) {
   // --- NAVIGATION & VIEW STATES ---
   const [activeTab, setActiveTab] = useState("schedule"); // "schedule", "book", "manage", "dashboard", "conflicts"
-  const [calendarView, setCalendarView] = useState("3days"); // "week", "3days", "day"
+  const [calendarView, setCalendarView] = useState("3days"); // "week" (Aktuelle KW), "7days", "5days", "3days", "day"
+  const [exportDialog, setExportDialog] = useState(null); // { from, to, format }
   const [viewDate, setViewDate] = useState(new Date());
   
   // --- FILTER STATES ---
@@ -122,6 +128,30 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
     catch (error) { console.error("Fehler:", error); }
   };
 
+  // Ansicht wechseln: jede Ansicht beginnt bei heute (KW = aktuelle Kalenderwoche)
+  const switchView = (view) => { setCalendarView(view); setViewDate(new Date()); };
+
+  const openExport = () => {
+    const first = displayDates[0];
+    setExportDialog({
+      from: new Date(first.getFullYear(), first.getMonth(), 1).toLocaleDateString("sv-SE"),
+      to: new Date(first.getFullYear(), first.getMonth() + 1, 0).toLocaleDateString("sv-SE"),
+      format: "pdf"
+    });
+  };
+
+  const handleExport = () => {
+    const { from, to, format } = exportDialog;
+    if (!from || !to) return alert("Bitte Von- und Bis-Datum wählen.");
+    if (from > to) return alert("Das Von-Datum darf nicht nach dem Bis-Datum liegen.");
+    if ((new Date(to) - new Date(from)) / 86400000 > 400) return alert("Bitte höchstens ein Jahr auf einmal exportieren.");
+    const months = buildSchedule({ bookings, closures, pitches, from, to, pitchId: filterPitch, team: filterTeam });
+    const filterText = [filterPitch && pitches.find(p => p.id === filterPitch)?.name, filterTeam].filter(Boolean).join(", ");
+    const blob = format === "xlsx" ? buildXlsx(months, { from, to, filterText }) : buildPdf(months, { from, to, filterText });
+    downloadBlob(blob, exportFileName(from, to, format));
+    setExportDialog(null);
+  };
+
   // Kalender-Berechnungen (Je nach View)
   const getDisplayDates = () => {
     const dates = [];
@@ -136,8 +166,9 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
         d.setDate(monday.getDate() + i);
         dates.push(d);
       }
-    } else if (calendarView === "3days") {
-      for (let i = 0; i < 3; i++) {
+    } else if (DAY_COUNTS[calendarView]) {
+      // Erste Spalte = gewählter Starttag (beim Umschalten: heute), rechts die folgenden Tage
+      for (let i = 0; i < DAY_COUNTS[calendarView]; i++) {
         const d = new Date(current);
         d.setDate(current.getDate() + i);
         dates.push(d);
@@ -165,7 +196,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
   const changeDate = (offset) => {
     const newDate = new Date(viewDate);
     if (calendarView === "week") newDate.setDate(viewDate.getDate() + (offset * 7));
-    else if (calendarView === "3days") newDate.setDate(viewDate.getDate() + (offset * 3));
+    else if (DAY_COUNTS[calendarView]) newDate.setDate(viewDate.getDate() + (offset * DAY_COUNTS[calendarView]));
     else newDate.setDate(viewDate.getDate() + offset);
     setViewDate(newDate);
   };
@@ -604,7 +635,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
           {pitches.length === 0 ? (
             <p style={{ color: "#666", textAlign: "center" }}>Noch keine Plätze angelegt.</p>
           ) : (
-            <div style={{ minWidth: calendarView === "week" ? "1000px" : calendarView === "3days" ? "560px" : "100%" }}> 
+            <div style={{ minWidth: { week: "1000px", "7days": "1000px", "5days": "760px", "3days": "560px" }[calendarView] || "100%" }}> 
               
               {/* Header über allem */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "20px", background: "white", padding: "12px 20px", borderRadius: "10px", boxShadow: "0 2px 5px rgba(0,0,0,0.05)" }}>
@@ -613,7 +644,7 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                   <button onClick={() => setViewDate(new Date())} style={{ padding: "6px 12px", background: "white", border: "1px solid #27ae60", color: "#27ae60", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>📅 Heute</button>
                   <button onClick={() => changeDate(-1)} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", color: "#555" }}>&lt;</button>
                   <button onClick={() => changeDate(1)} style={{ background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", color: "#555" }}>&gt;</button>
-                  <strong style={{ fontSize: "16px", marginLeft: "5px" }}>{calendarView === "week" ? `KW ${kw} · ` : ""}{dateRangeStr}</strong>
+                  <strong style={{ fontSize: "16px", marginLeft: "5px" }}>{calendarView !== "day" ? `KW ${kw} · ` : ""}{dateRangeStr}</strong>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", position: "relative", flexWrap: "wrap" }}>
@@ -627,12 +658,14 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
                     {teams && teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
 
-                  {/* Umschalter Tag / 3 Tage / Woche */}
-                  <div style={{ display: "flex", border: "1px solid #ccc", borderRadius: "6px", overflow: "hidden" }}>
-                     <button onClick={() => setCalendarView("day")} style={{ padding: "8px 10px", border: "none", background: calendarView === "day" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>TAG</button>
-                     <button onClick={() => setCalendarView("3days")} style={{ padding: "8px 10px", border: "none", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", background: calendarView === "3days" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>3 TAGE</button>
-                     <button onClick={() => setCalendarView("week")} style={{ padding: "8px 10px", border: "none", background: calendarView === "week" ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>WOCHE</button>
+                  {/* Umschalter Tag / 3 / 5 / 7 Tage (ab heute) / Aktuelle KW */}
+                  <div style={{ display: "flex", border: "1px solid #ccc", borderRadius: "6px", overflow: "hidden", flexWrap: "wrap" }}>
+                    {VIEWS.map(([id, label], i) => (
+                      <button key={id} onClick={() => switchView(id)} style={{ padding: "8px 10px", border: "none", borderLeft: i > 0 ? "1px solid #ccc" : "none", background: calendarView === id ? "#e0e0e0" : "white", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>{label}</button>
+                    ))}
                   </div>
+
+                  <button onClick={openExport} style={{ background: "white", color: "#2146d0", padding: "8px 12px", border: "1px solid #2146d0", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "13px" }}>📥 Kalender herunterladen</button>
 
                   <button onClick={() => setActiveTab("book")} style={{ background: "#27ae60", color: "white", padding: "8px 15px", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>➕ Buchen</button>
                   {isAdmin && <button onClick={() => setShowMenu(!showMenu)} style={{ background: "transparent", border: "none", fontSize: "20px", cursor: "pointer", padding: "0 5px" }}>⋮</button>}
@@ -773,6 +806,39 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* DIALOG: KALENDER HERUNTERLADEN */}
+      {exportDialog && (
+        <div onClick={() => setExportDialog(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "15px" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "10px", padding: "18px", width: "100%", maxWidth: "380px", textAlign: "left", boxShadow: "0 6px 20px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", color: "#2146d0" }}>📥 Kalender herunterladen</h3>
+            <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#666" }}>Belegungsplan nach Monaten und Tagen mit allen Buchungen und Platzsperren.</p>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+              <label style={{ flex: 1, fontSize: "12px", fontWeight: "bold", color: "#555" }}>Von
+                <input type="date" value={exportDialog.from} onChange={(e) => setExportDialog({ ...exportDialog, from: e.target.value })} style={{ ...inputStyle, marginTop: "4px" }} />
+              </label>
+              <label style={{ flex: 1, fontSize: "12px", fontWeight: "bold", color: "#555" }}>Bis
+                <input type="date" value={exportDialog.to} onChange={(e) => setExportDialog({ ...exportDialog, to: e.target.value })} style={{ ...inputStyle, marginTop: "4px" }} />
+              </label>
+            </div>
+            <div style={{ fontSize: "12px", fontWeight: "bold", color: "#555", marginBottom: "4px" }}>Format</div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+              {[["pdf", "📄 PDF"], ["xlsx", "📊 Excel"]].map(([id, label]) => (
+                <button key={id} onClick={() => setExportDialog({ ...exportDialog, format: id })} style={{ flex: 1, padding: "10px", borderRadius: "6px", border: exportDialog.format === id ? "2px solid #2146d0" : "1px solid #ccc", background: exportDialog.format === id ? "#eef2ff" : "white", fontWeight: "bold", cursor: "pointer", color: "#333" }}>{label}</button>
+              ))}
+            </div>
+            <p style={{ margin: "0 0 12px 0", fontSize: "11px", color: "#888" }}>
+              {filterPitch || filterTeam
+                ? `Es gilt der aktuelle Filter: ${[filterPitch && pitches.find(p => p.id === filterPitch)?.name, filterTeam].filter(Boolean).join(", ")}.`
+                : "Enthält alle Plätze und Mannschaften (über die Filter oben einschränkbar)."}
+            </p>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button onClick={handleExport} style={{ flex: 1, padding: "11px", background: "#27ae60", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>⬇️ Herunterladen</button>
+              <button onClick={() => setExportDialog(null)} style={{ flex: 1, padding: "11px", background: "#eee", color: "#333", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>Abbrechen</button>
+            </div>
+          </div>
         </div>
       )}
 
