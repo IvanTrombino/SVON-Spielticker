@@ -155,16 +155,19 @@ service cloud.firestore {
           && request.resource.data.comment is string
           && request.resource.data.comment.size() <= 200
           && (!('laundry' in request.resource.data) || request.resource.data.laundry is bool)
-          && request.resource.data.updatedAt == request.time;
+          && request.resource.data.updatedAt == request.time
+          // Pflicht: Name oder Telefonnummer wird im selben Schreibvorgang mitgeschickt
+          && existsAfter(/databases/$(database)/documents/attendance_events/$(eventId)/contacts/$(playerKey));
         allow delete: if isAdmin() || coachHasTeam(attendanceEvent(eventId).team);
       }
-      // Telefonnummer der Eltern (freiwillig): Eltern dürfen nur schreiben, lesen nur Trainer/Admins
+      // Name oder Telefonnummer der Eltern (Pflicht): Eltern dürfen nur schreiben, lesen nur Trainer/Admins
       match /contacts/{playerKey} {
         allow read, delete: if isAdmin() || coachHasTeam(attendanceEvent(eventId).team);
         allow create, update: if attendanceOpenFor(eventId, playerKey)
-          && request.resource.data.keys().hasOnly(['phone', 'updatedAt'])
-          && request.resource.data.phone is string
-          && request.resource.data.phone.size() <= 30
+          && request.resource.data.keys().hasOnly(['contact', 'updatedAt'])
+          && request.resource.data.contact is string
+          && request.resource.data.contact.size() >= 2
+          && request.resource.data.contact.size() <= 50
           && request.resource.data.updatedAt == request.time;
       }
     }

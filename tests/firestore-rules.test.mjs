@@ -7,7 +7,7 @@
 
 import { readFileSync } from "fs";
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, getDocs, deleteDoc, updateDoc, collection, query, where, Timestamp, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, getDocs, deleteDoc, updateDoc, collection, query, where, Timestamp, addDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 
 const rulesPath = process.argv[2] || "firestore.rules";
 const env = await initializeTestEnvironment({
@@ -170,29 +170,39 @@ await t("Trainer: Sommercamp-Teilnehmer abfragen", false, () => getDocs(query(co
 
 // --- Zu-/Absage ---
 const resp = (db, ev, key) => doc(db, "attendance_events", ev, "responses", key);
+const contact = (db, ev, key) => doc(db, "attendance_events", ev, "contacts", key);
+// Eltern schicken Antwort + Name/Telefon immer zusammen
+const vote = (db, ev, key, data, who = "Mama von Lian") => {
+  const batch = writeBatch(db);
+  batch.set(contact(db, ev, key), { contact: who, updatedAt: serverTimestamp() });
+  batch.set(resp(db, ev, key), { comment: "", updatedAt: serverTimestamp(), ...data });
+  return batch.commit();
+};
 await t("Eltern: Termin öffnen (Link)", true, () => getDoc(doc(publicDb, "attendance_events", "evF")));
 await t("Eltern: alle Termine auflisten", false, () => getDocs(collection(publicDb, "attendance_events")));
-await t("Eltern: zusagen", true, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
-await t("Eltern: Antwort ändern", true, () => setDoc(resp(publicDb, "evF", "pF"), { status: "no", comment: "krank", updatedAt: serverTimestamp() }));
+await t("Eltern: zusagen ohne Name/Telefon", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: zusagen mit leerem Namen", false, () => vote(publicDb, "evF", "pF", { status: "yes" }, ""));
+await t("Eltern: zusagen mit Name", true, () => vote(publicDb, "evF", "pF", { status: "yes" }));
+await t("Eltern: zusagen mit Telefonnummer", true, () => vote(publicDb, "evF", "pF", { status: "yes" }, "0170 1234567"));
+await t("Eltern: Name zu lang", false, () => vote(publicDb, "evF", "pF", { status: "yes" }, "x".repeat(51)));
+await t("Eltern: zusagen", true, () => vote(publicDb, "evF", "pF", { status: "yes" }));
+await t("Eltern: Antwort ändern", true, () => vote(publicDb, "evF", "pF", { status: "no", comment: "krank" }));
 await t("Eltern: Antworten sehen", true, () => getDocs(collection(publicDb, "attendance_events", "evF", "responses")));
-await t("Eltern: Kind nicht im Termin", false, () => setDoc(resp(publicDb, "evF", "fremd"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
-await t("Eltern: ungültiger Status", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "vielleicht", comment: "", updatedAt: serverTimestamp() }));
-await t("Eltern: Zusatzfelder", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp(), name: "x" }));
-await t("Eltern: Kommentar zu lang", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "x".repeat(201), updatedAt: serverTimestamp() }));
-await t("Eltern: falsche Zeit", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: Timestamp.fromMillis(0) }));
-await t("Eltern: beendeter Termin", false, () => setDoc(resp(publicDb, "evClosed", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
-await t("Eltern: nicht existierender Termin", false, () => setDoc(resp(publicDb, "gibtsnicht", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
-await t("Eltern: unsicher (abgeschafft)", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "maybe", comment: "", updatedAt: serverTimestamp() }));
-await t("Eltern: Trikotwäsche übernehmen", true, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", laundry: true, updatedAt: serverTimestamp() }));
-await t("Eltern: Trikotwäsche kein bool", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", laundry: "ja", updatedAt: serverTimestamp() }));
-const contact = (db, ev, key) => doc(db, "attendance_events", ev, "contacts", key);
-await t("Eltern: Telefonnummer hinterlegen", true, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "0170 1234567", updatedAt: serverTimestamp() }));
-await t("Eltern: Telefonnummer ändern", true, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "0171 7654321", updatedAt: serverTimestamp() }));
-await t("Eltern: Telefonnummern lesen", false, () => getDoc(contact(publicDb, "evF", "pF")));
-await t("Eltern: Telefonnummer zu lang", false, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "1".repeat(31), updatedAt: serverTimestamp() }));
-await t("Eltern: Telefonnummer fremdes Kind", false, () => setDoc(contact(publicDb, "evF", "fremd"), { phone: "1", updatedAt: serverTimestamp() }));
-await t("Eltern: Telefonnummer beendeter Termin", false, () => setDoc(contact(publicDb, "evClosed", "pF"), { phone: "1", updatedAt: serverTimestamp() }));
-await t("Trainer F: Telefonnummern lesen", true, () => getDocs(collection(coachF, "attendance_events", "evF", "contacts")));
+await t("Eltern: Kind nicht im Termin", false, () => vote(publicDb, "evF", "fremd", { status: "yes" }));
+await t("Eltern: ungültiger Status", false, () => vote(publicDb, "evF", "pF", { status: "vielleicht" }));
+await t("Eltern: Zusatzfelder", false, () => vote(publicDb, "evF", "pF", { status: "yes", name: "x" }));
+await t("Eltern: Kommentar zu lang", false, () => vote(publicDb, "evF", "pF", { status: "yes", comment: "x".repeat(201) }));
+await t("Eltern: falsche Zeit", false, () => vote(publicDb, "evF", "pF", { status: "yes", updatedAt: Timestamp.fromMillis(0) }));
+await t("Eltern: beendeter Termin", false, () => vote(publicDb, "evClosed", "pF", { status: "yes" }));
+await t("Eltern: nicht existierender Termin", false, () => vote(publicDb, "gibtsnicht", "pF", { status: "yes" }));
+await t("Eltern: unsicher (abgeschafft)", false, () => vote(publicDb, "evF", "pF", { status: "maybe" }));
+await t("Eltern: Trikotwäsche übernehmen", true, () => vote(publicDb, "evF", "pF", { status: "yes", laundry: true }));
+await t("Eltern: Trikotwäsche kein bool", false, () => vote(publicDb, "evF", "pF", { status: "yes", laundry: "ja" }));
+await t("Eltern: Namen/Telefon lesen", false, () => getDoc(contact(publicDb, "evF", "pF")));
+await t("Eltern: Kontakt mit altem Feld phone", false, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "0170", updatedAt: serverTimestamp() }));
+await t("Eltern: Kontakt fremdes Kind", false, () => setDoc(contact(publicDb, "evF", "fremd"), { contact: "Mama", updatedAt: serverTimestamp() }));
+await t("Eltern: Kontakt beendeter Termin", false, () => setDoc(contact(publicDb, "evClosed", "pF"), { contact: "Mama", updatedAt: serverTimestamp() }));
+await t("Trainer F: Namen/Telefon lesen", true, () => getDocs(collection(coachF, "attendance_events", "evF", "contacts")));
 await t("Trainer F: Bestätigung/Warteliste setzen", true, () => updateDoc(doc(coachF, "attendance_events", "evF"), { maxPlayers: 8, selection: { pF: "confirmed" } }));
 await t("Eltern: Antwort löschen", false, () => deleteDoc(resp(publicDb, "evF", "pF")));
 await t("Eltern: Termin ändern", false, () => setDoc(doc(publicDb, "attendance_events", "evF"), { closed: true }, { merge: true }));

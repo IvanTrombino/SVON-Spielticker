@@ -10,6 +10,7 @@ const btn = (background, color = "white") => ({ padding: "8px 12px", background,
 const today = () => new Date().toLocaleDateString("sv-SE");
 
 const emptyEvent = () => ({ type: "Spiel", title: "", date: today(), time: "", meetTime: "", location: "", note: "", maxPlayers: "" });
+const isPhone = (text) => /^[\d\s+()/-]{5,}$/.test(text);
 const phoneLink = (phone) => `tel:${phone.replace(/[^\d+]/g, "")}`;
 
 // Ein Termin mit Live-Rückmeldungen
@@ -127,7 +128,7 @@ function EventCard({ event, players }) {
               }).map(r => {
                 const response = responses[r.key];
                 const s = statusOf(response);
-                const phone = contacts[r.key]?.phone;
+                const who = contacts[r.key]?.contact || contacts[r.key]?.phone;
                 const sel = response?.status === "yes" ? selection[r.key] : null;
                 return (
                   <tr key={r.key} style={{ background: s ? s.background : "white", borderBottom: "1px solid #f0f0f0" }}>
@@ -141,7 +142,7 @@ function EventCard({ event, players }) {
                     </td>
                     <td style={{ padding: "6px 8px", color: "#555", fontSize: "12px" }}>
                       {response?.comment}
-                      {phone && <div><a href={phoneLink(phone)} style={{ color: "#2146d0" }}>📞 {phone}</a></div>}
+                      {who && <div>{isPhone(who) ? <a href={phoneLink(who)} style={{ color: "#2146d0" }}>📞 {who}</a> : <span style={{ color: "#2146d0" }}>👤 {who}</span>}</div>}
                     </td>
                     <td style={{ padding: "6px 8px", whiteSpace: "nowrap", textAlign: "right" }}>
                       {response?.status === "yes" && (

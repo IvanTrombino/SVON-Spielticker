@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { doc, collection, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, collection, onSnapshot, writeBatch, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { STATUS, SELECTION, formatEventDate, formatResponseTime, countResponses, statusOf, laundryName } from "../attendance";
 import logo from "../assets/SVON-Wappen.png";
@@ -10,9 +10,9 @@ const rememberKid = (key) => {
   try { localStorage.setItem(MY_KIDS_KEY, JSON.stringify([...new Set([...loadMyKids(), key])])); } catch { /* egal */ }
 };
 
-const PHONE_KEY = "svon_parent_phone";
-const loadPhone = () => { try { return localStorage.getItem(PHONE_KEY) || ""; } catch { return ""; } };
-const rememberPhone = (phone) => { try { localStorage.setItem(PHONE_KEY, phone); } catch { /* egal */ } };
+const CONTACT_KEY = "svon_parent_contact";
+const loadContact = () => { try { return localStorage.getItem(CONTACT_KEY) || localStorage.getItem("svon_parent_phone") || ""; } catch { return ""; } };
+const rememberContact = (contact) => { try { localStorage.setItem(CONTACT_KEY, contact); } catch { /* egal */ } };
 
 // Eltern-Seite: Zu-/Absage ohne Anmeldung über den geteilten Link (?zusage=<id>)
 export default function AttendancePublic({ eventId }) {
@@ -21,8 +21,8 @@ export default function AttendancePublic({ eventId }) {
   const [myKids, setMyKids] = useState(loadMyKids);
   const [comments, setComments] = useState({});
   const [savingKey, setSavingKey] = useState(null);
-  const [phones, setPhones] = useState({});
-  const [savedPhones, setSavedPhones] = useState({});
+  const [contact, setContact] = useState(loadContact);
+  const [contactMissing, setContactMissing] = useState(false);
 
   useEffect(() => {
     const unsubEvent = onSnapshot(doc(db, "attendance_events", eventId),
@@ -34,11 +34,22 @@ export default function AttendancePublic({ eventId }) {
     return () => { unsubEvent(); unsubResponses(); };
   }, [eventId]);
 
+  // Pflicht: Name oder Telefonnummer – geht nur an die Trainer (Eltern können sie nicht lesen)
   const answer = async (key, status, laundry = !!responses[key]?.laundry) => {
+    const who = contact.trim().slice(0, 50);
+    if (who.length < 2) {
+      setContactMissing(true);
+      document.getElementById("svon-contact")?.focus();
+      return alert("Bitte zuerst deinen Namen oder deine Telefonnummer eintragen.");
+    }
     setSavingKey(key);
     try {
       const comment = (comments[key] ?? responses[key]?.comment ?? "").slice(0, 200);
-      await setDoc(doc(db, "attendance_events", eventId, "responses", key), { status, comment, laundry, updatedAt: serverTimestamp() });
+      const batch = writeBatch(db);
+      batch.set(doc(db, "attendance_events", eventId, "contacts", key), { contact: who, updatedAt: serverTimestamp() });
+      batch.set(doc(db, "attendance_events", eventId, "responses", key), { status, comment, laundry, updatedAt: serverTimestamp() });
+      await batch.commit();
+      rememberContact(who);
       rememberKid(key);
       setMyKids(loadMyKids());
     } catch (error) {
@@ -46,20 +57,6 @@ export default function AttendancePublic({ eventId }) {
       alert("Speichern hat nicht geklappt. Ist die Abstimmung vielleicht schon beendet?");
     } finally {
       setSavingKey(null);
-    }
-  };
-
-  // Telefonnummer geht nur an die Trainer (Eltern können sie nicht lesen)
-  const savePhone = async (key) => {
-    const phone = (phones[key] ?? "").trim().slice(0, 30);
-    if (phone === (savedPhones[key] ?? "")) return;
-    try {
-      await setDoc(doc(db, "attendance_events", eventId, "contacts", key), { phone, updatedAt: serverTimestamp() });
-      setSavedPhones({ ...savedPhones, [key]: phone });
-      if (phone) rememberPhone(phone);
-    } catch (error) {
-      console.error("Telefonnummer speichern:", error);
-      alert("Telefonnummer konnte nicht gespeichert werden.");
     }
   };
 
@@ -109,6 +106,23 @@ export default function AttendancePublic({ eventId }) {
         {event.closed && <p style={{ margin: "10px 0 0 0", color: "#c0392b", fontWeight: "bold", fontSize: "13px" }}>🔒 Die Abstimmung ist beendet.</p>}
       </div>
 
+      {!event.closed && (
+        <div style={{ background: "white", borderRadius: "12px", padding: "12px 16px", marginBottom: "12px", border: contactMissing ? "2px solid #c0392b" : "1px solid #e0e0e0" }}>
+          <label htmlFor="svon-contact" style={{ fontSize: "13px", fontWeight: "bold", display: "block", marginBottom: "6px" }}>Dein Name oder deine Telefonnummer *</label>
+          <input
+            id="svon-contact"
+            type="text"
+            maxLength={50}
+            required
+            placeholder="z. B. Mama von Lian oder 0170 1234567"
+            value={contact}
+            onChange={(e) => { setContact(e.target.value); setContactMissing(false); }}
+            style={{ width: "100%", boxSizing: "border-box", padding: "9px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "14px", background: "#fff", color: "#333" }}
+          />
+          <div style={{ fontSize: "11px", color: contactMissing ? "#c0392b" : "#888", marginTop: "4px" }}>Pflichtfeld – nur für die Trainer sichtbar, damit sie wissen, wer abgestimmt hat.</div>
+        </div>
+      )}
+
       {!event.closed && <p style={{ fontSize: "13px", color: "#555", margin: "0 0 8px 4px" }}>Tippe bei deinem Kind auf „Bin dabei“ oder „Bin nicht dabei“:</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -150,18 +164,6 @@ export default function AttendancePublic({ eventId }) {
                       <input type="checkbox" checked={!!current.laundry} disabled={savingKey === r.key} onChange={(e) => answer(r.key, current.status, e.target.checked)} />
                       🧺 Übernehme Trikotwäsche
                     </label>
-                  )}
-                  {mine && (
-                    <input
-                      type="tel"
-                      maxLength={30}
-                      placeholder="Telefonnummer (optional, nur für die Trainer sichtbar)"
-                      value={phones[r.key] ?? savedPhones[r.key] ?? ""}
-                      onFocus={() => phones[r.key] === undefined && !savedPhones[r.key] && setPhones({ ...phones, [r.key]: loadPhone() })}
-                      onChange={(e) => setPhones({ ...phones, [r.key]: e.target.value })}
-                      onBlur={() => savePhone(r.key)}
-                      style={{ marginTop: "8px", width: "100%", boxSizing: "border-box", padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "13px", background: "#fff", color: "#333" }}
-                    />
                   )}
                   {mine && (
                     <input
