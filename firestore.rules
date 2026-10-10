@@ -131,7 +131,7 @@ service cloud.firestore {
 
     // 5c. Spieltags-Zu-/Absage: Trainer verwalten Termine ihrer Mannschaften.
     //     Eltern öffnen den geteilten Link (nicht erratbare Termin-ID) und antworten ohne Anmeldung –
-    //     nur für Kinder aus dem Termin, nur solange er offen ist, nur Status + kurzer Kommentar.
+    //     nur für Kinder aus dem Termin, nur solange er offen ist, nur Status (dabei/nicht dabei), kurzer Kommentar, Trikotwäsche.
     function attendanceEvent(eventId) {
       return get(/databases/$(database)/documents/attendance_events/$(eventId)).data;
     }
@@ -142,17 +142,30 @@ service cloud.firestore {
       allow update: if isAdmin() || (coachHasTeam(resource.data.team) && coachHasTeam(request.resource.data.team));
       allow delete: if isAdmin() || coachHasTeam(resource.data.team);
 
+      function attendanceOpenFor(eventId, playerKey) {
+        return exists(/databases/$(database)/documents/attendance_events/$(eventId))
+          && attendanceEvent(eventId).closed == false
+          && playerKey in attendanceEvent(eventId).rosterKeys;
+      }
       match /responses/{playerKey} {
         allow read: if true;
-        allow create, update: if exists(/databases/$(database)/documents/attendance_events/$(eventId))
-          && attendanceEvent(eventId).closed == false
-          && playerKey in attendanceEvent(eventId).rosterKeys
-          && request.resource.data.keys().hasOnly(['status', 'comment', 'updatedAt'])
-          && request.resource.data.status in ['yes', 'no', 'maybe']
+        allow create, update: if attendanceOpenFor(eventId, playerKey)
+          && request.resource.data.keys().hasOnly(['status', 'comment', 'laundry', 'updatedAt'])
+          && request.resource.data.status in ['yes', 'no']
           && request.resource.data.comment is string
           && request.resource.data.comment.size() <= 200
+          && (!('laundry' in request.resource.data) || request.resource.data.laundry is bool)
           && request.resource.data.updatedAt == request.time;
         allow delete: if isAdmin() || coachHasTeam(attendanceEvent(eventId).team);
+      }
+      // Telefonnummer der Eltern (freiwillig): Eltern dürfen nur schreiben, lesen nur Trainer/Admins
+      match /contacts/{playerKey} {
+        allow read, delete: if isAdmin() || coachHasTeam(attendanceEvent(eventId).team);
+        allow create, update: if attendanceOpenFor(eventId, playerKey)
+          && request.resource.data.keys().hasOnly(['phone', 'updatedAt'])
+          && request.resource.data.phone is string
+          && request.resource.data.phone.size() <= 30
+          && request.resource.data.updatedAt == request.time;
       }
     }
 

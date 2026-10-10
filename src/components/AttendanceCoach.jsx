@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { STATUS, EVENT_TYPES, buildRoster, attendanceLink, formatEventDate, shareText, reminderText, shareViaWhatsApp, countResponses } from "../attendance";
+import { STATUS, SELECTION, EVENT_TYPES, buildRoster, rosterName, attendanceLink, formatEventDate, formatResponseTime, shareText, reminderText, resultText, shareViaWhatsApp, countResponses, statusOf, laundryName, selectionLists } from "../attendance";
 import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom } from "../fussballde";
 
 const inputStyle = { padding: "9px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "13px", width: "100%", boxSizing: "border-box" };
@@ -9,34 +9,65 @@ const labelStyle = { fontSize: "11px", fontWeight: "bold", color: "#555", displa
 const btn = (background, color = "white") => ({ padding: "8px 12px", background, color, border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px" });
 const today = () => new Date().toLocaleDateString("sv-SE");
 
-const emptyEvent = () => ({ type: "Spiel", title: "", date: today(), time: "", meetTime: "", location: "", note: "" });
+const emptyEvent = () => ({ type: "Spiel", title: "", date: today(), time: "", meetTime: "", location: "", note: "", maxPlayers: "" });
+const phoneLink = (phone) => `tel:${phone.replace(/[^\d+]/g, "")}`;
 
 // Ein Termin mit Live-Rückmeldungen
 function EventCard({ event, players }) {
   const [responses, setResponses] = useState({});
+  const [contacts, setContacts] = useState({});
   const [open, setOpen] = useState(false);
 
   useEffect(() => onSnapshot(collection(db, "attendance_events", event.id, "responses"),
     (snap) => setResponses(Object.fromEntries(snap.docs.map(d => [d.id, d.data()])))), [event.id]);
 
+  useEffect(() => {
+    if (!open) return;
+    return onSnapshot(collection(db, "attendance_events", event.id, "contacts"),
+      (snap) => setContacts(Object.fromEntries(snap.docs.map(d => [d.id, d.data()]))),
+      (error) => console.error("Telefonnummern laden:", error));
+  }, [event.id, open]);
+
   const roster = event.roster || [];
   const counts = countResponses(roster, responses);
-  const missing = roster.filter(r => !responses[r.key]);
+  const missing = roster.filter(r => !statusOf(responses[r.key]));
+  const selection = event.selection || {};
+  const lists = selectionLists(event, responses);
+  const laundry = laundryName(roster, responses);
+  const isFull = event.maxPlayers && lists.confirmed.length >= event.maxPlayers;
+
+  const setSelection = (key, value) => {
+    const next = { ...selection };
+    if (next[key] === value) delete next[key]; else next[key] = value;
+    return updateDoc(doc(db, "attendance_events", event.id), { selection: next });
+  };
+
+  const changeMax = () => {
+    const input = window.prompt("Maximale Anzahl Kinder (leer = unbegrenzt):", event.maxPlayers || "");
+    if (input === null) return;
+    const max = parseInt(input, 10);
+    return updateDoc(doc(db, "attendance_events", event.id), { maxPlayers: max > 0 ? max : null });
+  };
   const newPlayers = players.filter(p => !roster.some(r => r.key === p.id));
+  // Termine von früher enthalten noch gekürzte oder veraltete Namen
+  const renamed = roster.filter(r => { const p = players.find(pl => pl.id === r.key); return p && rosterName(p) !== r.name; });
   const isPast = event.date < today();
 
   const toggleClosed = () => updateDoc(doc(db, "attendance_events", event.id), { closed: !event.closed });
 
-  const updateRoster = async () => {
-    if (!window.confirm(`${newPlayers.length} neue(n) Spieler zur Abstimmung hinzufügen?`)) return;
-    const merged = [...roster, ...buildRoster(newPlayers)];
+  const updateRoster = async (e) => {
+    e?.stopPropagation();
+    if (!window.confirm([newPlayers.length && `${newPlayers.length} neue(n) Spieler hinzufügen`, renamed.length && `${renamed.length} Namen aktualisieren`].filter(Boolean).join(" und ") + "?")) return;
+    const merged = [...roster.map(r => { const p = players.find(pl => pl.id === r.key); return p ? { ...r, name: rosterName(p) } : r; }), ...buildRoster(newPlayers)];
     await updateDoc(doc(db, "attendance_events", event.id), { roster: merged, rosterKeys: merged.map(r => r.key) });
   };
 
   const handleDelete = async () => {
     if (!window.confirm(`Termin „${event.title || event.type}“ mit allen Rückmeldungen löschen?`)) return;
-    const snap = await getDocs(collection(db, "attendance_events", event.id, "responses"));
-    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    for (const sub of ["responses", "contacts"]) {
+      const snap = await getDocs(collection(db, "attendance_events", event.id, sub));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    }
     await deleteDoc(doc(db, "attendance_events", event.id));
   };
 
@@ -55,10 +86,16 @@ function EventCard({ event, players }) {
         <div style={{ display: "flex", gap: "12px", marginTop: "6px", fontSize: "13px", fontWeight: "bold" }}>
           <span style={{ color: STATUS.yes.color }}>✅ {counts.yes}</span>
           <span style={{ color: STATUS.no.color }}>❌ {counts.no}</span>
-          <span style={{ color: STATUS.maybe.color }}>❔ {counts.maybe}</span>
           <span style={{ color: "#888" }}>offen {counts.open}</span>
+          {event.maxPlayers && <span style={{ color: isFull ? "#c0392b" : "#2146d0" }}>👍 {lists.confirmed.length}/{event.maxPlayers}</span>}
           <span style={{ marginLeft: "auto", color: "#888", fontWeight: "normal" }}>{open ? "▲" : "▼"}</span>
         </div>
+        {(newPlayers.length > 0 || renamed.length > 0) && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "8px", padding: "6px 8px", background: "#eef2ff", borderRadius: "6px", fontSize: "12px", color: "#2146d0" }}>
+            <span>🆕 {[newPlayers.length && `${newPlayers.length} neue(r) Spieler noch nicht in der Abstimmung`, renamed.length && `${renamed.length} Name(n) geändert`].filter(Boolean).join(", ")}</span>
+            <button onClick={updateRoster} style={{ ...btn("#2146d0"), marginLeft: "auto" }}>🔄 Spielerliste aktualisieren</button>
+          </div>
+        )}
       </div>
 
       {open && (
@@ -68,7 +105,7 @@ function EventCard({ event, players }) {
             <button onClick={copyLink} style={btn("#eef2ff", "#2146d0")}>🔗 Link kopieren</button>
             {missing.length > 0 && !event.closed && <button onClick={() => shareViaWhatsApp(reminderText(event, missing.map(r => r.name)))} style={btn("#f39c12")}>⏰ Erinnern ({missing.length})</button>}
             <button onClick={toggleClosed} style={btn("#7f8c8d")}>{event.closed ? "🔓 Wieder öffnen" : "🔒 Abstimmung beenden"}</button>
-            {newPlayers.length > 0 && <button onClick={updateRoster} style={btn("#2146d0")}>➕ {newPlayers.length} neue Spieler aufnehmen</button>}
+            <button onClick={() => shareViaWhatsApp(resultText(event, responses))} style={btn("#128c7e")}>📋 Ergebnis teilen</button>
             <button onClick={handleDelete} style={btn("white", "#c0392b")}>🗑️</button>
           </div>
           {(event.meetTime || event.location || event.note) && (
@@ -76,18 +113,44 @@ function EventCard({ event, players }) {
               {event.meetTime && `⏱ Treffpunkt ${event.meetTime} Uhr  `}{event.location && `📍 ${event.location}  `}{event.note && `ℹ️ ${event.note}`}
             </p>
           )}
+          <div style={{ background: "#f8f9fa", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "8px 10px", marginBottom: "10px", fontSize: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span>👥 <strong>{event.maxPlayers ? `Max. ${event.maxPlayers} Kinder` : "Keine Höchstzahl"}</strong></span>
+            <button onClick={changeMax} style={btn("#eef2ff", "#2146d0")}>✏️ Ändern</button>
+            <span style={{ color: "#555" }}>👍 {lists.confirmed.length} bestätigt · ⏳ {lists.waitlist.length} Warteliste{lists.undecided.length > 0 && ` · ${lists.undecided.length} noch nicht eingeteilt`}</span>
+            <span style={{ color: "#555", flexBasis: "100%" }}>🧺 Trikotwäsche: <strong>{laundry || "noch niemand"}</strong></span>
+          </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <tbody>
               {[...roster].sort((a, b) => {
-                const order = { yes: 0, maybe: 1, no: 2 };
-                return (order[responses[a.key]?.status] ?? 3) - (order[responses[b.key]?.status] ?? 3) || a.name.localeCompare(b.name);
+                const rank = (key) => (statusOf(responses[key]) ? { yes: 0, no: 1 }[responses[key].status] : 2);
+                return rank(a.key) - rank(b.key) || a.name.localeCompare(b.name);
               }).map(r => {
-                const s = responses[r.key] && STATUS[responses[r.key].status];
+                const response = responses[r.key];
+                const s = statusOf(response);
+                const phone = contacts[r.key]?.phone;
+                const sel = response?.status === "yes" ? selection[r.key] : null;
                 return (
                   <tr key={r.key} style={{ background: s ? s.background : "white", borderBottom: "1px solid #f0f0f0" }}>
-                    <td style={{ padding: "6px 8px", fontWeight: "bold" }}>{r.name}</td>
-                    <td style={{ padding: "6px 8px", color: s ? s.color : "#999", fontWeight: "bold", whiteSpace: "nowrap" }}>{s ? `${s.icon} ${s.label}` : "– offen –"}</td>
-                    <td style={{ padding: "6px 8px", color: "#555", fontSize: "12px" }}>{responses[r.key]?.comment}</td>
+                    <td style={{ padding: "6px 8px", fontWeight: "bold" }}>
+                      {r.name}{response?.laundry && <span title="übernimmt Trikotwäsche"> 🧺</span>}
+                      {sel && <div style={{ fontSize: "11px", color: SELECTION[sel].color }}>{SELECTION[sel].icon} {SELECTION[sel].label}</div>}
+                    </td>
+                    <td style={{ padding: "6px 8px", color: s ? s.color : "#999", fontWeight: "bold", whiteSpace: "nowrap" }}>
+                      {s ? `${s.icon} ${s.label}` : "– offen –"}
+                      {s && <div style={{ fontSize: "11px", color: "#888", fontWeight: "normal" }}>{formatResponseTime(response.updatedAt)}</div>}
+                    </td>
+                    <td style={{ padding: "6px 8px", color: "#555", fontSize: "12px" }}>
+                      {response?.comment}
+                      {phone && <div><a href={phoneLink(phone)} style={{ color: "#2146d0" }}>📞 {phone}</a></div>}
+                    </td>
+                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap", textAlign: "right" }}>
+                      {response?.status === "yes" && (
+                        <>
+                          <button onClick={() => setSelection(r.key, "confirmed")} title="Bestätigen" style={{ ...btn(sel === "confirmed" ? SELECTION.confirmed.color : "#eee", sel === "confirmed" ? "white" : "#333"), padding: "5px 8px", marginRight: "4px" }}>👍</button>
+                          <button onClick={() => setSelection(r.key, "waitlist")} title="Warteliste" style={{ ...btn(sel === "waitlist" ? SELECTION.waitlist.color : "#eee", sel === "waitlist" ? "white" : "#333"), padding: "5px 8px" }}>⏳</button>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -142,7 +205,8 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
     setIsSaving(true);
     try {
       const roster = buildRoster(players);
-      const data = { ...form, title: form.title.trim(), clubId, team, roster, rosterKeys: roster.map(r => r.key), closed: false, createdByName: coachName, createdAt: serverTimestamp() };
+      const maxPlayers = parseInt(form.maxPlayers, 10) > 0 ? parseInt(form.maxPlayers, 10) : null;
+      const data = { ...form, title: form.title.trim(), maxPlayers, selection: {}, clubId, team, roster, rosterKeys: roster.map(r => r.key), closed: false, createdByName: coachName, createdAt: serverTimestamp() };
       const ref = await addDoc(collection(db, "attendance_events"), data);
       setForm(null);
       if (window.confirm("Termin angelegt. Jetzt per WhatsApp an die Eltern schicken?")) shareViaWhatsApp(shareText({ ...data, id: ref.id }));
@@ -183,8 +247,9 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
             <div style={{ flex: "1 1 100px" }}><label style={labelStyle}>Treffpunkt</label><input type="time" value={form.meetTime} onChange={set("meetTime")} style={inputStyle} /></div>
           </div>
           <div style={{ marginBottom: "8px" }}><label style={labelStyle}>Ort</label><input value={form.location} onChange={set("location")} placeholder="z. B. Sportpark Orsingen" style={inputStyle} /></div>
+          <div style={{ marginBottom: "8px" }}><label style={labelStyle}>Max. Anzahl Kinder (optional)</label><input type="number" min="1" value={form.maxPlayers} onChange={set("maxPlayers")} placeholder="z. B. 10 – wird den Eltern als Hinweis angezeigt" style={inputStyle} /></div>
           <div style={{ marginBottom: "10px" }}><label style={labelStyle}>Hinweis an die Eltern</label><input value={form.note} onChange={set("note")} placeholder="z. B. Trikots mitbringen, Fahrgemeinschaften" style={inputStyle} /></div>
-          <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>{players.length} aktive Spieler werden in die Abstimmung übernommen (für Eltern nur Vorname + Initial).</p>
+          <p style={{ fontSize: "11px", color: "#888", margin: "0 0 10px 0" }}>{players.length} aktive Spieler werden in die Abstimmung übernommen (mit Vor- und Nachnamen).</p>
           <div style={{ display: "flex", gap: "8px" }}>
             <button type="submit" disabled={isSaving} style={{ ...btn("#27ae60"), flex: 1, padding: "11px" }}>{isSaving ? "Wird angelegt..." : "💾 Termin anlegen"}</button>
             <button type="button" onClick={() => setForm(null)} style={{ ...btn("#eee", "#333"), flex: 1, padding: "11px" }}>Abbrechen</button>

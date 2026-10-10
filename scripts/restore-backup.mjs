@@ -23,7 +23,7 @@ const NAMES = {
   summercamp_participants: "Sommercamp Kinder", summercamp_staff: "Sommercamp Betreuer",
   summercamp_donations: "Spenden", summercamp_settings: "Sommercamp Preise"
 };
-const SUBCOLLECTIONS = { attendance_events: ["responses"] };
+const SUBCOLLECTIONS = { attendance_events: ["responses", "contacts"] };
 
 // --- Argumente ---
 const args = process.argv.slice(2);

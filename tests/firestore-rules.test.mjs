@@ -182,6 +182,18 @@ await t("Eltern: Kommentar zu lang", false, () => setDoc(resp(publicDb, "evF", "
 await t("Eltern: falsche Zeit", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", updatedAt: Timestamp.fromMillis(0) }));
 await t("Eltern: beendeter Termin", false, () => setDoc(resp(publicDb, "evClosed", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
 await t("Eltern: nicht existierender Termin", false, () => setDoc(resp(publicDb, "gibtsnicht", "pF"), { status: "yes", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: unsicher (abgeschafft)", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "maybe", comment: "", updatedAt: serverTimestamp() }));
+await t("Eltern: Trikotwäsche übernehmen", true, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", laundry: true, updatedAt: serverTimestamp() }));
+await t("Eltern: Trikotwäsche kein bool", false, () => setDoc(resp(publicDb, "evF", "pF"), { status: "yes", comment: "", laundry: "ja", updatedAt: serverTimestamp() }));
+const contact = (db, ev, key) => doc(db, "attendance_events", ev, "contacts", key);
+await t("Eltern: Telefonnummer hinterlegen", true, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "0170 1234567", updatedAt: serverTimestamp() }));
+await t("Eltern: Telefonnummer ändern", true, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "0171 7654321", updatedAt: serverTimestamp() }));
+await t("Eltern: Telefonnummern lesen", false, () => getDoc(contact(publicDb, "evF", "pF")));
+await t("Eltern: Telefonnummer zu lang", false, () => setDoc(contact(publicDb, "evF", "pF"), { phone: "1".repeat(31), updatedAt: serverTimestamp() }));
+await t("Eltern: Telefonnummer fremdes Kind", false, () => setDoc(contact(publicDb, "evF", "fremd"), { phone: "1", updatedAt: serverTimestamp() }));
+await t("Eltern: Telefonnummer beendeter Termin", false, () => setDoc(contact(publicDb, "evClosed", "pF"), { phone: "1", updatedAt: serverTimestamp() }));
+await t("Trainer F: Telefonnummern lesen", true, () => getDocs(collection(coachF, "attendance_events", "evF", "contacts")));
+await t("Trainer F: Bestätigung/Warteliste setzen", true, () => updateDoc(doc(coachF, "attendance_events", "evF"), { maxPlayers: 8, selection: { pF: "confirmed" } }));
 await t("Eltern: Antwort löschen", false, () => deleteDoc(resp(publicDb, "evF", "pF")));
 await t("Eltern: Termin ändern", false, () => setDoc(doc(publicDb, "attendance_events", "evF"), { closed: true }, { merge: true }));
 await t("Trainer F: eigene Termine abfragen", true, () => getDocs(query(collection(coachF, "attendance_events"), where("clubId", "==", "svon"), where("team", "==", "F-Jugend"))));

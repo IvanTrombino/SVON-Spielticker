@@ -12,7 +12,7 @@ import { ADMIN_EMAILS } from "../src/admins.js";
 const KEEP_BACKUPS = 30;
 const PART_SIZE = 500000; // Zeichen pro Teil (Firestore-Dokumente dürfen max. 1 MB groß sein)
 const SKIP_COLLECTIONS = ["backups", "ticker_sessions"]; // Sicherungen selbst und kurzlebige Ticker-Sitzungen
-const SUBCOLLECTIONS = { attendance_events: ["responses"] };
+const SUBCOLLECTIONS = { attendance_events: ["responses", "contacts"] };
 
 const getApp = () => {
   if (getApps().length) return getApps()[0];
