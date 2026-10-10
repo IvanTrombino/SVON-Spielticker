@@ -53,6 +53,8 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
   const [loadErrors, setLoadErrors] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [strays, setStrays] = useState([]); // importierte Buchungen, deren Spielort nicht unser Sportpark ist
+  const [isCleaning, setIsCleaning] = useState(false);
 
   const linksRef = doc(db, "ticker", `${clubId}_fussballde`);
 
@@ -129,10 +131,12 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
     const today = new Date().toLocaleDateString("sv-SE");
     const errors = [];
     const found = [];
+    const awayVenues = {}; // matchId -> Spielort (nicht bei uns)
 
     await Promise.all(linked.map(async ([team, teamId]) => {
       try {
         const matches = await fetchTeamMatches(teamId);
+        matches.filter(m => m.matchId && m.venue && !isAtHomeVenue(m.venue)).forEach(m => { awayVenues[m.matchId] = m.venue; });
         matches
           .filter(m => isAtHomeVenue(m.venue) && m.time && m.matchId && m.date >= today)
           .forEach(m => {
@@ -168,8 +172,32 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
       const kind = statusOf(c, pitchDefaults[c.matchId]).kind;
       return [c.matchId, kind === "new" || kind === "changed"];
     })));
+    // Früher importierte Spiele, die laut fussball.de nicht bei uns stattfinden (z. B. SG-Spiele beim Partnerverein)
+    setStrays(bookings.filter(b => b.fussballMatchId && awayVenues[b.fussballMatchId]).map(b => ({ ...b, venue: awayVenues[b.fussballMatchId] }))
+      .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)));
     setLoadErrors(errors);
     setIsLoading(false);
+  };
+
+  const handleCleanup = async () => {
+    if (!window.confirm(`${strays.length} Eintrag/Einträge ohne Spielort ${HOME_ADDRESS} aus der Platzbelegung entfernen?`)) return;
+    setIsCleaning(true);
+    try {
+      const ids = new Set(strays.map(b => b.id));
+      await runTransaction(db, async (transaction) => {
+        const ref = doc(db, "ticker", `${clubId}_bookings`);
+        const snap = await transaction.get(ref);
+        const list = snap.exists() ? snap.data().list || [] : [];
+        transaction.set(ref, { list: list.filter(b => !ids.has(b.id)) });
+      });
+      alert(`✅ ${ids.size} Eintrag/Einträge entfernt.`);
+      setStrays([]);
+    } catch (error) {
+      console.error("Bereinigen fehlgeschlagen:", error);
+      alert("Fehler beim Bereinigen.");
+    } finally {
+      setIsCleaning(false);
+    }
   };
 
   const handleImport = async () => {
@@ -289,6 +317,24 @@ export default function FussballImport({ clubId, teams, pitches, bookings }) {
         {isLoading ? "Lade von fussball.de..." : "🔄 Heimspiele laden"}
       </button>
       {loadErrors.length > 0 && <p style={{ color: "#e74c3c", fontSize: "12px" }}>Konnte nicht geladen werden: {loadErrors.join(", ")}</p>}
+
+      {strays.length > 0 && (
+        <div style={{ marginTop: "12px", background: "#fdecea", border: "1px solid #f5b7b1", borderRadius: "8px", padding: "10px 12px" }}>
+          <strong style={{ fontSize: "13px", color: "#922b21" }}>🧹 {strays.length} Eintrag/Einträge in der Platzbelegung finden nicht bei uns statt</strong>
+          <p style={{ fontSize: "11px", color: "#922b21", margin: "4px 0 8px 0" }}>Diese Spiele wurden früher übernommen, haben laut fussball.de aber einen anderen Spielort als {HOME_ADDRESS}.</p>
+          <ul style={{ margin: "0 0 10px 0", paddingLeft: "18px", fontSize: "12px", color: "#333" }}>
+            {strays.map(b => (
+              <li key={b.id} style={{ marginBottom: "3px" }}>
+                <strong>{new Date(`${b.date}T12:00:00`).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "2-digit" })} {b.startTime}–{b.endTime}</strong> · {b.team} · {b.notes}
+                <div style={{ color: "#888", fontSize: "11px" }}>📍 {b.venue}</div>
+              </li>
+            ))}
+          </ul>
+          <button onClick={handleCleanup} disabled={isCleaning} style={{ background: "#c0392b", color: "white", border: "none", borderRadius: "6px", padding: "8px 12px", cursor: isCleaning ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: "12px" }}>
+            {isCleaning ? "Wird bereinigt..." : `🗑️ ${strays.length} Eintrag/Einträge aus der Platzbelegung entfernen`}
+          </button>
+        </div>
+      )}
 
       {candidates.length > 0 && (
         <>
