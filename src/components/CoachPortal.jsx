@@ -24,6 +24,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- APP STATES ---
   const [activeTab, setActiveTab] = useState("team");
   const [teamPlayers, setTeamPlayers] = useState([]);
+  const [playersError, setPlayersError] = useState("");
   
   // --- TEAMAUSWAHL STATES ---
   const [availableTeams, setAvailableTeams] = useState([]); 
@@ -206,6 +207,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
     if (!loggedInCoach || !activeViewTeam) return;
 
     const applyPlayers = (players) => {
+      setPlayersError("");
       setTeamPlayers(players);
 
       if (!editingTrainingId) {
@@ -236,6 +238,13 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
         return nameA.localeCompare(nameB);
       });
       applyPlayers(players);
+    }, (error) => {
+      // Sonst sähe ein Rechteproblem aus wie eine leere Mannschaft
+      console.error("Spieler laden:", error);
+      setTeamPlayers([]);
+      setPlayersError(error.code === "permission-denied"
+        ? `Keine Berechtigung für die Spieler der Mannschaft „${activeViewTeam}“. Bitte im Admin Portal prüfen, ob dem Trainerkonto genau diese Mannschaft zugewiesen ist.`
+        : `Spieler konnten nicht geladen werden (${error.code || error.message}).`);
     });
 
     const qTrainings = query(
@@ -461,7 +470,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       {activeTab === "team" && !isActiveView && (
         <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
           <h3 style={{ marginTop: 0, color: "#34495e", borderBottom: "2px solid #eee", paddingBottom: "8px", fontSize: "16px" }}>Spielerliste ({teamPlayers.length})</h3>
-          {teamPlayers.length === 0 ? <p style={{ color: "#777", textAlign: "center" }}>Dieser Mannschaft sind aktuell keine Spieler zugewiesen.</p> : (
+          {playersError ? <p style={{ color: "#c0392b", textAlign: "center", fontWeight: "bold" }}>⚠️ {playersError}</p> : teamPlayers.length === 0 ? <p style={{ color: "#777", textAlign: "center" }}>Der Mannschaft „{activeViewTeam}“ sind in der Jugenddatenbank keine aktiven Spieler zugewiesen.</p> : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
                 <thead style={{ background: "#2146d0", color: "white" }}>
