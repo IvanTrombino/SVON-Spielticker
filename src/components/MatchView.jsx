@@ -239,12 +239,15 @@ export default function MatchView({ clubId, teams }) {
     e.preventDefault();
     const updatedNextMatches = {
       ...nextMatches,
-      [selectedTeam]: { 
-        opponent: nextOpponent, 
-        date: nextDate, 
-        time: nextTime, 
-        isHome: nextIsHome, 
-        location: nextLocation 
+      // Ergänzungen aus dem Trainer Portal (Treffpunkt, Hinweise, ...) bleiben erhalten; Eintrag hat Vorrang vor fussball.de
+      [selectedTeam]: {
+        ...nextMatches[selectedTeam],
+        opponent: nextOpponent,
+        date: nextDate,
+        time: nextTime,
+        isHome: nextIsHome,
+        location: nextLocation,
+        override: !!nextDate
       }
     };
     setNextMatches(updatedNextMatches);
@@ -897,7 +900,7 @@ export default function MatchView({ clubId, teams }) {
           <h3 style={{ fontSize: "1.1rem", marginBottom: "5px", textAlign: "center", color: "#2146d0" }}>📅 Nächstes Spiel für {selectedTeam}</h3>
           {findLinkedTeamId(fussballLinks, selectedTeam) ? (
             <p style={{ fontSize: "12px", color: "#1e8449", background: "#e8f8f5", border: "1px solid #a3e4d7", borderRadius: "8px", padding: "8px", textAlign: "center", marginBottom: "15px" }}>
-              🔄 {selectedTeam} ist mit fussball.de verknüpft – das nächste Spiel wird automatisch angezeigt. Ein Eintrag hier wird nur genutzt, falls fussball.de nichts liefert.
+              🔄 {selectedTeam} ist mit fussball.de verknüpft – das nächste Spiel wird automatisch angezeigt. Ein Eintrag hier hat Vorrang, bis das Spiel vorbei ist (mehr Angaben im Trainer Portal unter „Nächstes Spiel“).
             </p>
           ) : (
             <p style={{ fontSize: "11px", color: "#666", textAlign: "center", marginBottom: "15px" }}>Trage hier das kommende Spiel ein.</p>

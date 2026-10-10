@@ -5,6 +5,7 @@ import { db } from "../firebase";
 import PitchManager from "./PitchManager"; // <-- NEU: Import für die Platzbelegung
 import TickerAdmin from "./TickerAdmin";
 import AttendanceCoach from "./AttendanceCoach";
+import NextMatchCoach from "./NextMatchCoach";
 import PlayerManager from "./PlayerManager";
 import ClosureBanner from "./ClosureBanner";
 import TrainerInfos from "./TrainerInfos";
@@ -437,6 +438,7 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
         {tabButton("stats", "📊", "Statistik")}
         {/* NEU: PLATZBELEGUNG BUTTON */}
         {tabButton("pitches", "🏟️", "Plätze")}
+        {tabButton("next", "📅", "Nächstes Spiel")}
         {tabButton("zusagen", "✅", "Zusagen")}
         {tabButton("ticker", "⚽", "Live-Ticker")}
         {tabButton("infos", "📢", unreadInfos > 0 ? `Infos (${unreadInfos} neu)` : "Infos")}
@@ -625,6 +627,10 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
       {/* LIVE-TICKER VERWALTUNG (Mannschaften verwaltet der Admin im Admin Portal) */}
       {activeTab === "zusagen" && (
         <AttendanceCoach clubId={clubId} team={activeViewTeam} players={teamPlayers} coachName={`${loggedInCoach.firstName} ${loggedInCoach.lastName || ""}`.trim()} />
+      )}
+
+      {activeTab === "next" && (
+        <NextMatchCoach clubId={clubId} team={activeTickerTeam} coachName={`${loggedInCoach.firstName} ${loggedInCoach.lastName || ""}`.trim()} />
       )}
 
       {activeTab === "infos" && (

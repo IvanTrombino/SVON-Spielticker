@@ -3,6 +3,8 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, where
 import { db } from "../firebase";
 import { STATUS, SELECTION, EVENT_TYPES, buildRoster, rosterName, attendanceLink, formatEventDate, formatResponseTime, shareText, reminderText, resultText, shareViaWhatsApp, countResponses, statusOf, laundryName, selectionLists } from "../attendance";
 import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom } from "../fussballde";
+import { effectiveNextMatch, nextMatchTitle, meetText } from "../nextMatch";
+import { isSameTeam } from "../teamOrder";
 
 const inputStyle = { padding: "9px", borderRadius: "6px", border: "1px solid #ccc", background: "#fff", color: "#333", fontSize: "13px", width: "100%", boxSizing: "border-box" };
 const labelStyle = { fontSize: "11px", fontWeight: "bold", color: "#555", display: "block", marginBottom: "3px" };
@@ -169,6 +171,7 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
   const [form, setForm] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [fussballLinks, setFussballLinks] = useState({});
+  const [nextEntries, setNextEntries] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -179,20 +182,26 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
 
   useEffect(() => {
     if (!clubId) return;
-    return onSnapshot(doc(db, "ticker", `${clubId}_fussballde`), (snap) => setFussballLinks(snap.exists() ? snap.data().links || {} : {}));
+    const unsubLinks = onSnapshot(doc(db, "ticker", `${clubId}_fussballde`), (snap) => setFussballLinks(snap.exists() ? snap.data().links || {} : {}));
+    const unsubNext = onSnapshot(doc(db, "ticker", `${clubId}_next_matches`), (snap) => setNextEntries(snap.exists() ? snap.data() : {}));
+    return () => { unsubLinks(); unsubNext(); };
   }, [clubId]);
 
   const linkedTeamId = findLinkedTeamId(fussballLinks, team);
+  const nextEntry = Object.entries(nextEntries).find(([name]) => isSameTeam(name, team))?.[1];
   const upcoming = events.filter(e => e.date >= today()).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
   const past = events.filter(e => e.date < today()).sort((a, b) => b.date.localeCompare(a.date));
 
   const fillFromNextMatch = async () => {
     try {
-      const next = nextMatchFrom(await fetchTeamMatches(linkedTeamId));
-      if (!next) return alert("Kein kommendes Spiel bei fussball.de gefunden.");
+      // Angaben aus „Nächstes Spiel“ (Trainer) haben Vorrang vor fussball.de
+      const next = effectiveNextMatch(linkedTeamId ? nextMatchFrom(await fetchTeamMatches(linkedTeamId)) : null, nextEntry);
+      if (!next) return alert("Kein kommendes Spiel gefunden.");
       const [h, m] = (next.time || "00:00").split(":").map(Number);
-      const meet = next.time ? `${String(Math.max(0, h - 1)).padStart(2, "0")}:${String(m).padStart(2, "0")}` : "";
-      setForm(f => ({ ...f, type: "Spiel", title: `${next.isHome ? "Heimspiel" : "Auswärtsspiel"} gegen ${next.opponent}`, date: next.date, time: next.time, meetTime: f.meetTime || meet, location: next.location }));
+      const meet = next.meetTime || (next.time ? `${String(Math.max(0, h - 1)).padStart(2, "0")}:${String(m).padStart(2, "0")}` : "");
+      const note = [next.meetPlace && `Treffpunkt: ${meetText({ meetPlace: next.meetPlace })}`, next.equipment && `Mitbringen: ${next.equipment}`, next.note].filter(Boolean).join(" · ");
+      const type = next.kind === "Turnier" ? "Turnier" : next.kind === "Sonstiges" ? "Sonstiges" : "Spiel";
+      setForm(f => ({ ...f, type, title: nextMatchTitle(next).replace(/^🏆 /, ""), date: next.date, time: next.time || "", meetTime: f.meetTime || meet, location: next.location || "", note: f.note || note }));
     } catch (error) {
       console.error(error);
       alert("fussball.de konnte nicht geladen werden.");
@@ -231,7 +240,7 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
 
       {form && (
         <form onSubmit={handleCreate} style={{ background: "#f8f9fa", border: "1px solid #e0e0e0", borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
-          {linkedTeamId && <button type="button" onClick={fillFromNextMatch} style={{ ...btn("#eef2ff", "#2146d0"), width: "100%", marginBottom: "10px" }}>📥 Nächstes Spiel von fussball.de übernehmen</button>}
+          {(linkedTeamId || nextEntry) && <button type="button" onClick={fillFromNextMatch} style={{ ...btn("#eef2ff", "#2146d0"), width: "100%", marginBottom: "10px" }}>📥 Nächstes Spiel übernehmen</button>}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
             <div style={{ flex: "1 1 120px" }}>
               <label style={labelStyle}>Art</label>

@@ -3,6 +3,7 @@ import logo from "../assets/SVON-Wappen.png";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom, showsTable, fetchTeamTable } from "../fussballde";
+import { effectiveNextMatch, nextMatchTitle, meetText } from "../nextMatch";
 
 // "2026-10-10" -> "Sa, 10.10.2026"; andere Schreibweisen bleiben unverändert
 const formatMatchDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
@@ -350,8 +351,8 @@ export default function PublicView({ clubId, teams }) {
                 // Blende "E-Jugend Funino" und "F-Jugend Funino" aus der Liste aus
                 .filter(t => t !== "E-Jugend Funino" && t !== "F-Jugend Funino")
                 .map((teamName) => {
-                  // fussball.de hat Vorrang, sonst von Hand eingetragen
-                  const nextMatch = autoNextMatches[teamName] || nextMatches[teamName];
+                  // Trainer-Angaben haben Vorrang, dann fussball.de, sonst alter Handeintrag
+                  const nextMatch = effectiveNextMatch(autoNextMatches[teamName], nextMatches[teamName]);
                   return (
                     <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
                       <div style={{ flex: 1, paddingRight: "10px" }}>
@@ -363,12 +364,7 @@ export default function PublicView({ clubId, teams }) {
                         )}
                         
                         <div style={{ fontSize: "13px", color: "#333", fontWeight: "bold", marginBottom: "4px" }}>
-                          {nextMatch?.opponent ? (
-                            <>
-                              {nextMatch.isHome ? "Heimspiel gegen " : "Auswärtsspiel gegen "}
-                              {nextMatch.opponent}
-                            </>
-                          ) : "Gegner noch offen"}
+                          {nextMatch ? nextMatchTitle(nextMatch) : "Gegner noch offen"}
                         </div>
 
                         {nextMatch?.location && (
@@ -376,6 +372,10 @@ export default function PublicView({ clubId, teams }) {
                             Spielort: {nextMatch.location}
                           </div>
                         )}
+                        {meetText(nextMatch) && <div style={{ fontSize: "11px", color: "#666", marginTop: "2px" }}>⏱ Treffpunkt: {meetText(nextMatch)}</div>}
+                        {nextMatch?.equipment && <div style={{ fontSize: "11px", color: "#666", marginTop: "2px" }}>🎒 Mitbringen: {nextMatch.equipment}</div>}
+                        {nextMatch?.note && <div style={{ fontSize: "11px", color: "#2146d0", marginTop: "2px", whiteSpace: "pre-line" }}>ℹ️ {nextMatch.note}</div>}
+                        {nextMatch?.organization && <div style={{ fontSize: "11px", color: "#666", marginTop: "2px", whiteSpace: "pre-line" }}>📋 {nextMatch.organization}</div>}
                       </div>
 
                       <div style={{ fontSize: "12px", color: "#555", textAlign: "right", whiteSpace: "nowrap" }}>
