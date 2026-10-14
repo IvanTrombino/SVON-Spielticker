@@ -55,7 +55,11 @@ export const reminderText = (event, missingNames) => [
   attendanceLink(event.id)
 ].join("\n");
 
-export const shareViaWhatsApp = (text) => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+// Öffnet WhatsApp mit dem Text. Blockiert der Browser das neue Fenster (z. B. iPhone nach dem Speichern), im selben Fenster öffnen.
+export const shareViaWhatsApp = (text) => {
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  if (!window.open(url, "_blank")) window.location.href = url;
+};
 
 export const countResponses = (roster, responses) => {
   const counts = { yes: 0, no: 0, open: 0 };

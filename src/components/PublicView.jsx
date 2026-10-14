@@ -4,6 +4,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom, showsTable, fetchTeamTable } from "../fussballde";
 import { effectiveNextMatch, nextMatchTitle, meetText } from "../nextMatch";
+import { isFuninoTeam } from "../teamOrder";
 
 // "2026-10-10" -> "Sa, 10.10.2026"; andere Schreibweisen bleiben unverändert
 const formatMatchDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
@@ -348,14 +349,14 @@ export default function PublicView({ clubId, teams }) {
               <p style={{ color: "#777", fontSize: "13px" }}>Keine Mannschaften vorhanden.</p>
             ) : (
               teams
-                // Blende "E-Jugend Funino" und "F-Jugend Funino" aus der Liste aus
-                .filter(t => t !== "E-Jugend Funino" && t !== "F-Jugend Funino")
+                // Funino-Teams (E/F/G-Jugend Funino) aus der Liste ausblenden
+                .filter(t => !isFuninoTeam(t))
                 .map((teamName) => {
                   // Trainer-Angaben haben Vorrang, dann fussball.de, sonst alter Handeintrag
                   const nextMatch = effectiveNextMatch(autoNextMatches[teamName], nextMatches[teamName]);
                   return (
                     <div key={teamName} style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
-                      <div style={{ flex: 1, paddingRight: "10px" }}>
+                      <div style={{ flex: 1, minWidth: 0, paddingRight: "10px", overflowWrap: "anywhere" }}>
                         <strong style={{ fontSize: "14px", color: "#2146d0", display: "block", marginBottom: "4px" }}>{teamName}</strong>
                         {autoTables[teamName]?.own && (
                           <div style={{ fontSize: "11px", color: "#7a6609", background: "#fef9e7", border: "1px solid #f7dc6f", borderRadius: "4px", padding: "2px 6px", display: "inline-block", marginBottom: "4px" }}>

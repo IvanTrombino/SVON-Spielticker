@@ -11,6 +11,9 @@ const decode = (s) => s
   .replace(/&amp;/g, "&")
   .replace(/&quot;/g, "\"")
   .replace(/&#39;/g, "'")
+  // z. B. "SG Buchheim/&#8203;Altheim" – Zahlen-Entities (auch doppelt kodiert) in Zeichen umwandeln
+  .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+  .replace(/&#(\d+);/g, (_, num) => String.fromCodePoint(Number(num)))
   .replace(/\s+/g, " ")
   .trim();
 

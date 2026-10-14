@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, writeBatch, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { STATUS, SELECTION, EVENT_TYPES, buildRoster, rosterName, attendanceLink, formatEventDate, formatResponseTime, shareText, reminderText, resultText, shareViaWhatsApp, countResponses, statusOf, laundryName, selectionLists } from "../attendance";
 import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom } from "../fussballde";
@@ -43,6 +43,36 @@ function EventCard({ event, players }) {
     const next = { ...selection };
     if (next[key] === value) delete next[key]; else next[key] = value;
     return updateDoc(doc(db, "attendance_events", event.id), { selection: next });
+  };
+
+  // Trainer korrigiert die Trikotwäsche (nur Kinder mit Rückmeldung; Zeitpunkt der Abstimmung bleibt unverändert)
+  const changeLaundry = async (key) => {
+    try {
+      const batch = writeBatch(db);
+      roster.forEach(r => {
+        const has = !!responses[r.key]?.laundry;
+        if (has !== (r.key === key)) batch.update(doc(db, "attendance_events", event.id, "responses", r.key), { laundry: r.key === key });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Trikotwäsche ändern:", error);
+      alert("Trikotwäsche konnte nicht geändert werden.");
+    }
+  };
+
+  // Trainer korrigiert Name/Telefonnummer der Eltern
+  const editContact = async (key, name, current) => {
+    const input = window.prompt(`Name oder Telefonnummer der Eltern von ${name}:`, current || "");
+    if (input === null) return;
+    const value = input.trim().slice(0, 50);
+    try {
+      const ref = doc(db, "attendance_events", event.id, "contacts", key);
+      if (value) await setDoc(ref, { contact: value, updatedAt: serverTimestamp() });
+      else await deleteDoc(ref);
+    } catch (error) {
+      console.error("Kontakt ändern:", error);
+      alert("Konnte nicht gespeichert werden.");
+    }
   };
 
   const changeMax = () => {
@@ -120,7 +150,13 @@ function EventCard({ event, players }) {
             <span>👥 <strong>{event.maxPlayers ? `Max. ${event.maxPlayers} Kinder` : "Keine Höchstzahl"}</strong></span>
             <button onClick={changeMax} style={btn("#eef2ff", "#2146d0")}>✏️ Ändern</button>
             <span style={{ color: "#555" }}>👍 {lists.confirmed.length} bestätigt · ⏳ {lists.waitlist.length} Warteliste{lists.undecided.length > 0 && ` · ${lists.undecided.length} noch nicht eingeteilt`}</span>
-            <span style={{ color: "#555", flexBasis: "100%" }}>🧺 Trikotwäsche: <strong>{laundry || "noch niemand"}</strong></span>
+            <label style={{ color: "#555", flexBasis: "100%", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              🧺 Trikotwäsche:
+              <select value={roster.find(r => responses[r.key]?.laundry)?.key || ""} onChange={(e) => changeLaundry(e.target.value)} style={{ padding: "5px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "12px", fontWeight: "bold", background: "#fff", color: "#333" }}>
+                <option value="">{laundry ? "– niemand –" : "noch niemand"}</option>
+                {roster.filter(r => statusOf(responses[r.key])).map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+              </select>
+            </label>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <tbody>
@@ -144,7 +180,12 @@ function EventCard({ event, players }) {
                     </td>
                     <td style={{ padding: "6px 8px", color: "#555", fontSize: "12px" }}>
                       {response?.comment}
-                      {who && <div>{isPhone(who) ? <a href={phoneLink(who)} style={{ color: "#2146d0" }}>📞 {who}</a> : <span style={{ color: "#2146d0" }}>👤 {who}</span>}</div>}
+                      {(who || s) && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          {who ? (isPhone(who) ? <a href={phoneLink(who)} style={{ color: "#2146d0" }}>📞 {who}</a> : <span style={{ color: "#2146d0" }}>👤 {who}</span>) : <span style={{ color: "#999" }}>kein Name</span>}
+                          <button onClick={() => editContact(r.key, r.name, who)} title="Name/Nummer der Eltern korrigieren" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "12px", padding: "0 2px" }}>✏️</button>
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: "6px 8px", whiteSpace: "nowrap", textAlign: "right" }}>
                       {response?.status === "yes" && (
@@ -173,6 +214,7 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
   const [fussballLinks, setFussballLinks] = useState({});
   const [nextEntries, setNextEntries] = useState({});
   const [isSaving, setIsSaving] = useState(false);
+  const [createdEvent, setCreatedEvent] = useState(null); // zum Teilen direkt nach dem Anlegen
 
   useEffect(() => {
     if (!clubId || !team) return;
@@ -219,7 +261,8 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
       const data = { ...form, title: form.title.trim(), maxPlayers, selection: {}, clubId, team, roster, rosterKeys: roster.map(r => r.key), closed: false, createdByName: coachName, createdAt: serverTimestamp() };
       const ref = await addDoc(collection(db, "attendance_events"), data);
       setForm(null);
-      if (window.confirm("Termin angelegt. Jetzt per WhatsApp an die Eltern schicken?")) shareViaWhatsApp(shareText({ ...data, id: ref.id }));
+      // Kein automatisches Öffnen nach dem Speichern – das blockieren Handy-Browser; der Trainer tippt den Knopf an
+      setCreatedEvent({ ...data, id: ref.id });
     } catch (error) {
       console.error("Fehler beim Anlegen:", error);
       alert("Fehler beim Anlegen des Termins.");
@@ -234,9 +277,19 @@ export default function AttendanceCoach({ clubId, team, players, coachName }) {
     <div style={{ background: "white", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", textAlign: "left" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
         <h3 style={{ margin: 0, color: "#2146d0", fontSize: "17px" }}>✅ Zu- und Absagen · {team}</h3>
-        {!form && <button onClick={() => setForm(emptyEvent())} style={btn("#27ae60")}>➕ Neuer Termin</button>}
+        {!form && <button onClick={() => { setForm(emptyEvent()); setCreatedEvent(null); }} style={btn("#27ae60")}>➕ Neuer Termin</button>}
       </div>
       <p style={{ fontSize: "12px", color: "#666", margin: "0 0 12px 0" }}>Termin anlegen, Link per WhatsApp an die Eltern schicken – die Rückmeldungen erscheinen hier live.</p>
+
+      {createdEvent && (
+        <div style={{ background: "#eafaf1", border: "1px solid #a9dfbf", borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
+          <strong style={{ color: "#1e8449", fontSize: "14px" }}>✅ Termin „{createdEvent.title || createdEvent.type}“ angelegt</strong>
+          <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+            <button onClick={() => { shareViaWhatsApp(shareText(createdEvent)); setCreatedEvent(null); }} style={{ ...btn("#25d366"), flex: "2 1 200px", padding: "11px", fontSize: "13px" }}>📤 Jetzt per WhatsApp an die Eltern schicken</button>
+            <button onClick={() => setCreatedEvent(null)} style={{ ...btn("#eee", "#333"), flex: "1 1 100px", padding: "11px" }}>Später</button>
+          </div>
+        </div>
+      )}
 
       {form && (
         <form onSubmit={handleCreate} style={{ background: "#f8f9fa", border: "1px solid #e0e0e0", borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>

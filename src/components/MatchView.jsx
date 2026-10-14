@@ -4,6 +4,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase"; 
 import { displayNameFor } from "../nameConsent";
 import { findLinkedTeamId } from "../fussballde";
+import { teamChannel } from "../teamOrder";
 
 // Signatur unter geteilten Spielberichten
 const CLUB_SIGNATURES = {
@@ -91,7 +92,7 @@ export default function MatchView({ clubId, teams }) {
 
   const sendNtfyPush = async (eventTitle, eventMessage) => {
     try {
-      const safeChannelName = `${clubId}${selectedTeam.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+      const safeChannelName = teamChannel(clubId, selectedTeam);
       await fetch(`https://ntfy.sh/${safeChannelName}`, {
         method: "POST",
         body: `${eventTitle}: ${eventMessage}`,

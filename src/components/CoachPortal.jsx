@@ -11,7 +11,7 @@ import ClosureBanner from "./ClosureBanner";
 import TrainerInfos from "./TrainerInfos";
 import { useTrainerInfos, visibleInfos, readSeenInfos, markInfosSeen } from "../trainerInfo";
 import { getOrCreateDailyCode } from "../tickerCode";
-import { compareTeamNames, isActiveTeam, isSameTeam } from "../teamOrder";
+import { compareTeamNames, isActiveTeam, isSameTeam, isFuninoTeam } from "../teamOrder";
 
 export default function CoachPortal({ clubId, tickerTeams = [] }) {
   // --- LOGIN STATES ---
@@ -137,8 +137,10 @@ export default function CoachPortal({ clubId, tickerTeams = [] }) {
     { id: "7", name: "G-Jugend" }
   ];
 
-  const currentTeamOptions = isJugendleitung 
-    ? (availableTeams.length > 0 ? availableTeams : fallbackTeams)
+  // Jugendleitung: Mannschaften der Jugenddatenbank plus neue Mannschaften aus dem Live-Ticker (z. B. Ü35/AH, ohne Funino)
+  const baseTeams = availableTeams.length > 0 ? availableTeams : fallbackTeams;
+  const currentTeamOptions = isJugendleitung
+    ? [...baseTeams, ...tickerTeams.filter(t => !isFuninoTeam(t) && !baseTeams.some(b => isSameTeam(b.name, t))).map(name => ({ id: name, name }))].sort((a, b) => compareTeamNames(a.name, b.name))
     : (loggedInCoach?.assignedTeams?.filter(t => t !== "Jugendleitung").sort(compareTeamNames).map(name => ({ id: name, name })) || []);
 
   // Live-Ticker: Jugendleitung verwaltet alle Ticker-Teams, Trainer nur ihre eigenen

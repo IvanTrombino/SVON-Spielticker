@@ -24,7 +24,11 @@ export const trainerChannel = (clubId) => `${clubId}trainerinfo`;
 export const sendTrainerPush = (clubId, text) =>
   fetch(`https://ntfy.sh/${trainerChannel(clubId)}`, { method: "POST", body: text, headers: { "Priority": "high" } }).catch(() => {});
 
-export const shareViaWhatsApp = (text) => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+// Öffnet WhatsApp mit dem Text. Blockiert der Browser das neue Fenster (z. B. iPhone nach dem Speichern), im selben Fenster öffnen.
+export const shareViaWhatsApp = (text) => {
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  if (!window.open(url, "_blank")) window.location.href = url;
+};
 
 // Betrifft eine Mannschaftsliste (Info/Sperre) diesen Trainer? teams = null -> sieht alles
 export const concernsTeams = (targetTeams, viewerTeams) =>

@@ -214,7 +214,8 @@ export default function PitchManager({ clubId, teams, currentUserName, isAdmin =
     "E-Jugend": "#e64a19",      // Rot
     "F-Jugend": "#f57c00",      // Orange
     "G-Jugend": "#fbc02d",      // Gelb
-    "Alte Herren": "#388e3c"    // Grün
+    "Alte Herren": "#388e3c",   // Grün
+    "Ü35": "#6d4c41"            // Braun (Ü35/AH)
   };
 
   const getTeamColor = (teamName) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import PublicView from "./components/PublicView";
 
 // Bereiche, die Zuschauer nicht brauchen, werden erst beim Öffnen geladen (schnellerer Start am Handy)
@@ -15,7 +15,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { isAdminUser } from "./admins";
 import { redeemTickerCode, isTickerSessionValid } from "./tickerCode";
-import { compareTeamNames } from "./teamOrder";
+import { compareTeamNames, mergeTeamNames } from "./teamOrder";
 import logo from "./assets/SVON-Wappen.png";
 
 export default function App() {
@@ -38,7 +38,10 @@ export default function App() {
   const [tickerCodeInput, setTickerCodeInput] = useState("");
   const [legalPage, setLegalPage] = useState(null); // "impressum" | "datenschutz" | null
   const [isRedeemingCode, setIsRedeemingCode] = useState(false);
-  const [teams, setTeams] = useState([]);
+  const [tickerTeamList, setTickerTeamList] = useState([]);
+  const [youthTeamNames, setYouthTeamNames] = useState([]);
+  // Neue Mannschaften aus der Jugenddatenbank (z. B. Ü35/AH) erscheinen automatisch auch im Ticker, in der Platzbelegung usw.
+  const teams = useMemo(() => mergeTeamNames(tickerTeamList, youthTeamNames).sort(compareTeamNames), [tickerTeamList, youthTeamNames]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -119,17 +122,20 @@ export default function App() {
     const docName = `${clubId}_teams`;
     const unsub = onSnapshot(doc(db, "ticker", docName), (snap) => {
       if (snap.exists() && snap.data().teamsList) {
-        setTeams(snap.data().teamsList);
+        setTickerTeamList(snap.data().teamsList);
       } else {
         if (clubId === "svon") {
           const defaultTeams = ["1. Mannschaft", "2. Mannschaft", "F-Jugend"];
-          setTeams(defaultTeams);
+          setTickerTeamList(defaultTeams);
         } else {
-          setTeams(["1. Mannschaft"]);
+          setTickerTeamList(["1. Mannschaft"]);
         }
       }
     });
-    return () => unsub();
+    const unsubYouth = onSnapshot(doc(db, "youth_settings", clubId),
+      (snap) => setYouthTeamNames(snap.exists() ? (snap.data().teams || []).map(t => t.name) : []),
+      () => setYouthTeamNames([]));
+    return () => { unsub(); unsubYouth(); };
   }, [clubId]);
 
   const handleSelectClub = (e) => {

@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useRef } from "react";
 import { collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, where, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { compareTeamNames } from "../teamOrder";
+import { compareTeamNames, mergeTeamNames, isFuninoTeam } from "../teamOrder";
 import { buildNameDisplayMap } from "../nameConsent";
 
 // Standard-Mannschaften, solange in der Datenbank noch keine hinterlegt sind
@@ -256,6 +256,13 @@ export default function YouthManager({ clubId }) {
   const [playerFilters, setPlayerFilters] = useState({ youthTeam: "", postalCode: "", city: "", birthYear: "", age: "" });
 
   const sortTeamsLogic = (a, b) => compareTeamNames(a.name, b.name);
+  const [tickerTeamNames, setTickerTeamNames] = useState([]);
+
+  // Mannschaften, die nur im Admin Portal unter „Teams“ angelegt sind (z. B. Ü35/AH), sollen Trainer zugeordnet bekommen können
+  useEffect(() => {
+    if (!clubId) return;
+    return onSnapshot(doc(db, "ticker", `${clubId}_teams`), (snap) => setTickerTeamNames(snap.exists() ? snap.data().teamsList || [] : []));
+  }, [clubId]);
 
   // 1. Teams laden (Sortierung nur für die Anzeige – es wird nichts zurückgeschrieben)
   useEffect(() => {
@@ -321,6 +328,9 @@ export default function YouthManager({ clubId }) {
   });
 
   const sortedTeamsList = [...teamSettings].sort(sortTeamsLogic);
+  const coachTeamOptions = mergeTeamNames(sortedTeamsList.map(t => t.name), tickerTeamNames.filter(t => !isFuninoTeam(t)))
+    .sort(compareTeamNames)
+    .map(name => sortedTeamsList.find(t => t.name === name) || { id: name, name });
 
   const totalRegisteredTeams = teamSettings.reduce((sum, t) => sum + (Number(t.count) || 0), 0);
   
@@ -832,8 +842,8 @@ export default function YouthManager({ clubId }) {
             </button>
           )}
 
-          {showCoachForm && <CoachForm formData={coachFormData} handleChange={(e) => handleCoachChange(e, false)} handleTeamToggle={(team) => handleCoachTeamToggle(team, false)} onSubmit={handleAddCoach} isSubmitting={isSubmitting} title="Neuen Trainer anlegen" buttonText="💾 Trainer speichern" onCancel={() => setShowCoachForm(false)} teamsList={sortedTeamsList} isEditMode={false} />}
-          {editCoachFormData && <CoachForm formData={editCoachFormData} handleChange={(e) => handleCoachChange(e, true)} handleTeamToggle={(team) => handleCoachTeamToggle(team, true)} onSubmit={handleUpdateCoach} isSubmitting={isSubmitting} title={`✏️ Bearbeiten: ${editCoachFormData.firstName} ${editCoachFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setEditCoachFormData(null)} teamsList={sortedTeamsList} isEditMode={true} />}
+          {showCoachForm && <CoachForm formData={coachFormData} handleChange={(e) => handleCoachChange(e, false)} handleTeamToggle={(team) => handleCoachTeamToggle(team, false)} onSubmit={handleAddCoach} isSubmitting={isSubmitting} title="Neuen Trainer anlegen" buttonText="💾 Trainer speichern" onCancel={() => setShowCoachForm(false)} teamsList={coachTeamOptions} isEditMode={false} />}
+          {editCoachFormData && <CoachForm formData={editCoachFormData} handleChange={(e) => handleCoachChange(e, true)} handleTeamToggle={(team) => handleCoachTeamToggle(team, true)} onSubmit={handleUpdateCoach} isSubmitting={isSubmitting} title={`✏️ Bearbeiten: ${editCoachFormData.firstName} ${editCoachFormData.lastName}`} buttonText="💾 Änderungen speichern" onCancel={() => setEditCoachFormData(null)} teamsList={coachTeamOptions} isEditMode={true} />}
 
           {!showCoachForm && !editCoachFormData && (
             coaches.length === 0 ? <p style={{ color: "#777", textAlign: "center", margin: "20px 0" }}>Keine Trainer erfasst.</p> : (

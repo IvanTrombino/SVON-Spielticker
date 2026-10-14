@@ -1,39 +1,14 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { compareTeamNames, teamChannel } from "../teamOrder";
 
 export default function TeamManager({ clubId }) {
   const [teams, setTeams] = useState([]);
   const [newTeam, setNewTeam] = useState("");
 
   // Hilfsfunktion: Sortiert die Teams nach deiner exakten Wunsch-Hierarchie
-  const sortTeams = (teamList) => {
-    const customOrder = [
-      "1. Mannschaft", 
-      "2. Mannschaft", 
-      "3. Mannschaft", 
-      "Damen",
-      "A-Jugend", 
-      "B-Jugend", 
-      "C-Jugend", 
-      "D-Jugend", 
-      "E-Jugend",
-      "E-Jugend Funino", 
-      "F-Jugend", 
-      "F-Jugend Funino", 
-      "G-Jugend"
-    ];
-
-    return [...teamList].sort((a, b) => {
-      const indexA = customOrder.indexOf(a);
-      const indexB = customOrder.indexOf(b);
-      
-      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
-      return a.localeCompare(b);
-    });
-  };
+  const sortTeams = (teamList) => [...teamList].sort(compareTeamNames);
 
   // Teams für diesen Club in Echtzeit aus der Cloud laden und sofort sortieren
   useEffect(() => {
@@ -88,7 +63,8 @@ export default function TeamManager({ clubId }) {
   return (
     <div style={{ padding: "15px", maxWidth: "600px", margin: "0 auto" }}>
       <h2 style={{ color: "#2146d0", marginBottom: "5px" }}>👥 Mannschaftsverwaltung</h2>
-      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "6px" }}>Aktiver Verein: <strong>{clubId.toUpperCase()}</strong></p>
+      <p style={{ color: "#666", fontSize: "12px", marginBottom: "20px" }}>Mannschaften aus der Jugenddatenbank (Teams) erscheinen automatisch auch im Live-Ticker und in der Platzbelegung – hier nur zusätzliche Teams wie „F-Jugend Funino“ anlegen.</p>
 
       <div style={{ display: "flex", gap: "10px", marginBottom: "25px" }}>
         <input
@@ -140,7 +116,10 @@ export default function TeamManager({ clubId }) {
               boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
             }}
           >
-            <span style={{ fontWeight: "bold", fontSize: "16px" }}>{team}</span>
+            <span style={{ fontWeight: "bold", fontSize: "16px" }}>
+              {team}
+              <span style={{ display: "block", fontWeight: "normal", fontSize: "11px", color: "#888" }}>📣 Push-Kanal: {teamChannel(clubId, team)}</span>
+            </span>
 
             <button
               onClick={() => deleteTeam(team)}

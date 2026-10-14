@@ -158,6 +158,10 @@ service cloud.firestore {
           && request.resource.data.updatedAt == request.time
           // Pflicht: Name oder Telefonnummer wird im selben Schreibvorgang mitgeschickt
           && existsAfter(/databases/$(database)/documents/attendance_events/$(eventId)/contacts/$(playerKey));
+        // Trainer korrigieren nur die Trikotwäsche (Status, Kommentar und Zeitpunkt bleiben)
+        allow update: if (isAdmin() || coachHasTeam(attendanceEvent(eventId).team))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['laundry'])
+          && request.resource.data.laundry is bool;
         allow delete: if isAdmin() || coachHasTeam(attendanceEvent(eventId).team);
       }
       // Name oder Telefonnummer der Eltern (Pflicht): Eltern dürfen nur schreiben, lesen nur Trainer/Admins
@@ -169,6 +173,12 @@ service cloud.firestore {
           && request.resource.data.contact.size() >= 2
           && request.resource.data.contact.size() <= 50
           && request.resource.data.updatedAt == request.time;
+        // Trainer korrigieren einen falsch eingetragenen Namen/Nummer
+        allow create, update: if (isAdmin() || coachHasTeam(attendanceEvent(eventId).team))
+          && request.resource.data.keys().hasOnly(['contact', 'updatedAt'])
+          && request.resource.data.contact is string
+          && request.resource.data.contact.size() >= 1
+          && request.resource.data.contact.size() <= 50;
       }
     }
 
