@@ -40,6 +40,9 @@ export const isActiveTeam = (name) => ACTIVE_TEAMS.some((t) => isSameTeam(t, nam
 export const teamChannel = (clubId, team) =>
   `${clubId}${(team || "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]/g, "")}`;
 
+// Dokument des Live-Spiels einer Mannschaft. "/" im Namen (z. B. "Ü35/AH") würde den Firestore-Pfad zerlegen.
+export const liveMatchDocId = (clubId, team) => `${clubId}_live_match_${(team || "").replace(/\//g, "-")}`;
+
 // Funino-Teams (E/F/G-Jugend Funino) gibt es nur im Live-Ticker, nicht in der Jugenddatenbank
 export const isFuninoTeam = (name) => /funino/i.test(name || "");
 

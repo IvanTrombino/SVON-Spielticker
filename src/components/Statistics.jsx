@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { liveMatchDocId } from "../teamOrder";
 
 export default function Statistics({ clubId, teams }) {
   const [selectedTeam, setSelectedTeam] = useState(teams && teams.length > 0 ? teams[0] : "1. Mannschaft");
@@ -33,7 +34,7 @@ export default function Statistics({ clubId, teams }) {
   useEffect(() => {
     if (!clubId || !selectedTeam) return;
 
-    const docName = `${clubId}_live_match_${selectedTeam}`;
+    const docName = liveMatchDocId(clubId, selectedTeam);
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (snap) => {
       if (snap.exists() && snap.data().history) {
         setLiveMatchHistory(snap.data().history);

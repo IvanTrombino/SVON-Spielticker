@@ -4,7 +4,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase"; 
 import { displayNameFor } from "../nameConsent";
 import { findLinkedTeamId } from "../fussballde";
-import { teamChannel } from "../teamOrder";
+import { teamChannel, liveMatchDocId } from "../teamOrder";
 
 // Signatur unter geteilten Spielberichten
 const CLUB_SIGNATURES = {
@@ -151,7 +151,7 @@ export default function MatchView({ clubId, teams }) {
   useEffect(() => {
     if (!clubId || !selectedTeam) return;
 
-    const docName = `${clubId}_live_match_${selectedTeam}`;
+    const docName = liveMatchDocId(clubId, selectedTeam);
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -221,7 +221,7 @@ export default function MatchView({ clubId, teams }) {
   const syncLiveMatch = async (updates) => {
     if (!clubId || !selectedTeam) return;
     try {
-      const docName = `${clubId}_live_match_${selectedTeam}`;
+      const docName = liveMatchDocId(clubId, selectedTeam);
       await setDoc(doc(db, "ticker", docName), updates, { merge: true });
     } catch (error) {
       console.error("Fehler beim Cloud-Speichern:", error);

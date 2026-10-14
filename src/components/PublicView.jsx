@@ -4,7 +4,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { findLinkedTeamId, fetchTeamMatches, nextMatchFrom, showsTable, fetchTeamTable } from "../fussballde";
 import { effectiveNextMatch, nextMatchTitle, meetText } from "../nextMatch";
-import { isFuninoTeam } from "../teamOrder";
+import { isFuninoTeam, liveMatchDocId } from "../teamOrder";
 
 // "2026-10-10" -> "Sa, 10.10.2026"; andere Schreibweisen bleiben unverändert
 const formatMatchDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
@@ -117,7 +117,7 @@ export default function PublicView({ clubId, teams }) {
     if (!clubId || !teams || teams.length === 0) return;
 
     const unsubList = teams.map((teamName) => {
-      const docName = `${clubId}_live_match_${teamName}`;
+      const docName = liveMatchDocId(clubId, teamName);
       return onSnapshot(doc(db, "ticker", docName), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -162,7 +162,7 @@ export default function PublicView({ clubId, teams }) {
   useEffect(() => {
     if (!clubId || selectedTeam === "übersicht") return;
 
-    const docName = `${clubId}_live_match_${selectedTeam}`;
+    const docName = liveMatchDocId(clubId, selectedTeam);
     const unsubLive = onSnapshot(doc(db, "ticker", docName), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
