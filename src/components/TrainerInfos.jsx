@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { compareTeamNames } from "../teamOrder";
+import { compareTeamNames, mergeTeamNames, isFuninoTeam } from "../teamOrder";
 import { todayString, addDays, formatInfoDate, visibleInfos, sendTrainerPush, shareViaWhatsApp } from "../trainerInfo";
 
 const MAX_DAYS = 365;
@@ -14,13 +14,19 @@ export default function TrainerInfos({ clubId, infos, viewerTeams, uid, authorNa
   const [form, setForm] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const [tickerTeams, setTickerTeams] = useState([]);
+
   useEffect(() => {
     if (!clubId) return;
-    return onSnapshot(doc(db, "youth_settings", clubId), (snap) => {
+    const unsubYouth = onSnapshot(doc(db, "youth_settings", clubId), (snap) => {
       const list = snap.exists() ? snap.data().teams || [] : [];
-      setAllTeams(list.map(t => t.name).sort(compareTeamNames));
+      setAllTeams(list.map(t => t.name));
     });
+    // Mannschaften, die nur im Live-Ticker angelegt sind (z. B. Ü35/AH), ohne Funino
+    const unsubTicker = onSnapshot(doc(db, "ticker", `${clubId}_teams`), (snap) => setTickerTeams(snap.exists() ? snap.data().teamsList || [] : []));
+    return () => { unsubYouth(); unsubTicker(); };
   }, [clubId]);
+  const teamOptions = mergeTeamNames(allTeams, tickerTeams.filter(t => !isFuninoTeam(t))).sort(compareTeamNames);
 
   const today = todayString();
   const shown = canModerate ? infos : visibleInfos(infos, viewerTeams, uid);
@@ -109,7 +115,7 @@ export default function TrainerInfos({ clubId, infos, viewerTeams, uid, authorNa
           <label style={labelStyle}>Für wen?</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "4px 0 12px 0" }}>
             <button onClick={() => setForm({ ...form, teams: [] })} style={{ padding: "6px 10px", borderRadius: "14px", border: "1px solid #2146d0", background: form.teams.length === 0 ? "#2146d0" : "white", color: form.teams.length === 0 ? "white" : "#2146d0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>Alle Trainer</button>
-            {allTeams.map(t => {
+            {teamOptions.map(t => {
               const active = form.teams.includes(t);
               return <button key={t} onClick={() => toggleTeam(t)} style={{ padding: "6px 10px", borderRadius: "14px", border: "1px solid #2146d0", background: active ? "#2146d0" : "white", color: active ? "white" : "#2146d0", fontSize: "12px", cursor: "pointer" }}>{t}</button>;
             })}

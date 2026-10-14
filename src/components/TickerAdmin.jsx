@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../firebase";
-import { compareTeamNames } from "../teamOrder";
+import { compareTeamNames, mergeTeamNames, isFuninoTeam } from "../teamOrder";
 import PlayerManager from "./PlayerManager";
 import Statistics from "./Statistics";
 import TeamManager from "./TeamManager";
@@ -11,8 +11,8 @@ import BackupPanel from "./BackupPanel";
 import TrainerInfos from "./TrainerInfos";
 import { useTrainerInfos } from "../trainerInfo";
 
-// Platzbelegung mit Admin-Rechten; Mannschaften wie im Trainer Portal aus der Jugenddatenbank
-function AdminPitches({ clubId }) {
+// Platzbelegung mit Admin-Rechten; Mannschaften aus der Jugenddatenbank plus Live-Ticker-Teams wie Ü35/AH (ohne Funino)
+function AdminPitches({ clubId, tickerTeams }) {
   const [teams, setTeams] = useState([]);
 
   useEffect(() => {
@@ -23,7 +23,8 @@ function AdminPitches({ clubId }) {
     });
   }, [clubId]);
 
-  return <PitchManager clubId={clubId} teams={teams} currentUserName={auth.currentUser?.email || "Admin"} isAdmin />;
+  const allTeams = mergeTeamNames(teams, tickerTeams.filter(t => !isFuninoTeam(t))).sort(compareTeamNames);
+  return <PitchManager clubId={clubId} teams={allTeams} currentUserName={auth.currentUser?.email || "Admin"} isAdmin />;
 }
 
 // Pinnwand im Admin Portal: Admins sehen und verwalten alle Infos
@@ -55,7 +56,7 @@ export default function TickerAdmin({ clubId, teams, canManageTeams = false, pla
       </div>
 
       {tab === "teams" && canManageTeams && <TeamManager clubId={clubId} />}
-      {tab === "pitches" && canManageTeams && <AdminPitches clubId={clubId} />}
+      {tab === "pitches" && canManageTeams && <AdminPitches clubId={clubId} tickerTeams={teams} />}
       {tab === "conflicts" && canManageTeams && <PitchConflicts clubId={clubId} canDecide />}
       {tab === "backup" && canManageTeams && <BackupPanel />}
       {tab === "infos" && canManageTeams && <AdminInfos clubId={clubId} />}
